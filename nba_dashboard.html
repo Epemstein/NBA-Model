@@ -1914,22 +1914,41 @@ function recalcGamesWithBaselines() {
   const teams = new Set();
   for (const g of STATE.games) { teams.add(g.away); teams.add(g.home); }
 
-  const promises = [...teams].map(t =>
-    fbDb.collection('nba_baselines').doc(t).get().then(s => [t, s.exists ? s.data().players || {} : {}])
+  // Load baselines AND game overrides for all teams
+  const basePromises = [...teams].map(t =>
+    fbDb.collection('nba_baselines').doc(t).get().then(s => ['bl', t, s.exists ? s.data().players || {} : {}])
   );
+  const gamePromises = [];
+  for (const g of STATE.games) {
+    for (const side of ['away', 'home']) {
+      const team = g[side];
+      const key = `${selectedDate}_${g.away}_${g.home}_${team}`;
+      gamePromises.push(
+        fbDb.collection('nba_game_overrides').doc(key).get().then(s => ['go', team, g, s.exists ? s.data().players || {} : {}])
+      );
+    }
+  }
 
-  Promise.all(promises).then(results => {
+  Promise.all([...basePromises, ...gamePromises]).then(results => {
     const baselines = {};
-    for (const [team, players] of results) baselines[team] = players;
+    const gameOverrides = {}; // keyed by `${away}_${home}_${team}`
+    for (const r of results) {
+      if (r[0] === 'bl') baselines[r[1]] = r[2];
+      else if (r[0] === 'go') {
+        const g = r[2];
+        gameOverrides[`${g.away}_${g.home}_${r[1]}`] = r[3];
+      }
+    }
 
     let anyChanged = false;
     for (const g of STATE.games) {
       for (const side of ['away', 'home']) {
         const team = g[side];
         const bl = baselines[team] || {};
+        const go = gameOverrides[`${g.away}_${g.home}_${team}`] || {};
         const playerList = g[`${side}_players`] || [];
-        if (!Object.keys(bl).length) {
-          // No baseline saved — zero out all minutes (user must fill in baselines)
+        if (!Object.keys(bl).length && !Object.keys(go).length) {
+          // No baseline or game override — zero out
           for (const p of playerList) p.min = 0;
           g[`${side}_off`] = 0;
           g[`${side}_def`] = 0;
@@ -1937,15 +1956,23 @@ function recalcGamesWithBaselines() {
         }
         anyChanged = true;
 
-        // Apply baselines: players IN the baseline get their saved minutes,
-        // players NOT in the baseline keep their original minutes
+        // Apply baselines first, then game overrides on top
         for (const p of playerList) {
           const sv = bl[p.name];
-          if (sv == null) continue; // Not in baseline — keep original
-          if (typeof sv === 'object') {
-            p.min = (sv.pg||0) + (sv.sg||0) + (sv.sf||0) + (sv.pf||0) + (sv.c||0);
-          } else {
-            p.min = sv;
+          const gv = go[p.name];
+          // Game override wins over baseline
+          if (gv != null) {
+            if (typeof gv === 'object') {
+              p.min = (gv.pg||0)+(gv.sg||0)+(gv.sf||0)+(gv.pf||0)+(gv.c||0);
+            } else {
+              p.min = gv;
+            }
+          } else if (sv != null) {
+            if (typeof sv === 'object') {
+              p.min = (sv.pg||0) + (sv.sg||0) + (sv.sf||0) + (sv.pf||0) + (sv.c||0);
+            } else {
+              p.min = sv;
+            }
           }
         }
         // Sort by minutes
