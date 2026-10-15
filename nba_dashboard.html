@@ -539,7 +539,11 @@ input[type=number] { -moz-appearance: textfield; }
     <!-- Odds Summary Sidebar -->
     <div class="card" style="min-width:360px;max-width:420px;flex-shrink:0;position:sticky;top:56px;max-height:calc(100vh - 180px);overflow-y:auto;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-        <div class="ct" style="margin:0;padding:0;border:none;">Odds Summary</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div class="ct" style="margin:0;padding:0;border:none;">Odds Summary</div>
+          <button class="btn bp" onclick="refreshOdds()" id="refresh-odds-btn" style="font-size:9px;padding:3px 8px;">Refresh</button>
+          <span id="odds-refresh-status" style="font-size:9px;color:var(--muted);"></span>
+        </div>
         <div style="display:flex;gap:2px;">
           <button class="btn bg odds-tab active" data-odds="spread" onclick="switchOddsTab('spread')" style="font-size:10px;padding:4px 10px;">Spread</button>
           <button class="btn bg odds-tab" data-odds="ml" onclick="switchOddsTab('ml')" style="font-size:10px;padding:4px 10px;">ML</button>
@@ -1111,6 +1115,36 @@ function togglePlayers(i) {
 
 // ── Odds Summary Sidebar ────────────────────────────────────────────────
 let _oddsTab = 'spread';
+
+const RENDER_URL = 'https://nba-model-7qcb.onrender.com';
+
+async function refreshOdds() {
+  const btn = document.getElementById('refresh-odds-btn');
+  const status = document.getElementById('odds-refresh-status');
+  btn.disabled = true;
+  btn.textContent = '...';
+  status.textContent = 'Fetching live odds...';
+  status.style.color = 'var(--yellow)';
+
+  try {
+    const r = await fetch(`${RENDER_URL}/refresh-odds?date=${selectedDate}`);
+    const data = await r.json();
+    if (r.ok) {
+      status.textContent = `Updated ${data.count} games`;
+      status.style.color = 'var(--green)';
+      // Firestore snapshot listener will auto-refresh the UI
+    } else {
+      status.textContent = data.error || 'Failed';
+      status.style.color = 'var(--red)';
+    }
+  } catch (e) {
+    status.textContent = 'Network error';
+    status.style.color = 'var(--red)';
+  }
+  btn.disabled = false;
+  btn.textContent = 'Refresh';
+  setTimeout(() => { status.textContent = ''; }, 5000);
+}
 
 function switchOddsTab(tab) {
   _oddsTab = tab;

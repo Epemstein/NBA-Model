@@ -4,10 +4,16 @@ services:
     runtime: python
     repo: https://github.com/Epemstein/NBA-Model
     branch: main
-    buildCommand: pip install requests
+    buildCommand: pip install requests cryptography firebase-admin
     startCommand: python server.py
     envVars:
       - key: ODDS_API_KEY
+        sync: false
+      - key: NOVIG_KEY_ID
+        sync: false
+      - key: NOVIG_PRIVATE_KEY
+        sync: false
+      - key: FIREBASE_SA_JSON
         sync: false
       - key: PORT
         value: 10000
