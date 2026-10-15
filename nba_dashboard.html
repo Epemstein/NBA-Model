@@ -509,6 +509,7 @@ input[type=number] { -moz-appearance: textfield; }
   <button data-tab="picks">Picks</button>
   <button data-tab="kelly">Kelly Tracker</button>
   <button data-tab="teams">Teams</button>
+  <button data-tab="history">History</button>
   <button data-tab="settings">Settings</button>
 </nav>
 
@@ -689,6 +690,24 @@ input[type=number] { -moz-appearance: textfield; }
     </div>
   </div>
 
+</div>
+
+<!-- ═══════════ SETTINGS PANEL ═══════════ -->
+<!-- ═══════════ HISTORY PANEL ═══════════ -->
+<div class="panel" id="panel-history">
+  <div class="card">
+    <div class="ct">Change Log</div>
+    <div class="sw" style="max-height:700px;">
+      <table class="dt" id="history-log-table">
+        <thead><tr>
+          <th style="width:140px;">Time</th><th style="width:80px;">User</th><th>Action</th><th style="width:60px;">Team</th>
+        </tr></thead>
+        <tbody id="history-log-body">
+          <tr><td colspan="4" style="text-align:center;color:var(--muted);font-family:var(--sans);padding:20px;">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
 </div>
 
 <!-- ═══════════ SETTINGS PANEL ═══════════ -->
@@ -1343,6 +1362,7 @@ async function refreshOdds() {
     if (r.ok) {
       status.textContent = `Updated ${data.count} games`;
       status.style.color = 'var(--green)';
+      logActivity(`Refreshed odds for ${selectedDate} (${data.count} games)`);
       // Firestore snapshot listener will auto-refresh the UI
     } else {
       status.textContent = data.error || 'Failed';
@@ -1690,6 +1710,7 @@ function saveSettings() {
     paceMult: parseFloat(document.getElementById('set-pace-mult').value) || 0.95,
   };
   localStorage.setItem('nba_settings', JSON.stringify(STATE.settings));
+  logActivity(`Settings: pace=${STATE.settings.paceMult}, HCA=${STATE.settings.hca}, edge=${STATE.settings.spreadEdge}`);
   recalcGamesWithBaselines();
 }
 
@@ -1882,7 +1903,7 @@ function saveTeamBaseline(silent) {
   }
   fbDb.collection('nba_baselines').doc(_selectedTeam).set({ players })
     .then(() => {
-      console.log(`${_selectedTeam} baseline auto-saved`);
+      logActivity(`Updated ${_selectedTeam} baseline`, _selectedTeam);
       recalcGamesWithBaselines();
     })
     .catch(e => { if (!silent) alert('Save failed: ' + e.message); });
@@ -2134,7 +2155,7 @@ function renderRosterTable() {
 
 function zeroRosterPlayer(idx) {
   const p = _rosterState.players[idx];
-  // Save original values for restore
+  logActivity(`Ruled out ${p.name} (${_rosterState.team})`, _rosterState.team);
   p._backup = { pg: p.pg, sg: p.sg, sf: p.sf, pf: p.pf, c: p.c };
   p.pg = 0; p.sg = 0; p.sf = 0; p.pf = 0; p.c = 0;
   renderRosterTable();
@@ -2144,6 +2165,7 @@ function zeroRosterPlayer(idx) {
 function restoreRosterPlayer(idx) {
   const p = _rosterState.players[idx];
   if (p._backup) {
+    logActivity(`Restored ${p.name} (${_rosterState.team})`, _rosterState.team);
     p.pg = p._backup.pg; p.sg = p._backup.sg; p.sf = p._backup.sf;
     p.pf = p._backup.pf; p.c = p._backup.c;
     delete p._backup;
@@ -2221,7 +2243,7 @@ function saveRoster(silent) {
 
   fbDb.collection('nba_game_overrides').doc(key).set({ players: overrides })
     .then(() => {
-      console.log(`Game override saved: ${key}`);
+      logActivity(`Game override: ${_rosterState.team} (${selectedDate})`, _rosterState.team);
       // Update game player minutes and recalc
       const side = _rosterState.side;
       const playerList = g[`${side}_players`] || [];
@@ -2261,6 +2283,49 @@ function saveRoster(silent) {
   if (!silent) closeRoster();
 }
 
+// ── Activity Log ────────────────────────────────────────────────────────
+let _currentUser = null;
+
+function logActivity(action, team) {
+  if (!_currentUser) return;
+  fbDb.collection('nba_activity').add({
+    uid: _currentUser.uid,
+    name: _currentUser.displayName || _currentUser.email,
+    photo: _currentUser.photoURL || '',
+    action,
+    team: team || '',
+    ts: firebase.firestore.FieldValue.serverTimestamp(),
+    tsMs: Date.now(),
+  }).catch(e => console.error('Activity log error:', e));
+}
+
+function setupHistoryListener() {
+  fbDb.collection('nba_activity')
+    .orderBy('tsMs', 'desc')
+    .limit(100)
+    .onSnapshot(snap => {
+      const tbody = document.getElementById('history-log-body');
+      if (snap.empty) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--muted);font-family:var(--sans);padding:20px;">No activity yet</td></tr>';
+        return;
+      }
+      tbody.innerHTML = snap.docs.map(doc => {
+        const d = doc.data();
+        const time = d.tsMs ? new Date(d.tsMs).toLocaleString('en-US', {
+          month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+          timeZone: 'America/New_York'
+        }) + ' ET' : '—';
+        const firstName = (d.name || '?').split(' ')[0];
+        return `<tr>
+          <td style="font-family:var(--mono);font-size:10px;color:var(--muted);white-space:nowrap;">${time}</td>
+          <td style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--accent);">${firstName}</td>
+          <td style="font-family:var(--sans);font-size:11px;">${d.action}</td>
+          <td style="font-family:var(--mono);font-size:11px;font-weight:600;">${d.team}</td>
+        </tr>`;
+      }).join('');
+    });
+}
+
 // ── Auth ────────────────────────────────────────────────────────────────
 function signInWithGoogle() {
   const provider = new firebase.auth.GoogleAuthProvider();
@@ -2276,6 +2341,7 @@ function signOut() {
 
 auth.onAuthStateChanged(user => {
   if (user) {
+    _currentUser = user;
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app-shell').style.display = '';
     const hdrUser = document.getElementById('hdr-user');
@@ -2311,6 +2377,7 @@ async function initApp() {
   loadSettingsUI();
   renderPicks();
   initTeamSelector();
+  setupHistoryListener();
   updateKelly();
 
   // Check Firestore connection
