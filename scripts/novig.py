@@ -336,6 +336,24 @@ def get_novig_nba_lines(client, target_date=None):
                 ev['totals'].sort(key=lambda m: float(m['strike']))
                 total_data = ev['totals'][len(ev['totals']) // 2]
 
+        # Get best bid + fillable qty for each spread outcome
+        sp_book = None
+        try:
+            sp_book = client.get_book(sp['marketId'])
+        except:
+            pass
+
+        def _best_bid(book, outcome_id):
+            """Get best bid price and fillable qty at that price."""
+            if not book or not book.get('orders'):
+                return None, 0
+            orders = book['orders'].get(outcome_id, [])
+            if not orders:
+                return None, 0
+            best_price = max(float(o['price']) for o in orders)
+            qty_at_best = sum(o['qty'] for o in orders if float(o['price']) == best_price)
+            return best_price, qty_at_best
+
         key = f'{away_team}@{home_team}'
         entry = {
             'event_id': eid,
@@ -344,26 +362,68 @@ def get_novig_nba_lines(client, target_date=None):
                 'market_id': sp['marketId'],
                 'home_team': home_team,
                 'away_team': away_team,
-                'liquidity': sp_liq,
             },
         }
+        # In the exchange, to BUY outcome A you cross with bids on outcome B
+        # Ask price for A = 1 - best_bid on B
+        # Fillable qty for A = qty at best bid on B
+        home_oid = None
+        away_oid = None
         for o in outcomes:
             if o['name'].startswith(home_team):
+                home_oid = o['outcomeId']
                 entry['spread']['home_outcome_id'] = o['outcomeId']
             else:
+                away_oid = o['outcomeId']
                 entry['spread']['away_outcome_id'] = o['outcomeId']
 
+        # To buy HOME spread: cross with bids on AWAY side
+        away_bid, away_bid_qty = _best_bid(sp_book, away_oid)
+        home_ask = round(1 - away_bid, 3) if away_bid else None
+        home_fillable = round(home_ask * away_bid_qty / 100) if home_ask and away_bid_qty else 0
+        entry['spread']['home_price'] = home_ask
+        entry['spread']['home_fillable'] = home_fillable
+
+        # To buy AWAY spread: cross with bids on HOME side
+        home_bid, home_bid_qty = _best_bid(sp_book, home_oid)
+        away_ask = round(1 - home_bid, 3) if home_bid else None
+        away_fillable = round(away_ask * home_bid_qty / 100) if away_ask and home_bid_qty else 0
+        entry['spread']['away_price'] = away_ask
+        entry['spread']['away_fillable'] = away_fillable
+
         if total_data:
+            tot_book = None
+            try:
+                tot_book = client.get_book(total_data['marketId'])
+            except:
+                pass
             entry['total'] = {
                 'strike': float(total_data['strike']),
                 'market_id': total_data['marketId'],
-                'liquidity': tot_liq,
             }
+            over_oid = None
+            under_oid = None
             for o in total_data['outcomes']:
                 if 'Over' in o['name']:
+                    over_oid = o['outcomeId']
                     entry['total']['over_outcome_id'] = o['outcomeId']
                 elif 'Under' in o['name']:
+                    under_oid = o['outcomeId']
                     entry['total']['under_outcome_id'] = o['outcomeId']
+
+            # To buy Over: cross with Under bids
+            under_bid, under_bid_qty = _best_bid(tot_book, under_oid)
+            over_ask = round(1 - under_bid, 3) if under_bid else None
+            over_fillable = round(over_ask * under_bid_qty / 100) if over_ask and under_bid_qty else 0
+            entry['total']['over_price'] = over_ask
+            entry['total']['over_fillable'] = over_fillable
+
+            # To buy Under: cross with Over bids
+            over_bid, over_bid_qty = _best_bid(tot_book, over_oid)
+            under_ask = round(1 - over_bid, 3) if over_bid else None
+            under_fillable = round(under_ask * over_bid_qty / 100) if under_ask and over_bid_qty else 0
+            entry['total']['under_price'] = under_ask
+            entry['total']['under_fillable'] = under_fillable
 
         lines[key] = entry
 

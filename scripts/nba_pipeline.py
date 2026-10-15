@@ -825,14 +825,21 @@ def run(override_date=None):
                 tot = nl.get('total', {})
                 if sp.get('strike') is not None:
                     gm['book_spread'] = sp['strike']
-                    gm['spread_liq'] = sp.get('liquidity', 0)
                     gm['novig_spread_home_oid'] = sp.get('home_outcome_id')
                     gm['novig_spread_away_oid'] = sp.get('away_outcome_id')
+                    # Per-side best bid price (probability) and fillable $
+                    gm['home_spread_price'] = sp.get('home_price')
+                    gm['home_spread_fill'] = sp.get('home_fillable', 0)
+                    gm['away_spread_price'] = sp.get('away_price')
+                    gm['away_spread_fill'] = sp.get('away_fillable', 0)
                 if tot.get('strike') is not None:
                     gm['book_total'] = tot['strike']
-                    gm['total_liq'] = tot.get('liquidity', 0)
                     gm['novig_total_over_oid'] = tot.get('over_outcome_id')
                     gm['novig_total_under_oid'] = tot.get('under_outcome_id')
+                    gm['over_price'] = tot.get('over_price')
+                    gm['over_fill'] = tot.get('over_fillable', 0)
+                    gm['under_price'] = tot.get('under_price')
+                    gm['under_fill'] = tot.get('under_fillable', 0)
                 gm['odds_source'] = 'Novig'
                 print(f'  {aw}@{hw}: spread={gm["book_spread"]} total={gm["book_total"]}')
         except Exception as e:

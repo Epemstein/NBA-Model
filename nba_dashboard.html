@@ -484,13 +484,17 @@ input:focus, select:focus { border-color: var(--accent); background: #fff; }
   <div style="display:flex;gap:12px;align-items:flex-start;">
 
     <!-- Odds Summary Sidebar -->
-    <div class="card" style="min-width:340px;max-width:400px;flex-shrink:0;position:sticky;top:56px;max-height:calc(100vh - 180px);overflow-y:auto;">
-      <div class="ct">Odds Summary</div>
+    <div class="card" style="min-width:360px;max-width:420px;flex-shrink:0;position:sticky;top:56px;max-height:calc(100vh - 180px);overflow-y:auto;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <div class="ct" style="margin:0;padding:0;border:none;">Odds Summary</div>
+        <div style="display:flex;gap:2px;">
+          <button class="btn bg odds-tab active" data-odds="spread" onclick="switchOddsTab('spread')" style="font-size:10px;padding:4px 10px;">Spread</button>
+          <button class="btn bg odds-tab" data-odds="total" onclick="switchOddsTab('total')" style="font-size:10px;padding:4px 10px;">Total</button>
+        </div>
+      </div>
       <div class="sw" style="max-height:none;">
         <table class="dt" id="odds-summary-table" style="font-size:11px;">
-          <thead><tr>
-            <th>Game</th><th>Team</th><th>Spread</th><th>Total</th><th>MDL</th><th>Edge</th><th>Liq</th>
-          </tr></thead>
+          <thead id="odds-summary-head"></thead>
           <tbody id="odds-summary-body"></tbody>
         </table>
       </div>
@@ -973,42 +977,83 @@ function togglePlayers(i) {
 }
 
 // ── Odds Summary Sidebar ────────────────────────────────────────────────
+let _oddsTab = 'spread';
+
+function switchOddsTab(tab) {
+  _oddsTab = tab;
+  document.querySelectorAll('.odds-tab').forEach(b => b.classList.remove('active'));
+  document.querySelector(`.odds-tab[data-odds="${tab}"]`).classList.add('active');
+  renderOddsSummary();
+}
+
+function fmtProb(p) {
+  if (p == null) return '—';
+  return (p * 100).toFixed(0) + '%';
+}
+
+function fmtFill(f) {
+  if (!f) return '—';
+  return '$' + f.toLocaleString();
+}
+
 function renderOddsSummary() {
+  const thead = document.getElementById('odds-summary-head');
   const tbody = document.getElementById('odds-summary-body');
-  if (!STATE.games.length) { tbody.innerHTML = ''; return; }
+  if (!STATE.games.length) { thead.innerHTML = ''; tbody.innerHTML = ''; return; }
 
-  let html = '';
-  for (const g of STATE.games) {
-    const spreadEdge = g.spread_edge != null ? g.spread_edge : null;
-    const totalEdge = g.total_edge != null ? g.total_edge : null;
-    const sLiq = g.spread_liq ? `$${(g.spread_liq/100).toFixed(0)}` : '—';
-    const tLiq = g.total_liq ? `$${(g.total_liq/100).toFixed(0)}` : '—';
-
-    // Away row
-    html += `<tr style="border-bottom:none;">
-      <td rowspan="2" style="font-family:var(--sans);font-weight:600;font-size:10px;vertical-align:middle;border-bottom:2px solid var(--border);white-space:nowrap;">
-        ${g.away} @<br>${g.home}<br><span style="color:var(--muted);font-weight:400;font-size:9px;">${g.game_time_et || ''}</span>
-      </td>
-      <td style="font-family:var(--sans);font-size:10px;">${g.away}</td>
-      <td>${g.book_spread != null ? fmtSpread(-g.book_spread) : '—'}</td>
-      <td>${g.book_total != null ? 'O ' + g.book_total : '—'}</td>
-      <td style="color:var(--accent)">${g.proj_spread != null ? fmtSpread(-g.proj_spread) : '—'}</td>
-      <td>${spreadEdge != null && spreadEdge > 0 ? `<span class="edge-chip ${edgeClass(spreadEdge)}">${spreadEdge.toFixed(1)}</span>` : ''}</td>
-      <td style="font-size:9px;color:var(--muted)">${sLiq}</td>
-    </tr>`;
-
-    // Home row
-    html += `<tr style="border-bottom:2px solid var(--border);">
-      <td style="font-family:var(--sans);font-size:10px;font-weight:600;">${g.home}</td>
-      <td style="font-weight:600;">${g.book_spread != null ? fmtSpread(g.book_spread) : '—'}</td>
-      <td>${g.book_total != null ? 'U ' + g.book_total : '—'}</td>
-      <td style="color:var(--accent);font-weight:600;">${g.proj_spread != null ? fmtSpread(g.proj_spread) : '—'}</td>
-      <td>${spreadEdge != null && spreadEdge < 0 ? `<span class="edge-chip ${edgeClass(spreadEdge)}">${Math.abs(spreadEdge).toFixed(1)}</span>` : ''}
-          ${totalEdge != null ? `<span class="edge-chip ${edgeClass(totalEdge)}" style="font-size:9px;">${totalEdge > 0 ? 'O' : 'U'}${Math.abs(totalEdge).toFixed(1)}</span>` : ''}</td>
-      <td style="font-size:9px;color:var(--muted)">${tLiq}</td>
-    </tr>`;
+  if (_oddsTab === 'spread') {
+    thead.innerHTML = '<tr><th>Game</th><th>Team</th><th>Line</th><th>Price</th><th>MDL</th><th>Edge</th><th>Avail</th></tr>';
+    let html = '';
+    for (const g of STATE.games) {
+      const edge = g.spread_edge;
+      html += `<tr style="border-bottom:none;">
+        <td rowspan="2" style="font-family:var(--sans);font-weight:600;font-size:10px;vertical-align:middle;border-bottom:2px solid var(--border);white-space:nowrap;">
+          ${g.away} @<br>${g.home}<br><span style="color:var(--muted);font-weight:400;font-size:9px;">${g.game_time_et || ''}</span>
+        </td>
+        <td style="font-family:var(--sans);font-size:10px;">${g.away}</td>
+        <td>${g.book_spread != null ? fmtSpread(-g.book_spread) : '—'}</td>
+        <td style="color:var(--accent);font-size:10px;">${fmtProb(g.away_spread_price)}</td>
+        <td style="color:var(--accent)">${g.proj_spread != null ? fmtSpread(-g.proj_spread) : '—'}</td>
+        <td>${edge != null && edge > 0 ? `<span class="edge-chip ${edgeClass(edge)}">${edge.toFixed(1)}</span>` : ''}</td>
+        <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.away_spread_fill)}</td>
+      </tr>`;
+      html += `<tr style="border-bottom:2px solid var(--border);">
+        <td style="font-family:var(--sans);font-size:10px;font-weight:600;">${g.home}</td>
+        <td style="font-weight:600;">${g.book_spread != null ? fmtSpread(g.book_spread) : '—'}</td>
+        <td style="color:var(--accent);font-size:10px;">${fmtProb(g.home_spread_price)}</td>
+        <td style="color:var(--accent);font-weight:600;">${g.proj_spread != null ? fmtSpread(g.proj_spread) : '—'}</td>
+        <td>${edge != null && edge < 0 ? `<span class="edge-chip ${edgeClass(edge)}">${Math.abs(edge).toFixed(1)}</span>` : ''}</td>
+        <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.home_spread_fill)}</td>
+      </tr>`;
+    }
+    tbody.innerHTML = html;
+  } else {
+    thead.innerHTML = '<tr><th>Game</th><th>Side</th><th>Line</th><th>Price</th><th>MDL</th><th>Edge</th><th>Avail</th></tr>';
+    let html = '';
+    for (const g of STATE.games) {
+      const edge = g.total_edge;
+      html += `<tr style="border-bottom:none;">
+        <td rowspan="2" style="font-family:var(--sans);font-weight:600;font-size:10px;vertical-align:middle;border-bottom:2px solid var(--border);white-space:nowrap;">
+          ${g.away} @<br>${g.home}<br><span style="color:var(--muted);font-weight:400;font-size:9px;">${g.game_time_et || ''}</span>
+        </td>
+        <td style="font-family:var(--sans);font-size:10px;">Over</td>
+        <td>${g.book_total != null ? g.book_total : '—'}</td>
+        <td style="color:var(--accent);font-size:10px;">${fmtProb(g.over_price)}</td>
+        <td style="color:var(--accent)">${g.proj_total != null ? g.proj_total.toFixed(1) : '—'}</td>
+        <td>${edge != null && edge > 0 ? `<span class="edge-chip ${edgeClass(edge)}">${edge.toFixed(1)}</span>` : ''}</td>
+        <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.over_fill)}</td>
+      </tr>`;
+      html += `<tr style="border-bottom:2px solid var(--border);">
+        <td style="font-family:var(--sans);font-size:10px;font-weight:600;">Under</td>
+        <td style="font-weight:600;">${g.book_total != null ? g.book_total : '—'}</td>
+        <td style="color:var(--accent);font-size:10px;">${fmtProb(g.under_price)}</td>
+        <td style="color:var(--accent);font-weight:600;">${g.proj_total != null ? g.proj_total.toFixed(1) : '—'}</td>
+        <td>${edge != null && edge < 0 ? `<span class="edge-chip ${edgeClass(edge)}">${Math.abs(edge).toFixed(1)}</span>` : ''}</td>
+        <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.under_fill)}</td>
+      </tr>`;
+    }
+    tbody.innerHTML = html;
   }
-  tbody.innerHTML = html;
 }
 
 // ── Update stat strip ───────────────────────────────────────────────────
