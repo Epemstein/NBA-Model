@@ -1436,8 +1436,7 @@ function saveSettings() {
     paceMult: parseFloat(document.getElementById('set-pace-mult').value) || 0.95,
   };
   localStorage.setItem('nba_settings', JSON.stringify(STATE.settings));
-  renderGames();
-  updateStrip();
+  recalcGamesWithBaselines();
 }
 
 function loadSettingsUI() {
@@ -1693,13 +1692,18 @@ function recalcGamesWithBaselines() {
         g[`${side}_def`] = Math.round(def * 100) / 100;
       }
 
-      // Recalculate projections
+      // Recalculate projections — apply pace multiplier from settings
       const avgOrtg = STATE.leagueAvgOrtg || 114.8;
-      const pace = g.matchup_pace || 95;
+      const paceMult = STATE.settings.paceMult || 1.0;
+      // matchup_pace from pipeline was baked with 0.95 — undo and reapply user setting
+      const rawPace = (g.matchup_pace || 95) / 0.95;
+      const pace = rawPace * paceMult;
+      g.matchup_pace = Math.round(pace * 10) / 10;
+      const hca = (STATE.settings.hca || 1.5) / 2;
       const awPP100 = avgOrtg + g.away_off - g.home_def;
       const hwPP100 = avgOrtg + g.home_off - g.away_def;
-      g.away_proj = Math.round((awPP100 / 100 * pace - 0.75) * 10) / 10;
-      g.home_proj = Math.round((hwPP100 / 100 * pace + 0.75) * 10) / 10;
+      g.away_proj = Math.round((awPP100 / 100 * pace - hca) * 10) / 10;
+      g.home_proj = Math.round((hwPP100 / 100 * pace + hca) * 10) / 10;
       g.proj_spread = Math.round((g.away_proj - g.home_proj) * 10) / 10;
       g.proj_total = Math.round((g.away_proj + g.home_proj) * 10) / 10;
       g.away_pp100 = Math.round(awPP100 * 10) / 10;
