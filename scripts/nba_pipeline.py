@@ -32,6 +32,7 @@ else:
     print('WARNING: No FIREBASE_SA_JSON — Firestore disabled')
 
 # ── Config ────────────────────────────────────────────────────────────────
+RENDER_URL     = os.environ.get('RENDER_URL', '')  # e.g. https://nba-model-XXXX.onrender.com
 ODDS_API_KEY   = os.environ.get('ODDS_API_KEY', '16381a969b24dad9592530007f8b51f9')
 TG_TOKEN       = os.environ.get('TG_TOKEN', '')
 TG_CHAT        = os.environ.get('TG_CHAT', '')
@@ -243,6 +244,27 @@ def _previous_season():
     return f'{year - 1}-{str(year)[2:]}'
 
 
+def _nba_get(base_url, params=None, timeout=30):
+    """Make an NBA API request, routing through Render proxy if configured.
+    stats.nba.com blocks cloud IPs (GitHub Actions, etc.) so the proxy is needed
+    for the pipeline to work in CI.
+    """
+    if RENDER_URL:
+        # Route through proxy: /nba-api/ → stats.nba.com/stats/
+        # /nba-live/ → cdn.nba.com/static/json/liveData/
+        if 'stats.nba.com/stats/' in base_url:
+            proxy_url = base_url.replace('https://stats.nba.com/stats/', f'{RENDER_URL}/nba-api/')
+        elif 'cdn.nba.com/static/json/liveData/' in base_url:
+            proxy_url = base_url.replace('https://cdn.nba.com/static/json/liveData/', f'{RENDER_URL}/nba-live/')
+        else:
+            proxy_url = base_url
+        r = requests.get(proxy_url, params=params, timeout=timeout)
+    else:
+        r = requests.get(base_url, params=params, headers=NBA_HEADERS, timeout=timeout)
+    r.raise_for_status()
+    return r
+
+
 # ── Fetch player minutes (last 8 games avg) from NBA API ────────────────
 def fetch_player_minutes():
     """Fetch average minutes per game over last ~8 games for all players.
@@ -269,11 +291,8 @@ def fetch_player_minutes():
     for season in [_current_season(), _previous_season()]:
         try:
             params = _nba_player_params(season, last_n=8)
-            r = requests.get(
-                'https://stats.nba.com/stats/leaguedashplayerstats',
-                params=params, headers=NBA_HEADERS, timeout=30
-            )
-            r.raise_for_status()
+            r = _nba_get('https://stats.nba.com/stats/leaguedashplayerstats',
+                         params=params, timeout=45)
             data = r.json()
             rows = data['resultSets'][0]['rowSet']
             if rows:
@@ -333,11 +352,8 @@ def fetch_team_pace():
     for season in [_current_season(), _previous_season()]:
         try:
             params = _nba_team_params(season)
-            r = requests.get(
-                'https://stats.nba.com/stats/leaguedashteamstats',
-                params=params, headers=NBA_HEADERS, timeout=30
-            )
-            r.raise_for_status()
+            r = _nba_get('https://stats.nba.com/stats/leaguedashteamstats',
+                         params=params, timeout=45)
             data = r.json()
             rows = data['resultSets'][0]['rowSet']
             if rows:
@@ -378,10 +394,9 @@ def fetch_schedule():
     Returns list of game dicts.
     """
     today = today_et()
-    url = f'https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json'
+    url = 'https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json'
 
-    r = requests.get(url, headers=NBA_HEADERS, timeout=15)
-    r.raise_for_status()
+    r = _nba_get(url, timeout=15)
     data = r.json()
 
     games = []

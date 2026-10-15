@@ -31,4 +31,5 @@ jobs:
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_CHAT: ${{ secrets.TG_CHAT }}
+          RENDER_URL: ${{ secrets.RENDER_URL }}
         run: python scripts/nba_pipeline.py
