@@ -354,6 +354,59 @@ input, select {
   width: 100%;
 }
 input:focus, select:focus { border-color: var(--accent); background: #fff; }
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type=number] { -moz-appearance: textfield; }
+
+/* ── TEAM HEADER BANNER ── */
+.team-banner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  border-radius: var(--radius);
+  margin-bottom: 14px;
+  color: #fff;
+  position: relative;
+  overflow: hidden;
+}
+.team-banner-logo {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,.3));
+  position: relative;
+  z-index: 1;
+}
+.team-banner-info { position: relative; z-index: 1; }
+.team-banner-name { font-size: 24px; font-weight: 800; text-shadow: 0 2px 8px rgba(0,0,0,.4); }
+.team-banner-sub { font-size: 12px; opacity: 0.8; margin-top: 2px; }
+.team-banner-stats {
+  margin-left: auto;
+  display: flex;
+  gap: 12px;
+  position: relative;
+  z-index: 1;
+}
+.team-banner-stat {
+  text-align: center;
+  background: rgba(0,0,0,.25);
+  border-radius: 4px;
+  padding: 6px 12px;
+}
+.team-banner-stat .tbs-label { font-size: 8px; text-transform: uppercase; letter-spacing: .08em; opacity: .7; }
+.team-banner-stat .tbs-val { font-family: var(--mono); font-size: 16px; font-weight: 700; }
+
+/* ── PLAYER HEADSHOT ── */
+.player-headshot {
+  width: 28px;
+  height: 20px;
+  object-fit: cover;
+  object-position: top;
+  border-radius: 2px;
+  background: #f0f0f0;
+  flex-shrink: 0;
+}
 
 /* ── BUTTONS ── */
 .btn {
@@ -590,6 +643,9 @@ input:focus, select:focus { border-color: var(--accent); background: #fff; }
       <select id="team-select" onchange="loadTeamBaseline()" style="font-size:14px;font-weight:600;padding:8px 12px;min-width:200px;">
         <option value="">Select team...</option>
       </select>
+    </div>
+    <div id="team-banner-container"></div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
       <div style="font-family:var(--mono);font-size:12px;color:var(--muted);">
         Total: <strong id="team-total-min" style="color:var(--text)">—</strong> / 240 min
       </div>
@@ -1300,6 +1356,25 @@ function loadSettingsUI() {
   document.getElementById('set-pace-mult').value = STATE.settings.paceMult;
 }
 
+// ── Logo/headshot helpers ────────────────────────────────────────────────
+function teamLogo(abr) {
+  return `https://a.espncdn.com/i/teamlogos/nba/500/${abr.toLowerCase()}.png`;
+}
+function playerHeadshot(nbaId) {
+  if (!nbaId) return '';
+  return `https://cdn.nba.com/headshots/nba/latest/260x190/${nbaId}.png`;
+}
+const FULL_NAMES = {
+  ATL:'Atlanta Hawks', BOS:'Boston Celtics', BKN:'Brooklyn Nets', CHA:'Charlotte Hornets',
+  CHI:'Chicago Bulls', CLE:'Cleveland Cavaliers', DAL:'Dallas Mavericks', DEN:'Denver Nuggets',
+  DET:'Detroit Pistons', GSW:'Golden State Warriors', HOU:'Houston Rockets', IND:'Indiana Pacers',
+  LAC:'Los Angeles Clippers', LAL:'Los Angeles Lakers', MEM:'Memphis Grizzlies', MIA:'Miami Heat',
+  MIL:'Milwaukee Bucks', MIN:'Minnesota Timberwolves', NOP:'New Orleans Pelicans', NYK:'New York Knicks',
+  OKC:'Oklahoma City Thunder', ORL:'Orlando Magic', PHI:'Philadelphia 76ers', PHX:'Phoenix Suns',
+  POR:'Portland Trail Blazers', SAC:'Sacramento Kings', SAS:'San Antonio Spurs', TOR:'Toronto Raptors',
+  UTA:'Utah Jazz', WAS:'Washington Wizards',
+};
+
 // ── Teams Baseline Editor ────────────────────────────────────────────────
 const POSITIONS = ['PG', 'SG', 'SF', 'PF', 'C'];
 let _teamPlayers = []; // [{name, pos, pg, sg, sf, pf, c, dpm, o_dpm, d_dpm}]
@@ -1332,17 +1407,8 @@ function loadTeamBaseline() {
 
         if (sv && typeof sv === 'object') {
           pg = sv.pg || 0; sg = sv.sg || 0; sf = sv.sf || 0; pf = sv.pf || 0; c = sv.c || 0;
-        } else {
-          // Default: put all minutes in the player's primary position
-          const defaultMin = (sv != null) ? sv : p.min;
-          const pri = (p.pos || 'SF').toUpperCase();
-          if (pri === 'PG') pg = defaultMin;
-          else if (pri === 'SG') sg = defaultMin;
-          else if (pri === 'SF') sf = defaultMin;
-          else if (pri === 'PF') pf = defaultMin;
-          else if (pri === 'C') c = defaultMin;
-          else sf = defaultMin; // fallback
         }
+        // If no saved baseline, all positions start at 0 — user fills them in
 
         return {
           name: p.name, pos: p.pos || '',
@@ -1358,15 +1424,47 @@ function loadTeamBaseline() {
   });
 }
 
+function hexToRgb(hex) {
+  hex = hex.replace('#', '');
+  return `${parseInt(hex.substring(0,2),16)},${parseInt(hex.substring(2,4),16)},${parseInt(hex.substring(4,6),16)}`;
+}
+
 function renderTeamBaseline() {
+  const color = COLORS[_selectedTeam] || '#333';
+  const fullName = FULL_NAMES[_selectedTeam] || _selectedTeam;
+  const rgb = hexToRgb(color);
+
+  // Banner
+  document.getElementById('team-banner-container').innerHTML = `
+    <div class="team-banner" style="background:linear-gradient(135deg, ${color} 0%, ${color}cc 60%, ${color}88 100%);">
+      <img class="team-banner-logo" src="${teamLogo(_selectedTeam)}" onerror="this.style.display='none'" />
+      <div class="team-banner-info">
+        <div class="team-banner-name">${_selectedTeam}</div>
+        <div class="team-banner-sub">${fullName}</div>
+      </div>
+      <div class="team-banner-stats">
+        <div class="team-banner-stat"><div class="tbs-label">Players</div><div class="tbs-val">${_teamPlayers.length}</div></div>
+        <div class="team-banner-stat"><div class="tbs-label">Total Min</div><div class="tbs-val" id="banner-total">0</div></div>
+        <div class="team-banner-stat"><div class="tbs-label">Target</div><div class="tbs-val">240</div></div>
+      </div>
+    </div>`;
+
+  // Table
   const tbody = document.getElementById('team-baseline-body');
   tbody.innerHTML = _teamPlayers.map((p, i) => {
     const total = p.pg + p.sg + p.sf + p.pf + p.c;
-    return `<tr>
-      <td style="font-family:var(--sans);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;">
-        ${p.name} <span style="font-size:9px;color:var(--muted)">${p.pos}</span>
+    const opacity = Math.min(total / 36, 1) * 0.15;
+    const bg = total > 0 ? `rgba(${rgb}, ${opacity})` : 'transparent';
+    const headshot = p.nba_id ? `<img class="player-headshot" src="${playerHeadshot(p.nba_id)}" onerror="this.style.display='none'" />` : '';
+
+    return `<tr style="background:${bg};">
+      <td style="font-family:var(--sans);font-weight:500;white-space:nowrap;">
+        <div style="display:flex;align-items:center;gap:6px;">
+          ${headshot}
+          ${p.name} <span style="font-size:9px;color:var(--muted);margin-left:2px;">${p.pos}</span>
+        </div>
       </td>
-      <td style="text-align:right;font-family:var(--mono);font-weight:700;">${total.toFixed(1)}</td>
+      <td style="text-align:right;font-family:var(--mono);font-weight:700;font-size:13px;">${total > 0 ? total.toFixed(1) : '—'}</td>
       <td style="text-align:center"><input type="number" value="${p.pg||''}" min="0" max="48" step="0.5" style="width:42px;text-align:center;font-size:11px;" onchange="updatePosMin(${i},'pg',this.value)" placeholder="0"></td>
       <td style="text-align:center"><input type="number" value="${p.sg||''}" min="0" max="48" step="0.5" style="width:42px;text-align:center;font-size:11px;" onchange="updatePosMin(${i},'sg',this.value)" placeholder="0"></td>
       <td style="text-align:center"><input type="number" value="${p.sf||''}" min="0" max="48" step="0.5" style="width:42px;text-align:center;font-size:11px;" onchange="updatePosMin(${i},'sf',this.value)" placeholder="0"></td>
@@ -1412,6 +1510,8 @@ function updateTeamSums() {
   document.getElementById('sum-c').style.color = clr(sumC, 48);
 
   document.getElementById('team-total-min').textContent = sumTotal.toFixed(0);
+  const bt = document.getElementById('banner-total');
+  if (bt) bt.textContent = sumTotal.toFixed(0);
   const warn = document.getElementById('team-min-warn');
   if (Math.abs(sumTotal - 240) > 10) {
     warn.textContent = sumTotal > 240 ? `${(sumTotal-240).toFixed(0)} over 240` : `${(240-sumTotal).toFixed(0)} under 240`;

@@ -186,12 +186,16 @@ def fetch_darko():
         pos_raw = row.get('Position', row.get('position', '')).strip()
         pos = pos_raw.replace('_pos', '').upper() if pos_raw else ''
 
+        # NBA player ID (for headshots)
+        nba_id = row.get('NBA ID', row.get('nba_id', ''))
+
         entry = {
             'name': name,
             'dpm': dpm,
             'o_dpm': o_dpm,
             'd_dpm': d_dpm,
             'pos': pos,
+            'nba_id': str(nba_id) if nba_id else '',
         }
         players[name.lower()] = entry
         raw_list.append(entry)
@@ -1168,6 +1172,7 @@ def run(override_date=None):
                     'o_dpm': round(dk['o_dpm'], 1) if dk else 0,
                     'd_dpm': round(dk['d_dpm'], 1) if dk else 0,
                     'pos': dk.get('pos', '') if dk else '',
+                    'nba_id': dk.get('nba_id', '') if dk else '',
                 })
             for team, players in all_teams.items():
                 players.sort(key=lambda p: -p['min'])
