@@ -1148,14 +1148,27 @@ async function refreshOdds() {
 
 function switchOddsTab(tab) {
   _oddsTab = tab;
-  document.querySelectorAll('.odds-tab').forEach(b => b.classList.remove('active'));
-  document.querySelector(`.odds-tab[data-odds="${tab}"]`).classList.add('active');
+  document.querySelectorAll('.odds-tab').forEach(b => {
+    b.classList.remove('active');
+    b.style.background = '#fff';
+    b.style.color = 'var(--text2)';
+  });
+  const active = document.querySelector(`.odds-tab[data-odds="${tab}"]`);
+  active.classList.add('active');
+  active.style.background = 'var(--accent)';
+  active.style.color = '#fff';
   renderOddsSummary();
 }
 
 function fmtProb(p) {
   if (p == null) return '—';
   return (p * 100).toFixed(0) + '%';
+}
+function fmtProbML(p) {
+  if (p == null) return '—';
+  const pct = (p * 100).toFixed(0);
+  const ml = fmtML(probToML(p));
+  return `${pct}% (${ml})`;
 }
 
 function fmtFill(f) {
@@ -1169,20 +1182,17 @@ function renderOddsSummary() {
   if (!STATE.games.length) { thead.innerHTML = ''; tbody.innerHTML = ''; return; }
 
   if (_oddsTab === 'spread') {
-    thead.innerHTML = '<tr><th>Game</th><th>Team</th><th>Line</th><th>ML</th><th>Price</th><th>MDL</th><th>Edge</th><th>Avail</th></tr>';
+    thead.innerHTML = '<tr><th>Game</th><th>Team</th><th>Line</th><th>Price</th><th>MDL</th><th>Edge</th><th>Avail</th></tr>';
     let html = '';
     for (const g of STATE.games) {
       const edge = g.spread_edge;
-      const awML = g.proj_spread != null ? fmtML(spreadToML(-g.proj_spread)) : '—';
-      const hwML = g.proj_spread != null ? fmtML(spreadToML(g.proj_spread)) : '—';
       html += `<tr style="border-bottom:none;">
         <td rowspan="2" style="font-family:var(--sans);font-weight:600;font-size:10px;vertical-align:middle;border-bottom:2px solid var(--border);white-space:nowrap;">
           ${g.away} @<br>${g.home}<br><span style="color:var(--muted);font-weight:400;font-size:9px;">${g.game_time_et || ''}</span>
         </td>
         <td style="font-family:var(--sans);font-size:10px;">${g.away}</td>
         <td>${g.book_spread != null ? fmtSpread(-g.book_spread) : '—'}</td>
-        <td style="font-family:var(--mono);font-size:10px;color:var(--text2);">${awML}</td>
-        <td style="color:var(--accent);font-size:10px;">${fmtProb(g.away_spread_price)}</td>
+        <td style="color:var(--accent);font-size:10px;">${fmtProbML(g.away_spread_price)}</td>
         <td style="color:var(--accent)">${g.proj_spread != null ? fmtSpread(-g.proj_spread) : '—'}</td>
         <td>${edge != null && edge > 0 ? `<span class="edge-chip ${edgeClass(edge)}">${edge.toFixed(1)}</span>` : ''}</td>
         <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.away_spread_fill)}</td>
@@ -1190,8 +1200,7 @@ function renderOddsSummary() {
       html += `<tr style="border-bottom:2px solid var(--border);">
         <td style="font-family:var(--sans);font-size:10px;font-weight:600;">${g.home}</td>
         <td style="font-weight:600;">${g.book_spread != null ? fmtSpread(g.book_spread) : '—'}</td>
-        <td style="font-family:var(--mono);font-size:10px;font-weight:600;">${hwML}</td>
-        <td style="color:var(--accent);font-size:10px;">${fmtProb(g.home_spread_price)}</td>
+        <td style="color:var(--accent);font-size:10px;">${fmtProbML(g.home_spread_price)}</td>
         <td style="color:var(--accent);font-weight:600;">${g.proj_spread != null ? fmtSpread(g.proj_spread) : '—'}</td>
         <td>${edge != null && edge < 0 ? `<span class="edge-chip ${edgeClass(edge)}">${Math.abs(edge).toFixed(1)}</span>` : ''}</td>
         <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.home_spread_fill)}</td>
@@ -1248,7 +1257,7 @@ function renderOddsSummary() {
         </td>
         <td style="font-family:var(--sans);font-size:10px;">Over</td>
         <td>${g.book_total != null ? g.book_total : '—'}</td>
-        <td style="color:var(--accent);font-size:10px;">${fmtProb(g.over_price)}</td>
+        <td style="color:var(--accent);font-size:10px;">${fmtProbML(g.over_price)}</td>
         <td style="color:var(--accent)">${g.proj_total != null ? g.proj_total.toFixed(1) : '—'}</td>
         <td>${edge != null && edge > 0 ? `<span class="edge-chip ${edgeClass(edge)}">${edge.toFixed(1)}</span>` : ''}</td>
         <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.over_fill)}</td>
@@ -1256,7 +1265,7 @@ function renderOddsSummary() {
       html += `<tr style="border-bottom:2px solid var(--border);">
         <td style="font-family:var(--sans);font-size:10px;font-weight:600;">Under</td>
         <td style="font-weight:600;">${g.book_total != null ? g.book_total : '—'}</td>
-        <td style="color:var(--accent);font-size:10px;">${fmtProb(g.under_price)}</td>
+        <td style="color:var(--accent);font-size:10px;">${fmtProbML(g.under_price)}</td>
         <td style="color:var(--accent);font-weight:600;">${g.proj_total != null ? g.proj_total.toFixed(1) : '—'}</td>
         <td>${edge != null && edge < 0 ? `<span class="edge-chip ${edgeClass(edge)}">${Math.abs(edge).toFixed(1)}</span>` : ''}</td>
         <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.under_fill)}</td>
