@@ -987,26 +987,29 @@ function renderGames() {
 
       <div class="gc-proj" style="display:flex;">
         ${(() => {
-          const homeFav = g.proj_spread != null && g.proj_spread <= 0;
-          const favTeam = homeFav ? g.home : g.away;
-          const favSpread = homeFav ? g.proj_spread : -g.proj_spread;
-          const bookFavSpread = g.book_spread != null ? (homeFav ? g.book_spread : -g.book_spread) : null;
+          // Show spread under the team with the edge (the side the model likes)
+          // spread_edge > 0 means model likes away more than book → show away spread
+          // spread_edge < 0 means model likes home more → show home spread
+          const edgeSideAway = g.spread_edge != null ? g.spread_edge > 0 : (g.proj_spread != null && g.proj_spread > 0);
+          const edgeTeam = edgeSideAway ? g.away : g.home;
+          const edgeSpread = edgeSideAway ? (g.proj_spread != null ? -g.proj_spread : null) : g.proj_spread;
+          const bookEdgeSpread = g.book_spread != null ? (edgeSideAway ? -g.book_spread : g.book_spread) : null;
+
           const spreadHtml = `<div class="gc-proj-item" style="flex:1;">
-            <div class="proj-label">${favTeam} Spread</div>
-            <div class="proj-val">${g.proj_spread != null ? favTeam + ' ' + fmtSpread(favSpread) : '—'}</div>
-            ${bookFavSpread != null ? `<div style="font-size:10px;color:var(--muted);margin-top:2px;">Book: ${favTeam} ${fmtSpread(bookFavSpread)}</div>` : ''}
-            ${g.spread_edge != null ? `<div class="edge-chip ${edgeClass(g.spread_edge)}" style="margin-top:3px;">${fmtSpread(g.spread_edge)} edge</div>` : ''}
+            <div class="proj-label">${edgeTeam} Spread</div>
+            <div class="proj-val">${edgeSpread != null ? edgeTeam + ' ' + fmtSpread(edgeSpread) : '—'}</div>
+            ${bookEdgeSpread != null ? `<div style="font-size:10px;color:var(--muted);margin-top:2px;">Market: ${edgeTeam} ${fmtSpread(bookEdgeSpread)}</div>` : ''}
+            ${g.spread_edge != null ? `<div class="edge-chip ${edgeClass(g.spread_edge)}" style="margin-top:3px;">${fmtSpread(Math.abs(g.spread_edge))} edge</div>` : ''}
           </div>`;
           const totalHtml = `<div class="gc-proj-item" style="flex:1;">
             <div class="proj-label">Total</div>
             <div class="proj-val">${g.proj_total != null ? g.proj_total.toFixed(1) : '—'}</div>
-            ${g.book_total != null ? `<div style="font-size:10px;color:var(--muted);margin-top:2px;">Book: ${g.book_total}</div>` : ''}
+            ${g.book_total != null ? `<div style="font-size:10px;color:var(--muted);margin-top:2px;">Market: ${g.book_total}</div>` : ''}
             ${g.total_edge != null ? `<div class="edge-chip ${edgeClass(g.total_edge)}" style="margin-top:3px;">${g.total_edge > 0 ? 'O' : 'U'} ${Math.abs(g.total_edge).toFixed(1)} edge</div>` : ''}
           </div>`;
-          // Spread under favored team, total under underdog
-          // Away is left, home is right
-          if (homeFav) return totalHtml + `<div style="border-left:1px solid var(--border);"></div>` + spreadHtml;
-          return spreadHtml + `<div style="border-left:1px solid var(--border);"></div>` + totalHtml;
+          // Spread under the edge team's side, total under the other
+          if (edgeSideAway) return spreadHtml + `<div style="border-left:1px solid var(--border);"></div>` + totalHtml;
+          return totalHtml + `<div style="border-left:1px solid var(--border);"></div>` + spreadHtml;
         })()}
       </div>
 
