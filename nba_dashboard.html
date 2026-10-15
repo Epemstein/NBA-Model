@@ -878,6 +878,8 @@ async function loadSlate() {
     renderOddsSummary();
     updateStrip();
     populatePickDropdown();
+    // Apply baselines client-side
+    recalcGamesWithBaselines();
   } catch (e) {
     console.error('loadSlate error:', e);
     document.getElementById('no-games').style.display = 'block';
@@ -1411,7 +1413,7 @@ function loadTeamBaseline() {
         // If no saved baseline, all positions start at 0 — user fills them in
 
         return {
-          name: p.name, pos: p.pos || '',
+          name: p.name, pos: p.pos || '', nba_id: p.nba_id || '',
           pg, sg, sf, pf, c,
           dpm: p.dpm, o_dpm: p.o_dpm, d_dpm: p.d_dpm,
         };
@@ -1478,14 +1480,9 @@ function renderTeamBaseline() {
 
 function updatePosMin(idx, pos, val) {
   _teamPlayers[idx][pos] = parseFloat(val) || 0;
-  // Update total in the row
-  const p = _teamPlayers[idx];
-  const total = p.pg + p.sg + p.sf + p.pf + p.c;
-  const rows = document.querySelectorAll('#team-baseline-body tr');
-  if (rows[idx]) {
-    rows[idx].querySelector('td:nth-child(2)').textContent = total.toFixed(1);
-  }
-  updateTeamSums();
+  // Re-sort by total minutes and re-render
+  _teamPlayers.sort((a, b) => (b.pg+b.sg+b.sf+b.pf+b.c) - (a.pg+a.sg+a.sf+a.pf+a.c));
+  renderTeamBaseline();
 }
 
 function updateTeamSums() {
@@ -1529,7 +1526,10 @@ function saveTeamBaseline() {
     players[p.name] = { pg: p.pg, sg: p.sg, sf: p.sf, pf: p.pf, c: p.c };
   }
   fbDb.collection('nba_baselines').doc(_selectedTeam).set({ players })
-    .then(() => alert(`${_selectedTeam} baseline saved`))
+    .then(() => {
+      console.log(`${_selectedTeam} baseline saved`);
+      recalcGamesWithBaselines();
+    })
     .catch(e => alert('Save failed: ' + e.message));
 }
 
@@ -1544,6 +1544,80 @@ function openTeamTab(team) {
   document.getElementById('panel-teams').classList.add('active');
   document.getElementById('team-select').value = team;
   loadTeamBaseline();
+}
+
+// ── Client-side model recalculation ─────────────────────────────────────
+function recalcGamesWithBaselines() {
+  // Load all saved baselines and apply to game player lists + recalc ratings
+  const teams = new Set();
+  for (const g of STATE.games) { teams.add(g.away); teams.add(g.home); }
+
+  const promises = [...teams].map(t =>
+    fbDb.collection('nba_baselines').doc(t).get().then(s => [t, s.exists ? s.data().players || {} : {}])
+  );
+
+  Promise.all(promises).then(results => {
+    const baselines = {};
+    for (const [team, players] of results) baselines[team] = players;
+
+    for (const g of STATE.games) {
+      for (const side of ['away', 'home']) {
+        const team = g[side];
+        const bl = baselines[team] || {};
+        const playerList = g[`${side}_players`] || [];
+
+        // Apply baselines to player minutes
+        for (const p of playerList) {
+          const sv = bl[p.name];
+          if (sv != null) {
+            if (typeof sv === 'object') {
+              p.min = (sv.pg||0) + (sv.sg||0) + (sv.sf||0) + (sv.pf||0) + (sv.c||0);
+            } else {
+              p.min = sv;
+            }
+          }
+        }
+        // Sort by minutes
+        playerList.sort((a, b) => b.min - a.min);
+
+        // Recalculate team rating (same math as pipeline)
+        const totalRaw = playerList.reduce((s, p) => s + p.min / 48, 0);
+        const scale = totalRaw > 0 ? 5.0 / totalRaw : 0;
+        let off = 0, def = 0;
+        for (const p of playerList) {
+          const w = (p.min / 48) * scale;
+          off += (p.o_dpm || 0) * w;
+          def += (p.d_dpm || 0) * w;
+        }
+        g[`${side}_off`] = Math.round(off * 100) / 100;
+        g[`${side}_def`] = Math.round(def * 100) / 100;
+      }
+
+      // Recalculate projections
+      const avgOrtg = STATE.leagueAvgOrtg || 114.8;
+      const pace = g.matchup_pace || 95;
+      const awPP100 = avgOrtg + g.away_off - g.home_def;
+      const hwPP100 = avgOrtg + g.home_off - g.away_def;
+      g.away_proj = Math.round((awPP100 / 100 * pace - 0.75) * 10) / 10;
+      g.home_proj = Math.round((hwPP100 / 100 * pace + 0.75) * 10) / 10;
+      g.proj_spread = Math.round((g.away_proj - g.home_proj) * 10) / 10;
+      g.proj_total = Math.round((g.away_proj + g.home_proj) * 10) / 10;
+      g.away_pp100 = Math.round(awPP100 * 10) / 10;
+      g.home_pp100 = Math.round(hwPP100 * 10) / 10;
+
+      // Recalc edges
+      if (g.book_spread != null) {
+        g.spread_edge = Math.round((g.proj_spread - g.book_spread) * 10) / 10;
+      }
+      if (g.book_total != null) {
+        g.total_edge = Math.round((g.proj_total - g.book_total) * 10) / 10;
+      }
+    }
+
+    renderGames();
+    renderOddsSummary();
+    updateStrip();
+  });
 }
 
 // ── Roster Editor ───────────────────────────────────────────────────────
