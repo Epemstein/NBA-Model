@@ -258,6 +258,66 @@ main { padding: 16px 20px; max-width: 1400px; margin: 0 auto; }
 .math-row .mv { font-family: var(--mono); font-weight: 500; }
 .math-row.hl { background: #f0f7ff; padding: 4px 6px; border-radius: 3px; margin-top: 4px; border-bottom: none; }
 
+/* ── ROSTER MODAL ── */
+.roster-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,.45);
+  z-index: 500;
+  align-items: center;
+  justify-content: center;
+}
+.roster-overlay.open { display: flex; }
+.roster-modal {
+  background: var(--surface);
+  border-radius: 6px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.2);
+  width: 480px;
+  max-width: 95vw;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.roster-header {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 2px solid var(--border);
+}
+.roster-header h3 { font-size: 15px; font-weight: 700; }
+.roster-header .roster-close { font-size: 20px; cursor: pointer; color: var(--muted); background: none; border: none; padding: 4px 8px; }
+.roster-header .roster-close:hover { color: var(--text); }
+.roster-body { overflow-y: auto; flex: 1; }
+.roster-body table { width: 100%; border-collapse: collapse; }
+.roster-body th {
+  font-size: 9px; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--muted); font-weight: 600; text-align: left; padding: 6px 8px;
+  border-bottom: 2px solid var(--border); position: sticky; top: 0;
+  background: var(--surface); z-index: 1;
+}
+.roster-body td { padding: 5px 8px; border-bottom: 1px solid #f0f0f0; font-size: 12px; }
+.roster-body tr:hover td { background: #f8fafc; }
+.roster-body input[type=number] {
+  width: 50px; font-family: var(--mono); font-size: 12px; padding: 3px 5px;
+  border: 1px solid var(--border2); border-radius: 3px; text-align: right;
+}
+.roster-body input[type=number]:focus { border-color: var(--accent); outline: none; }
+.roster-body input[type=number].edited { border-color: var(--yellow); background: #fff8e1; }
+.roster-footer {
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.roster-summary {
+  font-family: var(--mono); font-size: 11px; color: var(--text2);
+}
+
 /* ── CARD / GENERIC ── */
 .card {
   background: var(--surface);
@@ -575,6 +635,34 @@ input:focus, select:focus { border-color: var(--accent); background: #fff; }
 
 </main>
 
+<!-- ═══════════ ROSTER MODAL ═══════════ -->
+<div class="roster-overlay" id="roster-overlay" onclick="if(event.target===this)closeRoster()">
+  <div class="roster-modal">
+    <div class="roster-header">
+      <h3 id="roster-title">—</h3>
+      <button class="roster-close" onclick="closeRoster()">&times;</button>
+    </div>
+    <div class="roster-body">
+      <table>
+        <thead><tr>
+          <th>Player</th><th style="text-align:right">Min</th><th style="text-align:right">DPM</th>
+          <th style="text-align:right">O-DPM</th><th style="text-align:right">D-DPM</th>
+        </tr></thead>
+        <tbody id="roster-tbody"></tbody>
+      </table>
+    </div>
+    <div class="roster-footer">
+      <div class="roster-summary">
+        OFF: <strong id="roster-off">—</strong> &nbsp; DEF: <strong id="roster-def">—</strong> &nbsp; Total MIN: <strong id="roster-min">—</strong>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <button class="btn bg" onclick="resetRoster()">Reset</button>
+        <button class="btn bp" onclick="saveRoster()">Save Overrides</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 </div><!-- end app-shell -->
 
 <script>
@@ -733,11 +821,11 @@ function renderGames() {
     <div class="gc ${hasEdge ? 'has-edge' : ''}">
       <div class="gc-time">${g.game_time_et || g.status_text || ''}</div>
       <div class="gc-teams">
-        <div class="gc-team-hdr away" style="background:${awColor}">
+        <div class="gc-team-hdr away" style="background:${awColor};cursor:pointer;" onclick="openRoster(${i},'away')">
           <span class="team-hdr-name">${g.away}</span>
           <span class="team-hdr-proj">${g.away_proj != null ? g.away_proj : '—'}</span>
         </div>
-        <div class="gc-team-hdr home" style="background:${hwColor}">
+        <div class="gc-team-hdr home" style="background:${hwColor};cursor:pointer;" onclick="openRoster(${i},'home')">
           <span class="team-hdr-name">${g.home}</span>
           <span class="team-hdr-proj">${g.home_proj != null ? g.home_proj : '—'}</span>
         </div>
@@ -1136,6 +1224,128 @@ function loadSettingsUI() {
   document.getElementById('set-total-edge').value = STATE.settings.totalEdge;
   document.getElementById('set-hca').value = STATE.settings.hca;
   document.getElementById('set-pace-mult').value = STATE.settings.paceMult;
+}
+
+// ── Roster Editor ───────────────────────────────────────────────────────
+let _rosterState = { gameIdx: null, side: null, players: [], origPlayers: [] };
+
+function openRoster(gameIdx, side) {
+  const g = STATE.games[gameIdx];
+  const team = side === 'away' ? g.away : g.home;
+  const players = side === 'away' ? (g.away_players || []) : (g.home_players || []);
+  const color = COLORS[team] || '#333';
+
+  _rosterState = {
+    gameIdx, side, team,
+    players: players.map(p => ({...p})),
+    origPlayers: players.map(p => ({...p})),
+  };
+
+  document.getElementById('roster-title').innerHTML =
+    `<span style="color:${color}">${team}</span> Rotation`;
+
+  renderRosterTable();
+  document.getElementById('roster-overlay').classList.add('open');
+}
+
+function closeRoster() {
+  document.getElementById('roster-overlay').classList.remove('open');
+}
+
+function renderRosterTable() {
+  const tbody = document.getElementById('roster-tbody');
+  const players = _rosterState.players;
+
+  tbody.innerHTML = players.map((p, i) => {
+    const orig = _rosterState.origPlayers[i];
+    const edited = orig && p.min !== orig.min;
+    return `<tr>
+      <td style="font-family:var(--sans);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;">${p.name}</td>
+      <td style="text-align:right;">
+        <input type="number" value="${p.min}" min="0" max="48" step="0.5"
+          class="${edited ? 'edited' : ''}"
+          onchange="updateRosterMin(${i}, this.value)" />
+      </td>
+      <td style="text-align:right;font-family:var(--mono);color:${p.dpm>=0?'var(--green)':'var(--red)'}">${p.dpm>0?'+':''}${p.dpm}</td>
+      <td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--text2)">${p.o_dpm>0?'+':''}${p.o_dpm}</td>
+      <td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--text2)">${p.d_dpm>0?'+':''}${p.d_dpm}</td>
+    </tr>`;
+  }).join('');
+
+  updateRosterSummary();
+}
+
+function updateRosterMin(idx, val) {
+  _rosterState.players[idx].min = parseFloat(val) || 0;
+  updateRosterSummary();
+  // Mark input as edited
+  const inputs = document.querySelectorAll('#roster-tbody input[type=number]');
+  if (inputs[idx]) {
+    const orig = _rosterState.origPlayers[idx];
+    inputs[idx].className = orig && _rosterState.players[idx].min !== orig.min ? 'edited' : '';
+  }
+}
+
+function updateRosterSummary() {
+  const players = _rosterState.players;
+  const totalMin = players.reduce((s, p) => s + p.min, 0);
+  const totalRaw = players.reduce((s, p) => s + p.min / 48, 0);
+  const scale = totalRaw > 0 ? 5.0 / totalRaw : 0;
+
+  let off = 0, def = 0;
+  for (const p of players) {
+    const w = (p.min / 48) * scale;
+    off += p.o_dpm * w;
+    def += p.d_dpm * w;
+  }
+
+  document.getElementById('roster-off').textContent = (off >= 0 ? '+' : '') + off.toFixed(2);
+  document.getElementById('roster-off').style.color = off >= 0 ? 'var(--green)' : 'var(--red)';
+  document.getElementById('roster-def').textContent = (def >= 0 ? '+' : '') + def.toFixed(2);
+  document.getElementById('roster-def').style.color = def >= 0 ? 'var(--green)' : 'var(--red)';
+  document.getElementById('roster-min').textContent = totalMin.toFixed(0);
+}
+
+function resetRoster() {
+  _rosterState.players = _rosterState.origPlayers.map(p => ({...p}));
+  renderRosterTable();
+}
+
+function saveRoster() {
+  // Save minute overrides to Firestore for the pipeline to pick up
+  const overrides = {};
+  for (let i = 0; i < _rosterState.players.length; i++) {
+    const p = _rosterState.players[i];
+    const orig = _rosterState.origPlayers[i];
+    if (p.min !== orig.min) {
+      overrides[p.name] = p.min;
+    }
+  }
+
+  if (Object.keys(overrides).length === 0) {
+    closeRoster();
+    return;
+  }
+
+  // Merge with existing overrides
+  const merged = {...STATE.overrides, ...overrides};
+  // Remove overrides that are back to original
+  for (const [name, mins] of Object.entries(merged)) {
+    if (mins === null || mins === undefined) delete merged[name];
+  }
+
+  STATE.overrides = merged;
+  localStorage.setItem('nba_overrides', JSON.stringify(merged));
+
+  // Write to Firestore
+  fbDb.collection('nba_overrides').doc('minutes').set(
+    { players: merged }, { merge: true }
+  ).then(() => {
+    console.log('Overrides saved to Firestore');
+  }).catch(e => console.error('Override save failed:', e));
+
+  renderOverrides();
+  closeRoster();
 }
 
 // ── Auth ────────────────────────────────────────────────────────────────
