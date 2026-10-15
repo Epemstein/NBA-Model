@@ -1650,6 +1650,7 @@ function recalcGamesWithBaselines() {
       for (const side of ['away', 'home']) {
         const team = g[side];
         const bl = baselines[team] || {};
+        const playerList = g[`${side}_players`] || [];
         if (!Object.keys(bl).length) {
           // No baseline saved — zero out all minutes (user must fill in baselines)
           for (const p of playerList) p.min = 0;
@@ -1658,7 +1659,6 @@ function recalcGamesWithBaselines() {
           continue;
         }
         anyChanged = true;
-        const playerList = g[`${side}_players`] || [];
 
         // Apply baselines: players IN the baseline get their saved minutes,
         // players NOT in the baseline keep their original minutes
