@@ -15,12 +15,20 @@ from firebase_admin import credentials, firestore
 
 # ── Firebase ─────────────────────────────────────────────────────────────
 SA_JSON = os.environ.get('FIREBASE_SA_JSON', '')
+db = None
 if SA_JSON:
-    cred = credentials.Certificate(json.loads(SA_JSON))
-    firebase_admin.initialize_app(cred)
-    db = firestore.client()
+    try:
+        sa_data = json.loads(SA_JSON)
+        if sa_data.get('type') == 'service_account':
+            cred = credentials.Certificate(sa_data)
+            firebase_admin.initialize_app(cred)
+            db = firestore.client()
+            print('Firestore connected')
+        else:
+            print('WARNING: FIREBASE_SA_JSON is not a valid service account — Firestore disabled')
+    except Exception as e:
+        print(f'WARNING: Failed to init Firebase ({e}) — Firestore disabled')
 else:
-    db = None
     print('WARNING: No FIREBASE_SA_JSON — Firestore disabled')
 
 # ── Config ────────────────────────────────────────────────────────────────
