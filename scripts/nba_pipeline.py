@@ -151,54 +151,73 @@ def fetch_darko():
         except Exception as e:
             print(f'DARKO cache miss: {e}')
 
-    print('Fetching DARKO ratings from Google Sheet...')
-    r = requests.get(DARKO_CSV_URL, timeout=30)
-    r.raise_for_status()
+    print('Fetching DARKO ratings from darko.app...')
+    try:
+        r = requests.get('https://www.darko.app/__data.json',
+                        headers={'User-Agent': 'Mozilla/5.0'}, timeout=20)
+        r.raise_for_status()
+        data = r.json()
+        node = data['nodes'][1]['data']
+        keys = [node[i] for i in node[2]]
+        groups = node[29]
 
-    reader = csv.DictReader(io.StringIO(r.text))
-    players = {}
-    raw_list = []
+        # Decode columns from SvelteKit flat array format
+        columns = {}
+        for gi, gidx in enumerate(groups):
+            col_refs = node[gidx]
+            columns[keys[gi]] = [node[x] if isinstance(x, int) else x for x in col_refs]
 
-    for row in reader:
-        # Column is "Player Name" in the DARKO sheet
-        name = row.get('Player Name', row.get('Player', '')).strip()
-        if not name:
-            continue
+        n = len(columns['nba_id'])
+        players = {}
+        raw_list = []
 
-        o_dpm = 0.0
-        d_dpm = 0.0
-        dpm = 0.0
+        for i in range(n):
+            name = columns['player_name'][i]
+            # Position: "C-F" → "C", "F-G" → "SF", "G" → "PG"
+            pos_raw = columns['position'][i] or ''
+            pos_map = {'C': 'C', 'C-F': 'C', 'F-C': 'PF', 'F': 'SF', 'F-G': 'SF', 'G-F': 'SG', 'G': 'PG'}
+            pos = pos_map.get(pos_raw, pos_raw.split('-')[0] if pos_raw else '')
 
-        for key in ['Offensive DPM', 'O-DPM', 'ODPM']:
-            if key in row and row[key]:
-                try: o_dpm = float(row[key]); break
-                except: pass
-        for key in ['Defensive DPM', 'D-DPM', 'DDPM']:
-            if key in row and row[key]:
-                try: d_dpm = float(row[key]); break
-                except: pass
-        for key in ['DPM', 'dpm']:
-            if key in row and row[key]:
-                try: dpm = float(row[key]); break
-                except: pass
-
-        # Position: "c_pos" → "C", "pf_pos" → "PF", etc.
-        pos_raw = row.get('Position', row.get('position', '')).strip()
-        pos = pos_raw.replace('_pos', '').upper() if pos_raw else ''
-
-        # NBA player ID (for headshots)
-        nba_id = row.get('NBA ID', row.get('nba_id', ''))
-
-        entry = {
-            'name': name,
-            'dpm': dpm,
-            'o_dpm': o_dpm,
-            'd_dpm': d_dpm,
-            'pos': pos,
-            'nba_id': str(nba_id) if nba_id else '',
-        }
-        players[name.lower()] = entry
-        raw_list.append(entry)
+            entry = {
+                'name': name,
+                'dpm': round(columns['dpm'][i], 2),
+                'o_dpm': round(columns['o_dpm'][i], 2),
+                'd_dpm': round(columns['d_dpm'][i], 2),
+                'pos': pos,
+                'nba_id': str(columns['nba_id'][i]),
+            }
+            players[name.lower()] = entry
+            raw_list.append(entry)
+    except Exception as e:
+        print(f'darko.app failed ({e}), falling back to Google Sheet...')
+        r = requests.get(DARKO_CSV_URL, timeout=30)
+        r.raise_for_status()
+        reader = csv.DictReader(io.StringIO(r.text))
+        players = {}
+        raw_list = []
+        for row in reader:
+            name = row.get('Player Name', row.get('Player', '')).strip()
+            if not name: continue
+            o_dpm = d_dpm = dpm = 0.0
+            for key in ['Offensive DPM', 'O-DPM']:
+                if key in row and row[key]:
+                    try: o_dpm = float(row[key]); break
+                    except: pass
+            for key in ['Defensive DPM', 'D-DPM']:
+                if key in row and row[key]:
+                    try: d_dpm = float(row[key]); break
+                    except: pass
+            for key in ['DPM', 'dpm']:
+                if key in row and row[key]:
+                    try: dpm = float(row[key]); break
+                    except: pass
+            pos_raw = row.get('Position', '').strip()
+            pos = pos_raw.replace('_pos', '').upper() if pos_raw else ''
+            nba_id = row.get('NBA ID', '')
+            entry = {'name': name, 'dpm': dpm, 'o_dpm': o_dpm, 'd_dpm': d_dpm,
+                     'pos': pos, 'nba_id': str(nba_id) if nba_id else ''}
+            players[name.lower()] = entry
+            raw_list.append(entry)
 
     print(f'DARKO: {len(players)} players loaded')
 
