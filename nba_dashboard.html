@@ -739,21 +739,38 @@ input[type=number] { -moz-appearance: textfield; }
       </div>
     </div>
     <div class="roster-body">
-      <table>
-        <thead><tr>
-          <th>Player</th><th style="text-align:right">Min</th><th style="text-align:right">DPM</th>
-          <th style="text-align:right">O-DPM</th><th style="text-align:right">D-DPM</th>
-        </tr></thead>
+      <table style="font-size:11px;">
+        <thead>
+          <tr>
+            <th>Player</th><th style="text-align:right">Total</th>
+            <th style="text-align:center;color:var(--accent)">PG</th>
+            <th style="text-align:center;color:var(--accent)">SG</th>
+            <th style="text-align:center;color:var(--accent)">SF</th>
+            <th style="text-align:center;color:var(--accent)">PF</th>
+            <th style="text-align:center;color:var(--accent)">C</th>
+            <th style="text-align:right">DPM</th>
+          </tr>
+          <tr id="roster-sums-row" style="background:#f0f7ff;font-weight:700;font-family:var(--mono);font-size:10px;position:sticky;top:28px;z-index:1;">
+            <td style="font-family:var(--sans);font-size:9px;color:var(--muted)">SUM</td>
+            <td style="text-align:right" id="roster-sum-total">0</td>
+            <td style="text-align:center" id="roster-sum-pg">0</td>
+            <td style="text-align:center" id="roster-sum-sg">0</td>
+            <td style="text-align:center" id="roster-sum-sf">0</td>
+            <td style="text-align:center" id="roster-sum-pf">0</td>
+            <td style="text-align:center" id="roster-sum-c">0</td>
+            <td></td>
+          </tr>
+        </thead>
         <tbody id="roster-tbody"></tbody>
       </table>
     </div>
     <div class="roster-footer">
       <div class="roster-summary">
-        OFF: <strong id="roster-off">—</strong> &nbsp; DEF: <strong id="roster-def">—</strong> &nbsp; Total MIN: <strong id="roster-min">—</strong>
+        OFF: <strong id="roster-off">—</strong> &nbsp; DEF: <strong id="roster-def">—</strong>
       </div>
       <div style="display:flex;gap:6px;">
         <button class="btn bg" onclick="resetRoster()">Reset</button>
-        <button class="btn bp" onclick="saveRoster()">Save Overrides</button>
+        <button class="btn bp" onclick="saveRoster()">Save</button>
       </div>
     </div>
   </div>
@@ -1099,7 +1116,7 @@ function renderPlayersPanel(i) {
     return `<div>
       <div class="math-col-title" style="display:flex;align-items:center;justify-content:space-between;">
         ${team} Rotation <span style="font-size:9px;color:var(--muted);font-weight:400;">${totalMin.toFixed(0)} min</span>
-        <button class="btn bg" style="font-size:9px;padding:2px 6px;" onclick="toggleEditPlayers(${i},'${side}')">Edit</button>
+        <button class="btn bg" style="font-size:9px;padding:2px 6px;" onclick="openRoster(${i},'${side}')">Edit</button>
       </div>
       <table style="width:100%;border-collapse:collapse;font-size:11px;">
         <tr style="border-bottom:1px solid var(--border);">
@@ -1971,21 +1988,50 @@ let _rosterState = { gameIdx: null, side: null, players: [], origPlayers: [] };
 function openRoster(gameIdx, side) {
   const g = STATE.games[gameIdx];
   const team = side === 'away' ? g.away : g.home;
-  const players = side === 'away' ? (g.away_players || []) : (g.home_players || []);
   const color = COLORS[team] || '#333';
 
-  _rosterState = {
-    gameIdx, side, team,
-    players: players.map(p => ({...p})),
-    origPlayers: players.map(p => ({...p})),
-  };
+  _rosterState = { gameIdx, side, team, players: [] };
 
   document.getElementById('roster-title').innerHTML =
     `<span style="color:${color}">${team}</span> Game Override`;
   document.getElementById('roster-baseline-link').onclick = () => { closeRoster(); openTeamTab(team); };
-
-  renderRosterTable();
+  document.getElementById('roster-tbody').innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:12px;">Loading...</td></tr>';
   document.getElementById('roster-overlay').classList.add('open');
+
+  // Load full roster + baselines + existing game overrides
+  Promise.all([
+    fbDb.collection('nba_rosters').doc(team).get(),
+    fbDb.collection('nba_baselines').doc(team).get(),
+    fbDb.collection('nba_game_overrides').doc(`${selectedDate}_${g.away}_${g.home}_${team}`).get(),
+  ]).then(([rosterSnap, baseSnap, overSnap]) => {
+    const roster = rosterSnap.exists ? rosterSnap.data().players || [] : [];
+    const baselines = baseSnap.exists ? baseSnap.data().players || {} : {};
+    const overrides = overSnap.exists ? overSnap.data().players || {} : {};
+
+    _rosterState.players = roster.map(p => {
+      // Start from baseline
+      let pg=0, sg=0, sf=0, pf=0, c=0;
+      const bl = baselines[p.name];
+      if (bl && typeof bl === 'object') {
+        pg = bl.pg||0; sg = bl.sg||0; sf = bl.sf||0; pf = bl.pf||0; c = bl.c||0;
+      }
+      // Apply game override (stored as total minutes — put in primary position)
+      const ov = overrides[p.name];
+      if (ov != null && typeof ov === 'object') {
+        pg = ov.pg||0; sg = ov.sg||0; sf = ov.sf||0; pf = ov.pf||0; c = ov.c||0;
+      } else if (ov != null) {
+        // Legacy: single number override → zero all positions if set to 0
+        if (ov === 0) { pg=0; sg=0; sf=0; pf=0; c=0; }
+      }
+      return {
+        name: p.name, pos: p.pos||'', nba_id: p.nba_id||'',
+        pg, sg, sf, pf, c,
+        dpm: p.dpm||0, o_dpm: p.o_dpm||0, d_dpm: p.d_dpm||0,
+      };
+    }).sort((a, b) => (b.pg+b.sg+b.sf+b.pf+b.c) - (a.pg+a.sg+a.sf+a.pf+a.c));
+
+    renderRosterTable();
+  });
 }
 
 function closeRoster() {
@@ -1995,89 +2041,142 @@ function closeRoster() {
 function renderRosterTable() {
   const tbody = document.getElementById('roster-tbody');
   const players = _rosterState.players;
+  const color = COLORS[_rosterState.team] || '#333';
+  const rgb = hexToRgb(color);
 
   tbody.innerHTML = players.map((p, i) => {
-    const orig = _rosterState.origPlayers[i];
-    const edited = orig && p.min !== orig.min;
-    return `<tr>
-      <td style="font-family:var(--sans);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;">${p.name}</td>
-      <td style="text-align:right;">
-        <input type="number" value="${p.min}" min="0" max="48" step="0.5"
-          class="${edited ? 'edited' : ''}"
-          onchange="updateRosterMin(${i}, this.value)" />
+    const total = p.pg + p.sg + p.sf + p.pf + p.c;
+    const opacity = Math.min(total / 36, 1) * 0.15;
+    const bg = total > 0 ? `rgba(${rgb}, ${opacity})` : 'transparent';
+    const hs = p.nba_id ? `<img src="${playerHeadshot(p.nba_id)}" class="player-headshot" onerror="this.src='data:image/svg+xml,<%3Fxml version=%221.0%22%3F><svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2224%22 height=%2218%22><rect fill=%22%23ddd%22 width=%2224%22 height=%2218%22/><circle cx=%2212%22 cy=%227%22 r=%223.5%22 fill=%22%23bbb%22/><ellipse cx=%2212%22 cy=%2218%22 rx=%226%22 ry=%225%22 fill=%22%23bbb%22/></svg>'" />` : '';
+
+    return `<tr style="background:${bg};">
+      <td style="font-family:var(--sans);font-weight:500;white-space:nowrap;">
+        <div style="display:flex;align-items:center;gap:4px;">
+          ${hs}<span style="overflow:hidden;text-overflow:ellipsis;max-width:100px;">${p.name}</span>
+          <span style="font-size:8px;color:var(--muted)">${p.pos}</span>
+        </div>
       </td>
-      <td style="text-align:right;font-family:var(--mono);color:${p.dpm>=0?'var(--green)':'var(--red)'}">${p.dpm>0?'+':''}${p.dpm}</td>
-      <td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--text2)">${p.o_dpm>0?'+':''}${p.o_dpm}</td>
-      <td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--text2)">${p.d_dpm>0?'+':''}${p.d_dpm}</td>
+      <td style="text-align:right;font-family:var(--mono);font-weight:700;">${total > 0 ? total.toFixed(0) : '—'}</td>
+      <td style="text-align:center"><input type="number" value="${p.pg||''}" min="0" max="48" step="1" style="width:36px;text-align:center;font-size:10px;" onchange="updateRosterPos(${i},'pg',this.value)" placeholder="0"></td>
+      <td style="text-align:center"><input type="number" value="${p.sg||''}" min="0" max="48" step="1" style="width:36px;text-align:center;font-size:10px;" onchange="updateRosterPos(${i},'sg',this.value)" placeholder="0"></td>
+      <td style="text-align:center"><input type="number" value="${p.sf||''}" min="0" max="48" step="1" style="width:36px;text-align:center;font-size:10px;" onchange="updateRosterPos(${i},'sf',this.value)" placeholder="0"></td>
+      <td style="text-align:center"><input type="number" value="${p.pf||''}" min="0" max="48" step="1" style="width:36px;text-align:center;font-size:10px;" onchange="updateRosterPos(${i},'pf',this.value)" placeholder="0"></td>
+      <td style="text-align:center"><input type="number" value="${p.c||''}" min="0" max="48" step="1" style="width:36px;text-align:center;font-size:10px;" onchange="updateRosterPos(${i},'c',this.value)" placeholder="0"></td>
+      <td style="text-align:right;font-family:var(--mono);font-size:10px;color:${p.dpm>=0?'var(--green)':'var(--red)'}">${p.dpm>0?'+':''}${p.dpm}</td>
     </tr>`;
   }).join('');
 
-  updateRosterSummary();
+  updateRosterSums();
 }
 
-function updateRosterMin(idx, val) {
-  _rosterState.players[idx].min = parseFloat(val) || 0;
-  updateRosterSummary();
-  // Mark input as edited
-  const inputs = document.querySelectorAll('#roster-tbody input[type=number]');
-  if (inputs[idx]) {
-    const orig = _rosterState.origPlayers[idx];
-    inputs[idx].className = orig && _rosterState.players[idx].min !== orig.min ? 'edited' : '';
+function updateRosterPos(idx, pos, val) {
+  _rosterState.players[idx][pos] = parseFloat(val) || 0;
+  _rosterState.players.sort((a, b) => (b.pg+b.sg+b.sf+b.pf+b.c) - (a.pg+a.sg+a.sf+a.pf+a.c));
+  renderRosterTable();
+  autoSaveRoster();
+}
+
+function updateRosterSums() {
+  let sumPg=0, sumSg=0, sumSf=0, sumPf=0, sumC=0;
+  for (const p of _rosterState.players) {
+    sumPg += p.pg; sumSg += p.sg; sumSf += p.sf; sumPf += p.pf; sumC += p.c;
   }
-}
+  const total = sumPg + sumSg + sumSf + sumPf + sumC;
+  const clr = (v, t) => v > t+1 ? 'var(--red)' : v < t-1 ? 'var(--yellow)' : 'var(--green)';
+  document.getElementById('roster-sum-total').textContent = total.toFixed(0);
+  document.getElementById('roster-sum-total').style.color = clr(total, 240);
+  document.getElementById('roster-sum-pg').textContent = sumPg.toFixed(0);
+  document.getElementById('roster-sum-pg').style.color = clr(sumPg, 48);
+  document.getElementById('roster-sum-sg').textContent = sumSg.toFixed(0);
+  document.getElementById('roster-sum-sg').style.color = clr(sumSg, 48);
+  document.getElementById('roster-sum-sf').textContent = sumSf.toFixed(0);
+  document.getElementById('roster-sum-sf').style.color = clr(sumSf, 48);
+  document.getElementById('roster-sum-pf').textContent = sumPf.toFixed(0);
+  document.getElementById('roster-sum-pf').style.color = clr(sumPf, 48);
+  document.getElementById('roster-sum-c').textContent = sumC.toFixed(0);
+  document.getElementById('roster-sum-c').style.color = clr(sumC, 48);
 
-function updateRosterSummary() {
-  const players = _rosterState.players;
-  const totalMin = players.reduce((s, p) => s + p.min, 0);
-  const totalRaw = players.reduce((s, p) => s + p.min / 48, 0);
+  // Recalc OFF/DEF
+  const totalRaw = _rosterState.players.reduce((s, p) => s + (p.pg+p.sg+p.sf+p.pf+p.c) / 48, 0);
   const scale = totalRaw > 0 ? 5.0 / totalRaw : 0;
-
   let off = 0, def = 0;
-  for (const p of players) {
-    const w = (p.min / 48) * scale;
-    off += p.o_dpm * w;
-    def += p.d_dpm * w;
+  for (const p of _rosterState.players) {
+    const w = ((p.pg+p.sg+p.sf+p.pf+p.c) / 48) * scale;
+    off += (p.o_dpm||0) * w;
+    def += (p.d_dpm||0) * w;
   }
-
   document.getElementById('roster-off').textContent = (off >= 0 ? '+' : '') + off.toFixed(2);
   document.getElementById('roster-off').style.color = off >= 0 ? 'var(--green)' : 'var(--red)';
   document.getElementById('roster-def').textContent = (def >= 0 ? '+' : '') + def.toFixed(2);
   document.getElementById('roster-def').style.color = def >= 0 ? 'var(--green)' : 'var(--red)';
-  document.getElementById('roster-min').textContent = totalMin.toFixed(0);
+}
+
+let _rosterSaveTimer = null;
+function autoSaveRoster() {
+  clearTimeout(_rosterSaveTimer);
+  _rosterSaveTimer = setTimeout(() => saveRoster(true), 500);
 }
 
 function resetRoster() {
-  _rosterState.players = _rosterState.origPlayers.map(p => ({...p}));
-  renderRosterTable();
+  if (!confirm('Reset game overrides to baseline?')) return;
+  const g = STATE.games[_rosterState.gameIdx];
+  const key = `${selectedDate}_${g.away}_${g.home}_${_rosterState.team}`;
+  fbDb.collection('nba_game_overrides').doc(key).delete().then(() => {
+    openRoster(_rosterState.gameIdx, _rosterState.side); // reload
+    recalcGamesWithBaselines();
+  });
 }
 
-function saveRoster() {
-  // Save GAME-LEVEL minute overrides (only for this specific game)
+function saveRoster(silent) {
   const overrides = {};
-  for (let i = 0; i < _rosterState.players.length; i++) {
-    const p = _rosterState.players[i];
-    const orig = _rosterState.origPlayers[i];
-    if (p.min !== orig.min) {
-      overrides[p.name] = p.min;
-    }
+  for (const p of _rosterState.players) {
+    overrides[p.name] = { pg: p.pg, sg: p.sg, sf: p.sf, pf: p.pf, c: p.c };
   }
 
-  if (Object.keys(overrides).length === 0) {
-    closeRoster();
-    return;
-  }
-
-  // Build game-specific key: date_away_home_team
   const g = STATE.games[_rosterState.gameIdx];
   const key = `${selectedDate}_${g.away}_${g.home}_${_rosterState.team}`;
 
-  fbDb.collection('nba_game_overrides').doc(key).set(
-    { players: overrides }, { merge: true }
-  ).then(() => {
-    console.log(`Game override saved: ${key}`);
-  }).catch(e => console.error('Game override save failed:', e));
+  fbDb.collection('nba_game_overrides').doc(key).set({ players: overrides })
+    .then(() => {
+      console.log(`Game override saved: ${key}`);
+      // Update game player minutes and recalc
+      const side = _rosterState.side;
+      const playerList = g[`${side}_players`] || [];
+      for (const p of playerList) {
+        const edited = _rosterState.players.find(ep => ep.name === p.name);
+        if (edited) p.min = edited.pg + edited.sg + edited.sf + edited.pf + edited.c;
+      }
+      playerList.sort((a, b) => b.min - a.min);
+      const totalRaw = playerList.reduce((s, p) => s + p.min / 48, 0);
+      const scale = totalRaw > 0 ? 5.0 / totalRaw : 0;
+      let off = 0, def = 0;
+      for (const p of playerList) {
+        const w = (p.min / 48) * scale;
+        off += (p.o_dpm || 0) * w;
+        def += (p.d_dpm || 0) * w;
+      }
+      g[`${side}_off`] = Math.round(off * 100) / 100;
+      g[`${side}_def`] = Math.round(def * 100) / 100;
+      // Recalc projections
+      const avgOrtg = STATE.leagueAvgOrtg || 114.8;
+      const hca = (STATE.settings.hca || 1.5) / 2;
+      const pace = g.matchup_pace || 95;
+      const awPP100 = avgOrtg + g.away_off - g.home_def;
+      const hwPP100 = avgOrtg + g.home_off - g.away_def;
+      g.away_proj = Math.round((awPP100 / 100 * pace - hca) * 10) / 10;
+      g.home_proj = Math.round((hwPP100 / 100 * pace + hca) * 10) / 10;
+      g.proj_spread = Math.round((g.away_proj - g.home_proj) * 10) / 10;
+      g.proj_total = Math.round((g.away_proj + g.home_proj) * 10) / 10;
+      if (g.book_spread != null) g.spread_edge = Math.round((g.proj_spread - g.book_spread) * 10) / 10;
+      if (g.book_total != null) g.total_edge = Math.round((g.proj_total - g.book_total) * 10) / 10;
+      renderGames();
+      renderOddsSummary();
+      updateStrip();
+    })
+    .catch(e => { if (!silent) alert('Save failed: ' + e.message); });
 
-  closeRoster();
+  if (!silent) closeRoster();
 }
 
 // ── Auth ────────────────────────────────────────────────────────────────
