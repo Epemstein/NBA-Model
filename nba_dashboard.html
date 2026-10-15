@@ -990,7 +990,7 @@ function renderGames() {
                   <th style="text-align:right;font-size:9px;color:var(--muted);padding:2px 4px;">O-DPM</th>
                   <th style="text-align:right;font-size:9px;color:var(--muted);padding:2px 4px;">D-DPM</th>
                 </tr>
-                ${(g.away_players||[]).map(p => `
+                ${(g.away_players||[]).filter(p=>p.min>0).map(p => `
                 <tr style="border-bottom:1px solid #f0f0f0;">
                   <td style="padding:3px 0;font-family:var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100px;">${p.name}</td>
                   <td style="text-align:right;padding:3px 4px;font-family:var(--mono);font-weight:600;">${p.min}</td>
@@ -1010,7 +1010,7 @@ function renderGames() {
                   <th style="text-align:right;font-size:9px;color:var(--muted);padding:2px 4px;">O-DPM</th>
                   <th style="text-align:right;font-size:9px;color:var(--muted);padding:2px 4px;">D-DPM</th>
                 </tr>
-                ${(g.home_players||[]).map(p => `
+                ${(g.home_players||[]).filter(p=>p.min>0).map(p => `
                 <tr style="border-bottom:1px solid #f0f0f0;">
                   <td style="padding:3px 0;font-family:var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100px;">${p.name}</td>
                   <td style="text-align:right;padding:3px 4px;font-family:var(--mono);font-weight:600;">${p.min}</td>
@@ -1560,10 +1560,13 @@ function recalcGamesWithBaselines() {
     const baselines = {};
     for (const [team, players] of results) baselines[team] = players;
 
+    let anyChanged = false;
     for (const g of STATE.games) {
       for (const side of ['away', 'home']) {
         const team = g[side];
         const bl = baselines[team] || {};
+        if (!Object.keys(bl).length) continue;
+        anyChanged = true;
         const playerList = g[`${side}_players`] || [];
 
         // Apply baselines to player minutes
@@ -1614,6 +1617,9 @@ function recalcGamesWithBaselines() {
       }
     }
 
+    if (anyChanged) {
+      console.log('Baselines applied, re-rendering...');
+    }
     renderGames();
     renderOddsSummary();
     updateStrip();
