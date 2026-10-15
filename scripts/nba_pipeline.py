@@ -443,24 +443,42 @@ def fetch_schedule():
     """
     today = today_et()
 
+    # Try scoreboardv3 first (has gameLabel for preseason filtering)
     try:
-        url = 'https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json'
-        r = _nba_get(url, timeout=15)
+        r = _nba_get('https://stats.nba.com/stats/scoreboardv3',
+                     params={'GameDate': today, 'LeagueID': '00'}, timeout=15)
         data = r.json()
+        source = 'v3'
     except Exception as e:
-        print(f'NBA CDN failed ({e}), trying Firestore cache...')
-        # Fall back to last cached slate (which has game schedule info)
-        if db:
-            snap = db.collection('nba_slate').document(today).get()
-            if snap.exists:
-                cached = snap.to_dict()
-                if cached.get('games'):
-                    print(f'Schedule loaded from Firestore cache ({len(cached["games"])} games)')
-                    return cached['games']
-        raise
+        print(f'Scoreboard v3 failed ({e}), trying CDN...')
+        try:
+            url = 'https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json'
+            r = _nba_get(url, timeout=15)
+            data = r.json()
+            source = 'cdn'
+        except Exception as e2:
+            print(f'NBA CDN also failed ({e2}), trying Firestore cache...')
+            if db:
+                snap = db.collection('nba_slate').document(today).get()
+                if snap.exists:
+                    cached = snap.to_dict()
+                    if cached.get('games'):
+                        print(f'Schedule loaded from Firestore cache ({len(cached["games"])} games)')
+                        return cached['games']
+            raise
 
     games = []
     for g in data.get('scoreboard', {}).get('games', []):
+        # Skip preseason games
+        game_label = g.get('gameLabel', '')
+        game_id = g.get('gameId', '')
+        is_preseason = game_label.lower() == 'preseason' or game_id.startswith('001')
+        if is_preseason:
+            aw_tri = g.get('awayTeam', {}).get('teamTricode', '?')
+            hw_tri = g.get('homeTeam', {}).get('teamTricode', '?')
+            print(f'  Skipping preseason: {aw_tri} @ {hw_tri}')
+            continue
+
         away_id = g['awayTeam']['teamId']
         home_id = g['homeTeam']['teamId']
         aw = NBA_ID_TO_ABR.get(away_id, g['awayTeam'].get('teamTricode', ''))
@@ -793,8 +811,8 @@ def run():
 
     for gm in games:
         aw, hw = gm['away'], gm['home']
-        aw_r = team_ratings.get(aw, {'off': 0, 'def': 0})
-        hw_r = team_ratings.get(hw, {'off': 0, 'def': 0})
+        aw_r = team_ratings.get(aw, {'off': 0, 'def': 0, 'players': []})
+        hw_r = team_ratings.get(hw, {'off': 0, 'def': 0, 'players': []})
 
         aw_pace = team_paces.get(aw, league_avg_pace)
         hw_pace = team_paces.get(hw, league_avg_pace)
@@ -817,6 +835,18 @@ def run():
         gm['home_def'] = hw_r['def']
         gm['away_pp100'] = proj['away_pp100']
         gm['home_pp100'] = proj['home_pp100']
+
+        # Attach player rosters (top 10 by minutes)
+        gm['away_players'] = [
+            {'name': p['name'], 'min': p['minutes'], 'dpm': round(p['dpm'], 1),
+             'o_dpm': round(p['o_dpm'], 1), 'd_dpm': round(p['d_dpm'], 1)}
+            for p in aw_r.get('players', [])[:10]
+        ]
+        gm['home_players'] = [
+            {'name': p['name'], 'min': p['minutes'], 'dpm': round(p['dpm'], 1),
+             'o_dpm': round(p['o_dpm'], 1), 'd_dpm': round(p['d_dpm'], 1)}
+            for p in hw_r.get('players', [])[:10]
+        ]
 
         print(f'\n{aw} @ {hw} | {gm["game_time_et"]}')
         print(f'  {aw}: OFF={aw_r["off"]:+.1f} DEF={aw_r["def"]:+.1f} → {proj["away_pts"]} pts')
