@@ -1967,9 +1967,9 @@ function recalcGamesWithBaselines() {
       // Recalculate projections — apply pace multiplier from settings
       const avgOrtg = STATE.leagueAvgOrtg || 114.8;
       const paceMult = STATE.settings.paceMult || 1.0;
-      // matchup_pace from pipeline was baked with 0.95 — undo and reapply user setting
-      const rawPace = (g.matchup_pace || 95) / 0.95;
-      const pace = rawPace * paceMult;
+      // Store raw pace (before any multiplier) on first run, reuse it after
+      if (!g._rawPace) g._rawPace = (g.matchup_pace || 95) / 0.95;
+      const pace = g._rawPace * paceMult;
       g.matchup_pace = Math.round(pace * 10) / 10;
       const hca = (STATE.settings.hca || 1.5) / 2;
       const awPP100 = avgOrtg + g.away_off - g.home_def;
