@@ -1800,7 +1800,7 @@ function renderTeamBaseline() {
     const placeholder = `data:image/svg+xml,<%3Fxml version=%221.0%22%3F><svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2236%22 height=%2228%22><rect fill=%22%23ddd%22 width=%2236%22 height=%2228%22/><circle cx=%2218%22 cy=%2210%22 r=%225%22 fill=%22%23bbb%22/><ellipse cx=%2218%22 cy=%2228%22 rx=%229%22 ry=%228%22 fill=%22%23bbb%22/></svg>`;
     const dpmColor = p.dpm >= 0 ? 'var(--green)' : 'var(--red)';
 
-    return `<tr style="background:${bg};height:40px;">
+    return `<tr style="background:${bg};height:40px;${total === 0 ? 'opacity:0.35;' : ''}">
       <td style="font-family:var(--sans);font-weight:500;white-space:nowrap;padding:6px 8px;">
         <div style="display:flex;align-items:center;gap:8px;">
           <img src="${hsUrl || placeholder}" style="width:36px;height:28px;object-fit:cover;object-position:top;border-radius:3px;background:#e0e0e0;flex-shrink:0;" onerror="this.src='${placeholder}'" />
@@ -2067,9 +2067,11 @@ function renderRosterTable() {
     const bg = total > 0 ? `rgba(${rgb}, ${opacity})` : 'transparent';
     const hs = p.nba_id ? `<img src="${playerHeadshot(p.nba_id)}" class="player-headshot" onerror="this.src='data:image/svg+xml,<%3Fxml version=%221.0%22%3F><svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2224%22 height=%2218%22><rect fill=%22%23ddd%22 width=%2224%22 height=%2218%22/><circle cx=%2212%22 cy=%227%22 r=%223.5%22 fill=%22%23bbb%22/><ellipse cx=%2212%22 cy=%2218%22 rx=%226%22 ry=%225%22 fill=%22%23bbb%22/></svg>'" />` : '';
 
-    return `<tr style="background:${bg};">
+    const zeroed = total === 0 && (p.pg===0&&p.sg===0&&p.sf===0&&p.pf===0&&p.c===0);
+    return `<tr style="background:${bg};${zeroed ? 'opacity:0.3;' : ''}">
       <td style="font-family:var(--sans);font-weight:500;white-space:nowrap;">
         <div style="display:flex;align-items:center;gap:4px;">
+          <button style="font-size:12px;color:var(--red);background:none;border:none;cursor:pointer;padding:0 2px;flex-shrink:0;font-weight:700;" onclick="zeroRosterPlayer(${i})" title="Rule out">&times;</button>
           ${hs}<span style="overflow:hidden;text-overflow:ellipsis;max-width:100px;">${p.name}</span>
           <span style="font-size:8px;color:var(--muted)">${p.pos}</span>
         </div>
@@ -2085,6 +2087,13 @@ function renderRosterTable() {
   }).join('');
 
   updateRosterSums();
+}
+
+function zeroRosterPlayer(idx) {
+  const p = _rosterState.players[idx];
+  p.pg = 0; p.sg = 0; p.sf = 0; p.pf = 0; p.c = 0;
+  renderRosterTable();
+  autoSaveRoster();
 }
 
 function updateRosterPos(idx, pos, val) {
