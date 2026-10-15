@@ -895,7 +895,14 @@ def get_game_overrides(date, away, home, team):
         if doc.exists:
             data = doc.to_dict() or {}
             players = data.get('players', {})
-            return {norm_name(k): v for k, v in players.items()}
+            result = {}
+            for name, val in players.items():
+                if isinstance(val, dict):
+                    total = sum(val.get(p, 0) for p in ['pg', 'sg', 'sf', 'pf', 'c'])
+                    result[norm_name(name)] = total
+                else:
+                    result[norm_name(name)] = val
+            return result
     except:
         pass
     return {}
@@ -1184,13 +1191,18 @@ def run(override_date=None):
             })
             print(f'\nWrote {len(games_out)} games to Firestore')
 
-            # Write all team rosters (for Teams tab)
+            # Write all team rosters (for Teams tab) — deduplicate by normalized name
             all_teams = {}
-            for name_lower, mp in player_minutes.items():
+            seen = {}  # {(team, norm_name): True}
+            for name_key, mp in player_minutes.items():
                 team = mp['team_abr']
+                nk = norm_name(mp['name'])
+                if (team, nk) in seen:
+                    continue
+                seen[(team, nk)] = True
                 if team not in all_teams:
                     all_teams[team] = []
-                dk = darko.get(name_lower)
+                dk = darko.get(nk) or darko.get(name_key)
                 all_teams[team].append({
                     'name': mp['name'],
                     'min': mp['minutes'],
