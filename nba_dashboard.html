@@ -1034,7 +1034,7 @@ function renderGames() {
                 <tr style="border-bottom:1px solid #f0f0f0;">
                   <td style="padding:3px 0;font-family:var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;">
                     <div style="display:flex;align-items:center;gap:4px;">
-                      ${p.nba_id ? `<img src="https://cdn.nba.com/headshots/nba/latest/260x190/${p.nba_id}.png" style="width:24px;height:18px;object-fit:cover;object-position:top;border-radius:2px;background:#f0f0f0;" onerror="this.style.display='none'" />` : ''}
+                      <img src="${p.nba_id ? `https://cdn.nba.com/headshots/nba/latest/260x190/${p.nba_id}.png` : ''}" style="width:24px;height:18px;object-fit:cover;object-position:top;border-radius:2px;background:#e0e0e0;flex-shrink:0;" onerror="this.src='data:image/svg+xml,<%3Fxml version=%221.0%22%3F><svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2224%22 height=%2218%22><rect fill=%22%23ddd%22 width=%2224%22 height=%2218%22/><circle cx=%2212%22 cy=%227%22 r=%223.5%22 fill=%22%23bbb%22/><ellipse cx=%2212%22 cy=%2218%22 rx=%226%22 ry=%225%22 fill=%22%23bbb%22/></svg>'" />
                       ${p.name}
                     </div>
                   </td>
@@ -1055,7 +1055,7 @@ function renderGames() {
                 <tr style="border-bottom:1px solid #f0f0f0;">
                   <td style="padding:3px 0;font-family:var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;">
                     <div style="display:flex;align-items:center;gap:4px;">
-                      ${p.nba_id ? `<img src="https://cdn.nba.com/headshots/nba/latest/260x190/${p.nba_id}.png" style="width:24px;height:18px;object-fit:cover;object-position:top;border-radius:2px;background:#f0f0f0;" onerror="this.style.display='none'" />` : ''}
+                      <img src="${p.nba_id ? `https://cdn.nba.com/headshots/nba/latest/260x190/${p.nba_id}.png` : ''}" style="width:24px;height:18px;object-fit:cover;object-position:top;border-radius:2px;background:#e0e0e0;flex-shrink:0;" onerror="this.src='data:image/svg+xml,<%3Fxml version=%221.0%22%3F><svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2224%22 height=%2218%22><rect fill=%22%23ddd%22 width=%2224%22 height=%2218%22/><circle cx=%2212%22 cy=%227%22 r=%223.5%22 fill=%22%23bbb%22/><ellipse cx=%2212%22 cy=%2218%22 rx=%226%22 ry=%225%22 fill=%22%23bbb%22/></svg>'" />
                       ${p.name}
                     </div>
                   </td>
