@@ -287,19 +287,28 @@ def fetch_player_minutes():
 
     print('Fetching player minutes from NBA API...')
 
-    # Try current season first, fall back to previous if no data
-    for season in [_current_season(), _previous_season()]:
+    # Try: current regular season → current preseason → previous regular season
+    season_attempts = [
+        (_current_season(), 'Regular Season'),
+        (_current_season(), 'Pre Season'),
+        (_previous_season(), 'Regular Season'),
+    ]
+    rows = []
+    for season, season_type in season_attempts:
         try:
             params = _nba_player_params(season, last_n=8)
+            params['SeasonType'] = season_type
+            if season_type == 'Pre Season':
+                params['LastNGames'] = '0'  # all preseason games
             r = _nba_get('https://stats.nba.com/stats/leaguedashplayerstats',
                          params=params, timeout=45)
             data = r.json()
             rows = data['resultSets'][0]['rowSet']
             if rows:
-                print(f'Using season {season} ({len(rows)} players)')
+                print(f'Using {season} {season_type} ({len(rows)} players)')
                 break
         except Exception as e:
-            print(f'Season {season} failed: {e}')
+            print(f'{season} {season_type} failed: {e}')
             rows = []
     else:
         # Fall back to stale Firestore cache (any age)
