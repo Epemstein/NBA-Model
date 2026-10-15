@@ -1825,9 +1825,8 @@ function setupRealtimeListener() {
         hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York'
       }) + ' ET';
     }
-    renderGames();
-    renderOddsSummary();
-    updateStrip();
+    // Apply baselines before rendering
+    recalcGamesWithBaselines();
     populatePickDropdown();
   });
 }
