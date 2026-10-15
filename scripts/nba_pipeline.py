@@ -1191,6 +1191,23 @@ def run(override_date=None):
             })
             print(f'\nWrote {len(games_out)} games to Firestore')
 
+            # Fetch official NBA rosters to catch players with no minutes (injured etc)
+            official_rosters = {}
+            for team_id, team_abr in NBA_ID_TO_ABR.items():
+                try:
+                    r = _nba_get('https://stats.nba.com/stats/commonteamroster',
+                                params={'TeamID': str(team_id), 'Season': _current_season(), 'LeagueID': '00'},
+                                timeout=10)
+                    rdata = r.json()
+                    rhdrs = rdata['resultSets'][0]['headers']
+                    rrows = rdata['resultSets'][0]['rowSet']
+                    name_i = rhdrs.index('PLAYER')
+                    pid_i = rhdrs.index('PLAYER_ID')
+                    official_rosters[team_abr] = [(row[name_i], str(row[pid_i])) for row in rrows]
+                except:
+                    pass
+            print(f'Official rosters: {len(official_rosters)} teams')
+
             # Write all team rosters (for Teams tab) — deduplicate by normalized name
             # When duplicates exist, prefer the one with a DARKO match
             all_teams = {}
@@ -1218,6 +1235,25 @@ def run(override_date=None):
                     continue
                 seen[(team, nk)] = len(all_teams[team])
                 all_teams[team].append(entry)
+            # Add missing official roster players (injured, haven't played yet)
+            for team_abr, roster_list in official_rosters.items():
+                if team_abr not in all_teams:
+                    all_teams[team_abr] = []
+                existing = {norm_name(p['name']) for p in all_teams.get(team_abr, [])}
+                for pname, pid in roster_list:
+                    nk = norm_name(pname)
+                    if nk not in existing:
+                        dk = darko.get(nk)
+                        all_teams[team_abr].append({
+                            'name': pname,
+                            'min': 0,
+                            'dpm': round(dk['dpm'], 1) if dk else 0,
+                            'o_dpm': round(dk['o_dpm'], 1) if dk else 0,
+                            'd_dpm': round(dk['d_dpm'], 1) if dk else 0,
+                            'pos': dk.get('pos', '') if dk else '',
+                            'nba_id': dk.get('nba_id', pid) if dk else pid,
+                        })
+
             for team, players in all_teams.items():
                 players.sort(key=lambda p: -p['min'])
                 db.collection('nba_rosters').document(team).set({
