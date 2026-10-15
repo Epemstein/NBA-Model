@@ -1362,7 +1362,7 @@ function fmtProbML(p) {
   if (p == null) return '—';
   const pct = (p * 100).toFixed(0);
   const ml = fmtML(probToML(p));
-  return `${pct}% (${ml})`;
+  return `${ml} (${pct}%)`;
 }
 
 function fmtFill(f) {
