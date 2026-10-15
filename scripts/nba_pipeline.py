@@ -825,10 +825,12 @@ def run(override_date=None):
                 tot = nl.get('total', {})
                 if sp.get('strike') is not None:
                     gm['book_spread'] = sp['strike']
+                    gm['spread_liq'] = sp.get('liquidity', 0)
                     gm['novig_spread_home_oid'] = sp.get('home_outcome_id')
                     gm['novig_spread_away_oid'] = sp.get('away_outcome_id')
                 if tot.get('strike') is not None:
                     gm['book_total'] = tot['strike']
+                    gm['total_liq'] = tot.get('liquidity', 0)
                     gm['novig_total_over_oid'] = tot.get('over_outcome_id')
                     gm['novig_total_under_oid'] = tot.get('under_outcome_id')
                 gm['odds_source'] = 'Novig'

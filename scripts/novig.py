@@ -231,6 +231,7 @@ def get_novig_nba_lines(client, target_date=None):
 
     spreads = client.get_nba_markets(market_type='SPREAD')
     totals = client.get_nba_markets(market_type='TOTAL')
+    moneys = client.get_nba_markets(market_type='MONEY')
 
     if not spreads and not totals:
         return {}
@@ -266,9 +267,33 @@ def get_novig_nba_lines(client, target_date=None):
         if not ev['spreads']:
             continue
 
-        # Pick primary spread: smallest absolute strike (closest to pick'em)
-        ev['spreads'].sort(key=lambda m: abs(float(m['strike'])))
+        # Pick primary spread: midpoint of all available strikes
+        # Novig posts alt lines around the primary — the midpoint of the range
+        # matches the actual market line. On ties, pick closer to zero.
+        # Pick the spread with the most liquidity (total qty on the book)
+        best_liq = -1
         sp = ev['spreads'][0]
+        sp_liq = 0
+        for m in ev['spreads']:
+            try:
+                book = client.get_book(m['marketId'])
+                total_qty = sum(
+                    o.get('qty', 0) if isinstance(o, dict) else 0
+                    for orders in (book.get('orders', {}).values() if book else [])
+                    for o in (orders if isinstance(orders, list) else [])
+                )
+                if total_qty > best_liq:
+                    best_liq = total_qty
+                    sp = m
+                    sp_liq = total_qty
+            except:
+                pass
+        if best_liq <= 0:
+            # Fallback: midpoint of strikes
+            strikes = [float(m['strike']) for m in ev['spreads']]
+            primary = round((min(strikes) + max(strikes)) / 2 * 2) / 2
+            ev['spreads'].sort(key=lambda m: abs(float(m['strike']) - primary))
+            sp = ev['spreads'][0]
         outcomes = sp['outcomes']
 
         # Extract team names from outcomes (e.g. "NYK -5.5", "PHI +5.5")
@@ -288,12 +313,28 @@ def get_novig_nba_lines(client, target_date=None):
         else:
             home_team, away_team = teams[1], teams[0]
 
-        # Pick primary total: median strike
+        # Pick primary total: most liquidity, fallback to median strike
         total_data = None
+        tot_liq = 0
         if ev['totals']:
-            ev['totals'].sort(key=lambda m: float(m['strike']))
-            mid = len(ev['totals']) // 2
-            total_data = ev['totals'][mid]
+            best_tot_liq = -1
+            for m in ev['totals']:
+                try:
+                    book = client.get_book(m['marketId'])
+                    tq = sum(
+                        o.get('qty', 0) if isinstance(o, dict) else 0
+                        for orders in (book.get('orders', {}).values() if book else [])
+                        for o in (orders if isinstance(orders, list) else [])
+                    )
+                    if tq > best_tot_liq:
+                        best_tot_liq = tq
+                        total_data = m
+                        tot_liq = tq
+                except:
+                    pass
+            if best_tot_liq <= 0:
+                ev['totals'].sort(key=lambda m: float(m['strike']))
+                total_data = ev['totals'][len(ev['totals']) // 2]
 
         key = f'{away_team}@{home_team}'
         entry = {
@@ -303,6 +344,7 @@ def get_novig_nba_lines(client, target_date=None):
                 'market_id': sp['marketId'],
                 'home_team': home_team,
                 'away_team': away_team,
+                'liquidity': sp_liq,
             },
         }
         for o in outcomes:
@@ -315,6 +357,7 @@ def get_novig_nba_lines(client, target_date=None):
             entry['total'] = {
                 'strike': float(total_data['strike']),
                 'market_id': total_data['marketId'],
+                'liquidity': tot_liq,
             }
             for o in total_data['outcomes']:
                 if 'Over' in o['name']:

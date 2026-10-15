@@ -421,9 +421,29 @@ input:focus, select:focus { border-color: var(--accent); background: #fff; }
     <div class="stat-strip-item"><div class="sl">Avg Pace</div><div class="sv" id="ss-pace">—</div></div>
   </div>
 
-  <div class="gg" id="games-grid"></div>
-  <div id="no-games" style="display:none;text-align:center;padding:40px;color:var(--muted);">
-    No games today. Check back later or run the pipeline manually.
+  <div style="display:flex;gap:12px;align-items:flex-start;">
+
+    <!-- Odds Summary Sidebar -->
+    <div class="card" style="min-width:340px;max-width:400px;flex-shrink:0;position:sticky;top:56px;max-height:calc(100vh - 180px);overflow-y:auto;">
+      <div class="ct">Odds Summary</div>
+      <div class="sw" style="max-height:none;">
+        <table class="dt" id="odds-summary-table" style="font-size:11px;">
+          <thead><tr>
+            <th>Game</th><th>Team</th><th>Spread</th><th>Total</th><th>MDL</th><th>Edge</th><th>Liq</th>
+          </tr></thead>
+          <tbody id="odds-summary-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Game Cards Grid -->
+    <div style="flex:1;min-width:0;">
+      <div class="gg" id="games-grid"></div>
+      <div id="no-games" style="display:none;text-align:center;padding:40px;color:var(--muted);">
+        No games today. Check back later or run the pipeline manually.
+      </div>
+    </div>
+
   </div>
 
 </div>
@@ -678,6 +698,7 @@ async function loadSlate() {
     }
 
     renderGames();
+    renderOddsSummary();
     updateStrip();
     populatePickDropdown();
   } catch (e) {
@@ -861,6 +882,45 @@ function toggleDrawer(i) {
 function togglePlayers(i) {
   const d = document.getElementById('players-' + i);
   d.classList.toggle('open');
+}
+
+// ── Odds Summary Sidebar ────────────────────────────────────────────────
+function renderOddsSummary() {
+  const tbody = document.getElementById('odds-summary-body');
+  if (!STATE.games.length) { tbody.innerHTML = ''; return; }
+
+  let html = '';
+  for (const g of STATE.games) {
+    const spreadEdge = g.spread_edge != null ? g.spread_edge : null;
+    const totalEdge = g.total_edge != null ? g.total_edge : null;
+    const sLiq = g.spread_liq ? `$${(g.spread_liq/100).toFixed(0)}` : '—';
+    const tLiq = g.total_liq ? `$${(g.total_liq/100).toFixed(0)}` : '—';
+
+    // Away row
+    html += `<tr style="border-bottom:none;">
+      <td rowspan="2" style="font-family:var(--sans);font-weight:600;font-size:10px;vertical-align:middle;border-bottom:2px solid var(--border);white-space:nowrap;">
+        ${g.away} @<br>${g.home}<br><span style="color:var(--muted);font-weight:400;font-size:9px;">${g.game_time_et || ''}</span>
+      </td>
+      <td style="font-family:var(--sans);font-size:10px;">${g.away}</td>
+      <td>${g.book_spread != null ? fmtSpread(-g.book_spread) : '—'}</td>
+      <td>${g.book_total != null ? 'O ' + g.book_total : '—'}</td>
+      <td style="color:var(--accent)">${g.proj_spread != null ? fmtSpread(-g.proj_spread) : '—'}</td>
+      <td>${spreadEdge != null && spreadEdge > 0 ? `<span class="edge-chip ${edgeClass(spreadEdge)}">${spreadEdge.toFixed(1)}</span>` : ''}</td>
+      <td style="font-size:9px;color:var(--muted)">${sLiq}</td>
+    </tr>`;
+
+    // Home row
+    html += `<tr style="border-bottom:2px solid var(--border);">
+      <td style="font-family:var(--sans);font-size:10px;font-weight:600;">${g.home}</td>
+      <td style="font-weight:600;">${g.book_spread != null ? fmtSpread(g.book_spread) : '—'}</td>
+      <td>${g.book_total != null ? 'U ' + g.book_total : '—'}</td>
+      <td style="color:var(--accent);font-weight:600;">${g.proj_spread != null ? fmtSpread(g.proj_spread) : '—'}</td>
+      <td>${spreadEdge != null && spreadEdge < 0 ? `<span class="edge-chip ${edgeClass(spreadEdge)}">${Math.abs(spreadEdge).toFixed(1)}</span>` : ''}
+          ${totalEdge != null ? `<span class="edge-chip ${edgeClass(totalEdge)}" style="font-size:9px;">${totalEdge > 0 ? 'O' : 'U'}${Math.abs(totalEdge).toFixed(1)}</span>` : ''}</td>
+      <td style="font-size:9px;color:var(--muted)">${tLiq}</td>
+    </tr>`;
+  }
+  tbody.innerHTML = html;
 }
 
 // ── Update stat strip ───────────────────────────────────────────────────
@@ -1163,6 +1223,7 @@ function setupRealtimeListener() {
       }) + ' ET';
     }
     renderGames();
+    renderOddsSummary();
     updateStrip();
     populatePickDropdown();
   });
