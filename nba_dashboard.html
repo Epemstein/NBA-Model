@@ -848,6 +848,39 @@ function edgeClass(e) {
   return 'lo';
 }
 
+// ── Spread → Moneyline conversion (σ = 13) ──────────────────────────────
+// Standard normal CDF approximation (Abramowitz & Stegun)
+function normCdf(x) {
+  const a1=0.254829592, a2=-0.284496736, a3=1.421413741, a4=-1.453152027, a5=1.061405429;
+  const p=0.3275911;
+  const sign = x < 0 ? -1 : 1;
+  x = Math.abs(x) / Math.sqrt(2);
+  const t = 1.0 / (1.0 + p * x);
+  const y = 1.0 - (((((a5*t + a4)*t) + a3)*t + a2)*t + a1)*t * Math.exp(-x*x);
+  return 0.5 * (1.0 + sign * y);
+}
+
+function spreadToWinProb(spread) {
+  // P = Φ(-S / 13)  — negative spread = favorite
+  return normCdf(-spread / 13);
+}
+
+function probToML(p) {
+  if (p >= 0.9999) return -99999;
+  if (p <= 0.0001) return 99999;
+  if (p >= 0.5) return Math.round(-100 * p / (1 - p));
+  return Math.round(100 * (1 - p) / p);
+}
+
+function fmtML(ml) {
+  if (ml >= 0) return '+' + ml;
+  return '' + ml;
+}
+
+function spreadToML(spread) {
+  return probToML(spreadToWinProb(spread));
+}
+
 // ── Load data from Firestore ────────────────────────────────────────────
 async function loadSlate() {
   const dateKey = selectedDate;
@@ -914,11 +947,17 @@ function renderGames() {
       <div class="gc-teams">
         <div class="gc-team-hdr away" style="background:${awColor};cursor:pointer;" onclick="openRoster(${i},'away')">
           <span class="team-hdr-name">${g.away}</span>
-          <span class="team-hdr-proj">${g.away_proj != null ? g.away_proj : '—'}</span>
+          <div style="text-align:right;position:relative;z-index:1;">
+            <div class="team-hdr-proj">${g.away_proj != null ? g.away_proj : '—'}</div>
+            ${g.proj_spread != null ? `<div style="font-size:10px;font-family:var(--mono);opacity:.8;margin-top:1px;">${(spreadToWinProb(-g.proj_spread)*100).toFixed(0)}% · ${fmtML(spreadToML(-g.proj_spread))}</div>` : ''}
+          </div>
         </div>
         <div class="gc-team-hdr home" style="background:${hwColor};cursor:pointer;" onclick="openRoster(${i},'home')">
           <span class="team-hdr-name">${g.home}</span>
-          <span class="team-hdr-proj">${g.home_proj != null ? g.home_proj : '—'}</span>
+          <div style="text-align:right;position:relative;z-index:1;">
+            <div class="team-hdr-proj">${g.home_proj != null ? g.home_proj : '—'}</div>
+            ${g.proj_spread != null ? `<div style="font-size:10px;font-family:var(--mono);opacity:.8;margin-top:1px;">${(spreadToWinProb(g.proj_spread)*100).toFixed(0)}% · ${fmtML(spreadToML(g.proj_spread))}</div>` : ''}
+          </div>
         </div>
       </div>
 
@@ -1091,16 +1130,19 @@ function renderOddsSummary() {
   if (!STATE.games.length) { thead.innerHTML = ''; tbody.innerHTML = ''; return; }
 
   if (_oddsTab === 'spread') {
-    thead.innerHTML = '<tr><th>Game</th><th>Team</th><th>Line</th><th>Price</th><th>MDL</th><th>Edge</th><th>Avail</th></tr>';
+    thead.innerHTML = '<tr><th>Game</th><th>Team</th><th>Line</th><th>ML</th><th>Price</th><th>MDL</th><th>Edge</th><th>Avail</th></tr>';
     let html = '';
     for (const g of STATE.games) {
       const edge = g.spread_edge;
+      const awML = g.proj_spread != null ? fmtML(spreadToML(-g.proj_spread)) : '—';
+      const hwML = g.proj_spread != null ? fmtML(spreadToML(g.proj_spread)) : '—';
       html += `<tr style="border-bottom:none;">
         <td rowspan="2" style="font-family:var(--sans);font-weight:600;font-size:10px;vertical-align:middle;border-bottom:2px solid var(--border);white-space:nowrap;">
           ${g.away} @<br>${g.home}<br><span style="color:var(--muted);font-weight:400;font-size:9px;">${g.game_time_et || ''}</span>
         </td>
         <td style="font-family:var(--sans);font-size:10px;">${g.away}</td>
         <td>${g.book_spread != null ? fmtSpread(-g.book_spread) : '—'}</td>
+        <td style="font-family:var(--mono);font-size:10px;color:var(--text2);">${awML}</td>
         <td style="color:var(--accent);font-size:10px;">${fmtProb(g.away_spread_price)}</td>
         <td style="color:var(--accent)">${g.proj_spread != null ? fmtSpread(-g.proj_spread) : '—'}</td>
         <td>${edge != null && edge > 0 ? `<span class="edge-chip ${edgeClass(edge)}">${edge.toFixed(1)}</span>` : ''}</td>
@@ -1109,6 +1151,7 @@ function renderOddsSummary() {
       html += `<tr style="border-bottom:2px solid var(--border);">
         <td style="font-family:var(--sans);font-size:10px;font-weight:600;">${g.home}</td>
         <td style="font-weight:600;">${g.book_spread != null ? fmtSpread(g.book_spread) : '—'}</td>
+        <td style="font-family:var(--mono);font-size:10px;font-weight:600;">${hwML}</td>
         <td style="color:var(--accent);font-size:10px;">${fmtProb(g.home_spread_price)}</td>
         <td style="color:var(--accent);font-weight:600;">${g.proj_spread != null ? fmtSpread(g.proj_spread) : '—'}</td>
         <td>${edge != null && edge < 0 ? `<span class="edge-chip ${edgeClass(edge)}">${Math.abs(edge).toFixed(1)}</span>` : ''}</td>
