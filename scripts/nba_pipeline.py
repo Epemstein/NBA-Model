@@ -904,12 +904,12 @@ def run(override_date=None):
         gm['away_players'] = [
             {'name': p['name'], 'min': p['minutes'], 'dpm': round(p['dpm'], 1),
              'o_dpm': round(p['o_dpm'], 1), 'd_dpm': round(p['d_dpm'], 1)}
-            for p in aw_r.get('players', [])[:10]
+            for p in aw_r.get('players', [])
         ]
         gm['home_players'] = [
             {'name': p['name'], 'min': p['minutes'], 'dpm': round(p['dpm'], 1),
              'o_dpm': round(p['o_dpm'], 1), 'd_dpm': round(p['d_dpm'], 1)}
-            for p in hw_r.get('players', [])[:10]
+            for p in hw_r.get('players', [])
         ]
 
         print(f'\n{aw} @ {hw} | {gm["game_time_et"]}')
