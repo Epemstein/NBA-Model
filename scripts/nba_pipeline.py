@@ -193,6 +193,7 @@ def fetch_darko():
                 'nba_id': str(columns['nba_id'][i]),
             }
             players[norm_name(name)] = entry
+            players[f'id:{columns["nba_id"][i]}'] = entry  # Also key by NBA ID
             raw_list.append(entry)
     except Exception as e:
         print(f'darko.app failed ({e}), falling back to Google Sheet...')
@@ -223,6 +224,8 @@ def fetch_darko():
             entry = {'name': name, 'dpm': dpm, 'o_dpm': o_dpm, 'd_dpm': d_dpm,
                      'pos': pos, 'nba_id': str(nba_id) if nba_id else ''}
             players[norm_name(name)] = entry
+            if nba_id:
+                players[f'id:{nba_id}'] = entry
             raw_list.append(entry)
 
     print(f'DARKO: {len(players)} players loaded')
@@ -461,6 +464,7 @@ def _fetch_nba_api_minutes(today):
     team_idx = hdrs.index('TEAM_ABBREVIATION')
     min_idx = hdrs.index('MIN')
     gp_idx = hdrs.index('GP')
+    pid_idx = hdrs.index('PLAYER_ID')
 
     players = {}
     raw_list = []
@@ -469,11 +473,12 @@ def _fetch_nba_api_minutes(today):
         team = row[team_idx]
         minutes = row[min_idx] or 0
         gp = row[gp_idx] or 0
+        pid = str(row[pid_idx])
 
         if gp < 1 or minutes < 1:
             continue
 
-        entry = {'name': name, 'team_abr': team, 'minutes': round(minutes, 1)}
+        entry = {'name': name, 'team_abr': team, 'minutes': round(minutes, 1), 'nba_id': pid}
         players[norm_name(name)] = entry
         raw_list.append(entry)
 
@@ -725,8 +730,11 @@ def compute_team_rating(team_abr, darko, minutes):
     for name_lower, mp in minutes.items():
         if mp['team_abr'] != team_abr:
             continue
-        # Find matching DARKO entry by exact name only
-        dk = darko.get(name_lower)
+        # Match DARKO by NBA ID first, then by name
+        nba_id = mp.get('nba_id', '')
+        dk = darko.get(f'id:{nba_id}') if nba_id else None
+        if not dk:
+            dk = darko.get(name_lower)
 
         team_players.append({
             'name': mp['name'],
@@ -734,7 +742,7 @@ def compute_team_rating(team_abr, darko, minutes):
             'o_dpm': dk['o_dpm'] if dk else None,
             'd_dpm': dk['d_dpm'] if dk else None,
             'dpm': dk['dpm'] if dk else None,
-            'nba_id': dk.get('nba_id', '') if dk else '',
+            'nba_id': dk.get('nba_id', nba_id) if dk else nba_id,
         })
 
     if not team_players:
@@ -1212,48 +1220,52 @@ def run(override_date=None):
                     pass
             print(f'Official rosters: {len(official_rosters)} teams')
 
-            # Write all team rosters (for Teams tab) — deduplicate by normalized name
-            # When duplicates exist, prefer the one with a DARKO match
+            # Write all team rosters — match DARKO by NBA ID first, then name
             all_teams = {}
-            seen = {}  # {(team, norm_name): index in all_teams[team]}
+            seen = {}  # {(team, nba_id or norm_name): index}
             for name_key, mp in player_minutes.items():
                 team = mp['team_abr']
+                pid = mp.get('nba_id', '')
                 nk = norm_name(mp['name'])
-                dk = darko.get(nk) or darko.get(name_key)
+                # Match by ID first, then name
+                dk = darko.get(f'id:{pid}') if pid else None
+                if not dk:
+                    dk = darko.get(nk) or darko.get(name_key)
+                # Deduplicate by ID or normalized name
+                dedup_key = (team, pid) if pid else (team, nk)
                 entry = {
-                    'name': mp['name'],
+                    'name': dk['name'] if dk else mp['name'],  # Use DARKO name if matched
                     'min': mp['minutes'],
                     'dpm': round(dk['dpm'], 1) if dk else None,
                     'o_dpm': round(dk['o_dpm'], 1) if dk else None,
                     'd_dpm': round(dk['d_dpm'], 1) if dk else None,
                     'pos': dk.get('pos', '') if dk else '',
-                    'nba_id': dk.get('nba_id', '') if dk else '',
+                    'nba_id': dk.get('nba_id', pid) if dk else pid,
                 }
                 if team not in all_teams:
                     all_teams[team] = []
-                if (team, nk) in seen:
-                    # Duplicate — replace if this one has DARKO data and existing doesn't
-                    idx = seen[(team, nk)]
-                    if dk and all_teams[team][idx]['dpm'] == 0:
+                if dedup_key in seen:
+                    idx = seen[dedup_key]
+                    if dk and all_teams[team][idx].get('dpm') is None:
                         all_teams[team][idx] = entry
                     continue
-                seen[(team, nk)] = len(all_teams[team])
+                seen[dedup_key] = len(all_teams[team])
                 all_teams[team].append(entry)
             # Add missing official roster players (injured, haven't played yet)
             for team_abr, roster_list in official_rosters.items():
                 if team_abr not in all_teams:
                     all_teams[team_abr] = []
-                existing = {norm_name(p['name']) for p in all_teams.get(team_abr, [])}
+                existing_ids = {p.get('nba_id', '') for p in all_teams.get(team_abr, []) if p.get('nba_id')}
                 for pname, pid in roster_list:
-                    nk = norm_name(pname)
-                    if nk not in existing:
-                        dk = darko.get(nk)
-                        all_teams[team_abr].append({
-                            'name': pname,
+                    if pid in existing_ids:
+                        continue
+                    dk = darko.get(f'id:{pid}') or darko.get(norm_name(pname))
+                    all_teams[team_abr].append({
+                            'name': dk['name'] if dk else pname,
                             'min': 0,
-                            'dpm': round(dk['dpm'], 1) if dk else 0,
-                            'o_dpm': round(dk['o_dpm'], 1) if dk else 0,
-                            'd_dpm': round(dk['d_dpm'], 1) if dk else 0,
+                            'dpm': round(dk['dpm'], 1) if dk else None,
+                            'o_dpm': round(dk['o_dpm'], 1) if dk else None,
+                            'd_dpm': round(dk['d_dpm'], 1) if dk else None,
                             'pos': dk.get('pos', '') if dk else '',
                             'nba_id': dk.get('nba_id', pid) if dk else pid,
                         })
