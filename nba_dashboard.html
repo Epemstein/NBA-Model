@@ -1915,9 +1915,12 @@ function recalcGamesWithBaselines() {
   const teams = new Set();
   for (const g of STATE.games) { teams.add(g.away); teams.add(g.home); }
 
-  // Load baselines AND game overrides for all teams
+  // Load baselines, game overrides, AND rosters for all teams
   const basePromises = [...teams].map(t =>
     fbDb.collection('nba_baselines').doc(t).get().then(s => ['bl', t, s.exists ? s.data().players || {} : {}])
+  );
+  const rosterPromises = [...teams].map(t =>
+    fbDb.collection('nba_rosters').doc(t).get().then(s => ['ro', t, s.exists ? s.data().players || [] : []])
   );
   const gamePromises = [];
   for (const g of STATE.games) {
@@ -1930,11 +1933,13 @@ function recalcGamesWithBaselines() {
     }
   }
 
-  Promise.all([...basePromises, ...gamePromises]).then(results => {
+  Promise.all([...basePromises, ...rosterPromises, ...gamePromises]).then(results => {
     const baselines = {};
-    const gameOverrides = {}; // keyed by `${away}_${home}_${team}`
+    const rosters = {};
+    const gameOverrides = {};
     for (const r of results) {
       if (r[0] === 'bl') baselines[r[1]] = r[2];
+      else if (r[0] === 'ro') rosters[r[1]] = r[2];
       else if (r[0] === 'go') {
         const g = r[2];
         gameOverrides[`${g.away}_${g.home}_${r[1]}`] = r[3];
@@ -1947,9 +1952,10 @@ function recalcGamesWithBaselines() {
         const team = g[side];
         const bl = baselines[team] || {};
         const go = gameOverrides[`${g.away}_${g.home}_${team}`] || {};
-        const playerList = g[`${side}_players`] || [];
+        const roster = rosters[team] || [];
         if (!Object.keys(bl).length && !Object.keys(go).length) {
           // No baseline or game override — zero out
+          const playerList = g[`${side}_players`] || [];
           for (const p of playerList) p.min = 0;
           g[`${side}_off`] = 0;
           g[`${side}_def`] = 0;
@@ -1957,32 +1963,31 @@ function recalcGamesWithBaselines() {
         }
         anyChanged = true;
 
-        // Apply baselines first, then game overrides on top
-        // Build normalized lookup maps
+        // Rebuild player list from roster + baselines + game overrides
         const blNorm = {}; for (const [k,v] of Object.entries(bl)) blNorm[normName(k)] = v;
         const goNorm = {}; for (const [k,v] of Object.entries(go)) goNorm[normName(k)] = v;
-        for (const p of playerList) {
-          const nn = normName(p.name);
-          const sv = blNorm[nn];
+
+        function resolveMin(name) {
+          const nn = normName(name);
           const gv = goNorm[nn];
-          // Game override wins over baseline; if neither exists, zero out
+          const sv = blNorm[nn];
           if (gv != null) {
-            if (typeof gv === 'object') {
-              p.min = (gv.pg||0)+(gv.sg||0)+(gv.sf||0)+(gv.pf||0)+(gv.c||0);
-            } else {
-              p.min = gv;
-            }
-          } else if (sv != null) {
-            if (typeof sv === 'object') {
-              p.min = (sv.pg||0) + (sv.sg||0) + (sv.sf||0) + (sv.pf||0) + (sv.c||0);
-            } else {
-              p.min = sv;
-            }
-          } else {
-            // Player not in baseline or game override — zero out
-            p.min = 0;
+            return typeof gv === 'object' ? (gv.pg||0)+(gv.sg||0)+(gv.sf||0)+(gv.pf||0)+(gv.c||0) : gv;
           }
+          if (sv != null) {
+            return typeof sv === 'object' ? (sv.pg||0)+(sv.sg||0)+(sv.sf||0)+(sv.pf||0)+(sv.c||0) : sv;
+          }
+          return 0;
         }
+
+        // Build from roster (has all players with DPM/nba_id)
+        const newList = roster.map(p => ({
+          name: p.name, dpm: p.dpm||0, o_dpm: p.o_dpm||0, d_dpm: p.d_dpm||0,
+          nba_id: p.nba_id||'', min: resolveMin(p.name),
+        })).filter(p => p.min > 0).sort((a,b) => b.min - a.min);
+
+        g[`${side}_players`] = newList;
+        const playerList = newList;
         // Sort by minutes
         playerList.sort((a, b) => b.min - a.min);
 
