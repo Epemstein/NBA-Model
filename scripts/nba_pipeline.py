@@ -266,13 +266,96 @@ def _nba_get(base_url, params=None, timeout=30):
 
 
 # ── Fetch player minutes (last 8 games avg) from NBA API ────────────────
+# ── FantasyPros team abbreviation mapping ────────────────────────────────
+_FP_TEAM_MAP = {
+    'SA': 'SAS', 'GS': 'GSW', 'NY': 'NYK', 'NO': 'NOP', 'CHA': 'CHA',
+    'PHO': 'PHX', 'WSH': 'WAS', 'BKN': 'BKN', 'LAL': 'LAL', 'LAC': 'LAC',
+}
+
+def fetch_projected_minutes():
+    """Fetch projected minutes per game from FantasyPros.
+    Returns dict: {player_name_lower: {name, team_abr, minutes}} or None if fails.
+    """
+    import re as _re
+
+    url = 'https://www.fantasypros.com/nba/projections/avg-overall.php'
+    try:
+        r = requests.get(url, headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }, timeout=20)
+        r.raise_for_status()
+    except Exception as e:
+        print(f'FantasyPros fetch failed: {e}')
+        return None
+
+    table = _re.search(r'<table[^>]*id="data"[^>]*>(.*?)</table>', r.text, _re.DOTALL)
+    if not table:
+        print('FantasyPros: no data table found')
+        return None
+
+    tbody = _re.search(r'<tbody>(.*?)</tbody>', table.group(1), _re.DOTALL)
+    if not tbody:
+        return None
+
+    rows = _re.findall(r'<tr[^>]*>(.*?)</tr>', tbody.group(1), _re.DOTALL)
+    players = {}
+    raw_list = []
+
+    for row in rows:
+        cells = _re.findall(r'<td[^>]*>(.*?)</td>', row, _re.DOTALL)
+        if len(cells) < 11:
+            continue
+        clean = [_re.sub(r'<[^>]+>', '', c).strip() for c in cells]
+
+        # Parse player name and team: "Jayson Tatum (BOS - SF,PF)"
+        player_cell = clean[0]
+        match = _re.match(r'^(.+?)\s*\((\w+)\s*-', player_cell)
+        if not match:
+            continue
+        name = match.group(1).strip()
+        team_raw = match.group(2).strip()
+        team = _FP_TEAM_MAP.get(team_raw, team_raw)
+
+        try:
+            minutes = float(clean[10])  # MIN column (index 10)
+        except (ValueError, IndexError):
+            continue
+
+        if minutes < 1:
+            continue
+
+        entry = {'name': name, 'team_abr': team, 'minutes': round(minutes, 1)}
+        players[name.lower()] = entry
+        raw_list.append(entry)
+
+    if players:
+        print(f'FantasyPros projected minutes: {len(players)} players')
+        # Cache to Firestore
+        if db:
+            try:
+                db.collection('nba_minutes').document('projected').set({
+                    'players': raw_list,
+                    '_ts': int(time.time()),
+                    'source': 'fantasypros',
+                })
+            except: pass
+
+    return players if players else None
+
+
 def fetch_player_minutes():
-    """Fetch average minutes per game over last ~8 games for all players.
+    """Fetch projected minutes from FantasyPros as primary source.
+    Falls back to NBA API preseason/regular season stats.
     Returns dict: {player_name_lower: {name, team_abr, minutes}}
     """
     today = today_et()
 
-    # Try Firestore cache (refresh every 4 hours)
+    # Try FantasyPros projected minutes first (best source)
+    proj = fetch_projected_minutes()
+    if proj:
+        return proj
+
+    # Fall back to Firestore cache (refresh every 4 hours)
     if db:
         try:
             snap = db.collection('nba_minutes').document(today).get()
@@ -478,15 +561,10 @@ def fetch_schedule(target_date=None):
 
     games = []
     for g in data.get('scoreboard', {}).get('games', []):
-        # Skip preseason games
+        # Tag preseason games but include them
         game_label = g.get('gameLabel', '')
         game_id = g.get('gameId', '')
         is_preseason = game_label.lower() == 'preseason' or game_id.startswith('001')
-        if is_preseason:
-            aw_tri = g.get('awayTeam', {}).get('teamTricode', '?')
-            hw_tri = g.get('homeTeam', {}).get('teamTricode', '?')
-            print(f'  Skipping preseason: {aw_tri} @ {hw_tri}')
-            continue
 
         away_id = g['awayTeam']['teamId']
         home_id = g['homeTeam']['teamId']
@@ -506,6 +584,7 @@ def fetch_schedule(target_date=None):
             'game_time_et': fmt_time_et(game_time) if game_time else game_status,
             'status': g.get('gameStatus', 1),  # 1=scheduled, 2=in progress, 3=final
             'status_text': game_status,
+            'is_preseason': is_preseason,
             # Model outputs (filled later)
             'away_proj': None,
             'home_proj': None,
