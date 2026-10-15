@@ -657,28 +657,27 @@ input[type=number] { -moz-appearance: textfield; }
       <div id="team-min-warn" style="font-size:11px;color:var(--yellow);display:none;"></div>
     </div>
     <div class="sw" style="max-height:600px;">
-      <table class="dt" style="font-size:11px;">
+      <table class="dt" style="font-size:13px;">
         <thead>
           <tr>
-            <th>Player</th><th style="text-align:right">Total</th>
-            <th style="text-align:center;color:var(--accent)">PG</th>
-            <th style="text-align:center;color:var(--accent)">SG</th>
-            <th style="text-align:center;color:var(--accent)">SF</th>
-            <th style="text-align:center;color:var(--accent)">PF</th>
-            <th style="text-align:center;color:var(--accent)">C</th>
-            <th style="text-align:right">DPM</th>
-            <th style="text-align:right">OFF</th>
-            <th style="text-align:right">DEF</th>
+            <th style="min-width:200px;">Player</th><th style="text-align:right;width:50px;">Total</th>
+            <th style="text-align:center;color:var(--accent);width:50px;">PG</th>
+            <th style="text-align:center;color:var(--accent);width:50px;">SG</th>
+            <th style="text-align:center;color:var(--accent);width:50px;">SF</th>
+            <th style="text-align:center;color:var(--accent);width:50px;">PF</th>
+            <th style="text-align:center;color:var(--accent);width:50px;">C</th>
+            <th style="text-align:right;width:50px;">OFF</th>
+            <th style="text-align:right;width:50px;">DEF</th>
           </tr>
-          <tr id="team-sums-row" style="background:#f0f7ff;font-weight:700;font-family:var(--mono);font-size:11px;position:sticky;top:28px;z-index:1;">
-            <td style="font-family:var(--sans);font-size:10px;color:var(--muted)">SUM</td>
+          <tr id="team-sums-row" style="background:#f0f7ff;font-weight:700;font-family:var(--mono);font-size:12px;position:sticky;top:30px;z-index:1;">
+            <td style="font-family:var(--sans);font-size:11px;color:var(--muted)">SUM</td>
             <td style="text-align:right" id="sum-total">0</td>
             <td style="text-align:center" id="sum-pg">0</td>
             <td style="text-align:center" id="sum-sg">0</td>
             <td style="text-align:center" id="sum-sf">0</td>
             <td style="text-align:center" id="sum-pf">0</td>
             <td style="text-align:center" id="sum-c">0</td>
-            <td></td><td></td><td></td>
+            <td></td><td></td>
           </tr>
         </thead>
         <tbody id="team-baseline-body"></tbody>
@@ -1783,24 +1782,28 @@ function renderTeamBaseline() {
     const total = p.pg + p.sg + p.sf + p.pf + p.c;
     const opacity = Math.min(total / 36, 1) * 0.15;
     const bg = total > 0 ? `rgba(${rgb}, ${opacity})` : 'transparent';
-    const headshot = p.nba_id ? `<img class="player-headshot" src="${playerHeadshot(p.nba_id)}" onerror="this.style.display='none'" />` : '';
+    const hsUrl = p.nba_id ? playerHeadshot(p.nba_id) : '';
+    const placeholder = `data:image/svg+xml,<%3Fxml version=%221.0%22%3F><svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2236%22 height=%2228%22><rect fill=%22%23ddd%22 width=%2236%22 height=%2228%22/><circle cx=%2218%22 cy=%2210%22 r=%225%22 fill=%22%23bbb%22/><ellipse cx=%2218%22 cy=%2228%22 rx=%229%22 ry=%228%22 fill=%22%23bbb%22/></svg>`;
+    const dpmColor = p.dpm >= 0 ? 'var(--green)' : 'var(--red)';
 
-    return `<tr style="background:${bg};">
-      <td style="font-family:var(--sans);font-weight:500;white-space:nowrap;">
-        <div style="display:flex;align-items:center;gap:6px;">
-          ${headshot}
-          ${p.name} <span style="font-size:9px;color:var(--muted);margin-left:2px;">${p.pos}</span>
+    return `<tr style="background:${bg};height:40px;">
+      <td style="font-family:var(--sans);font-weight:500;white-space:nowrap;padding:6px 8px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <img src="${hsUrl || placeholder}" style="width:36px;height:28px;object-fit:cover;object-position:top;border-radius:3px;background:#e0e0e0;flex-shrink:0;" onerror="this.src='${placeholder}'" />
+          <div>
+            <div style="font-size:14px;font-weight:600;">${p.name}</div>
+            <div style="font-size:11px;"><span style="color:var(--muted);">${p.pos}</span> <span style="font-family:var(--mono);color:${dpmColor};font-weight:600;">${p.dpm>0?'+':''}${p.dpm}</span></div>
+          </div>
         </div>
       </td>
-      <td style="text-align:right;font-family:var(--mono);font-weight:700;font-size:13px;">${total > 0 ? total.toFixed(1) : '—'}</td>
-      <td style="text-align:center"><input type="number" value="${p.pg||''}" min="0" max="48" step="0.5" style="width:42px;text-align:center;font-size:11px;" onchange="updatePosMin(${i},'pg',this.value)" placeholder="0"></td>
-      <td style="text-align:center"><input type="number" value="${p.sg||''}" min="0" max="48" step="0.5" style="width:42px;text-align:center;font-size:11px;" onchange="updatePosMin(${i},'sg',this.value)" placeholder="0"></td>
-      <td style="text-align:center"><input type="number" value="${p.sf||''}" min="0" max="48" step="0.5" style="width:42px;text-align:center;font-size:11px;" onchange="updatePosMin(${i},'sf',this.value)" placeholder="0"></td>
-      <td style="text-align:center"><input type="number" value="${p.pf||''}" min="0" max="48" step="0.5" style="width:42px;text-align:center;font-size:11px;" onchange="updatePosMin(${i},'pf',this.value)" placeholder="0"></td>
-      <td style="text-align:center"><input type="number" value="${p.c||''}" min="0" max="48" step="0.5" style="width:42px;text-align:center;font-size:11px;" onchange="updatePosMin(${i},'c',this.value)" placeholder="0"></td>
-      <td style="text-align:right;font-family:var(--mono);color:${p.dpm>=0?'var(--green)':'var(--red)'}">${p.dpm>0?'+':''}${p.dpm}</td>
-      <td style="text-align:right;font-family:var(--mono);font-size:10px;color:var(--text2)">${p.o_dpm>0?'+':''}${p.o_dpm}</td>
-      <td style="text-align:right;font-family:var(--mono);font-size:10px;color:var(--text2)">${p.d_dpm>0?'+':''}${p.d_dpm}</td>
+      <td style="text-align:right;font-family:var(--mono);font-weight:700;font-size:14px;padding:6px 8px;">${total > 0 ? total.toFixed(1) : '—'}</td>
+      <td style="text-align:center;padding:4px 2px;"><input type="number" value="${p.pg||''}" min="0" max="48" step="0.5" style="width:44px;text-align:center;font-size:13px;padding:4px 2px;" onchange="updatePosMin(${i},'pg',this.value)" placeholder="0"></td>
+      <td style="text-align:center;padding:4px 2px;"><input type="number" value="${p.sg||''}" min="0" max="48" step="0.5" style="width:44px;text-align:center;font-size:13px;padding:4px 2px;" onchange="updatePosMin(${i},'sg',this.value)" placeholder="0"></td>
+      <td style="text-align:center;padding:4px 2px;"><input type="number" value="${p.sf||''}" min="0" max="48" step="0.5" style="width:44px;text-align:center;font-size:13px;padding:4px 2px;" onchange="updatePosMin(${i},'sf',this.value)" placeholder="0"></td>
+      <td style="text-align:center;padding:4px 2px;"><input type="number" value="${p.pf||''}" min="0" max="48" step="0.5" style="width:44px;text-align:center;font-size:13px;padding:4px 2px;" onchange="updatePosMin(${i},'pf',this.value)" placeholder="0"></td>
+      <td style="text-align:center;padding:4px 2px;"><input type="number" value="${p.c||''}" min="0" max="48" step="0.5" style="width:44px;text-align:center;font-size:13px;padding:4px 2px;" onchange="updatePosMin(${i},'c',this.value)" placeholder="0"></td>
+      <td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--text2);padding:6px 4px;">${p.o_dpm>0?'+':''}${p.o_dpm}</td>
+      <td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--text2);padding:6px 4px;">${p.d_dpm>0?'+':''}${p.d_dpm}</td>
     </tr>`;
   }).join('');
   updateTeamSums();
