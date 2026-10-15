@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: nba-model
+    runtime: python
+    repo: https://github.com/Epemstein/NBA-Model
+    branch: main
+    buildCommand: pip install requests
+    startCommand: python server.py
+    envVars:
+      - key: ODDS_API_KEY
+        sync: false
+      - key: PORT
+        value: 10000
+    plan: free
+    autoDeploy: true

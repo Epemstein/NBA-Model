@@ -125,7 +125,9 @@ def calc_kelly(edge_points):
 # ── Fetch DARKO ratings ──────────────────────────────────────────────────
 def fetch_darko():
     """Fetch DARKO DPM ratings from the public Google Sheet.
-    Returns dict: {player_name_lower: {name, team, dpm, o_dpm, d_dpm}}
+    Note: The DARKO sheet has NO team column — team assignment comes from
+    the NBA API minutes data. We key by player name and match later.
+    Returns dict: {player_name_lower: {name, dpm, o_dpm, d_dpm}}
     """
     # Try Firestore cache first
     today = today_et()
@@ -149,20 +151,20 @@ def fetch_darko():
     raw_list = []
 
     for row in reader:
-        name = row.get('Player', row.get('player', '')).strip()
+        # Column is "Player Name" in the DARKO sheet
+        name = row.get('Player Name', row.get('Player', '')).strip()
         if not name:
             continue
 
-        # Try multiple possible column names
         o_dpm = 0.0
         d_dpm = 0.0
         dpm = 0.0
 
-        for key in ['O-DPM', 'Offensive DPM', 'ODPM', 'o_dpm']:
+        for key in ['Offensive DPM', 'O-DPM', 'ODPM']:
             if key in row and row[key]:
                 try: o_dpm = float(row[key]); break
                 except: pass
-        for key in ['D-DPM', 'Defensive DPM', 'DDPM', 'd_dpm']:
+        for key in ['Defensive DPM', 'D-DPM', 'DDPM']:
             if key in row and row[key]:
                 try: d_dpm = float(row[key]); break
                 except: pass
@@ -171,11 +173,8 @@ def fetch_darko():
                 try: dpm = float(row[key]); break
                 except: pass
 
-        team = row.get('Tm', row.get('Team', row.get('team', ''))).strip()
-
         entry = {
             'name': name,
-            'team': team,
             'dpm': dpm,
             'o_dpm': o_dpm,
             'd_dpm': d_dpm,
@@ -196,6 +195,44 @@ def fetch_darko():
             print(f'DARKO cache write failed: {e}')
 
     return players
+
+
+# ── NBA API params builder ───────────────────────────────────────────────
+def _nba_player_params(season, last_n=8):
+    return {
+        'Conference': '', 'DateFrom': '', 'DateTo': '', 'Division': '',
+        'GameScope': '', 'GameSegment': '', 'Height': '', 'ISTRound': '',
+        'LastNGames': str(last_n), 'LeagueID': '00', 'Location': '',
+        'MeasureType': 'Base', 'Month': '0', 'OpponentTeamID': '0',
+        'Outcome': '', 'PORound': '0', 'PaceAdjust': 'N', 'PerMode': 'PerGame',
+        'Period': '0', 'PlayerExperience': '', 'PlayerPosition': '',
+        'PlusMinus': 'N', 'Rank': 'N', 'Season': season,
+        'SeasonSegment': '', 'SeasonType': 'Regular Season',
+        'ShotClockRange': '', 'StarterBench': '', 'TeamID': '0',
+        'TwoWay': '0', 'VsConference': '', 'VsDivision': '', 'Weight': '',
+    }
+
+def _nba_team_params(season):
+    return {
+        'Conference': '', 'DateFrom': '', 'DateTo': '', 'Division': '',
+        'GameScope': '', 'GameSegment': '', 'Height': '', 'ISTRound': '',
+        'LastNGames': '0', 'LeagueID': '00', 'Location': '',
+        'MeasureType': 'Advanced', 'Month': '0', 'OpponentTeamID': '0',
+        'Outcome': '', 'PORound': '0', 'PaceAdjust': 'N', 'PerMode': 'PerGame',
+        'Period': '0', 'PlayerExperience': '', 'PlayerPosition': '',
+        'PlusMinus': 'N', 'Rank': 'N', 'Season': season,
+        'SeasonSegment': '', 'SeasonType': 'Regular Season',
+        'ShotClockRange': '', 'StarterBench': '', 'TeamID': '0',
+        'TwoWay': '0', 'VsConference': '', 'VsDivision': '', 'Weight': '',
+    }
+
+def _previous_season():
+    """Return previous NBA season string."""
+    now = datetime.datetime.now(ET)
+    year = now.year
+    if now.month < 10:
+        return f'{year - 2}-{str(year - 1)[2:]}'
+    return f'{year - 1}-{str(year)[2:]}'
 
 
 # ── Fetch player minutes (last 8 games avg) from NBA API ────────────────
@@ -219,31 +256,33 @@ def fetch_player_minutes():
             print(f'Minutes cache miss: {e}')
 
     print('Fetching player minutes from NBA API...')
-    # Use leaguedashplayerstats with LastNGames=8
-    season = _current_season()
-    url = (
-        'https://stats.nba.com/stats/leaguedashplayerstats'
-        f'?LastNGames=8&Season={season}&SeasonType=Regular+Season'
-        '&PerMode=PerGame&MeasureType=Base'
-        '&PaceAdjust=N&PlusMinus=N&Rank=N'
-        '&Outcome=&Location=&Month=0&OpponentTeamID=0'
-        '&Period=0&DateFrom=&DateTo=&VsConference=&VsDivision='
-        '&GameSegment=&LeagueID=00&PlayerExperience='
-        '&PlayerPosition=&StarterBench=&TeamID=0'
-        '&TwoWay=0&Conference=&Division='
-    )
 
-    r = requests.get(url, headers=NBA_HEADERS, timeout=30)
-    r.raise_for_status()
-    data = r.json()
+    # Try current season first, fall back to previous if no data
+    for season in [_current_season(), _previous_season()]:
+        try:
+            params = _nba_player_params(season, last_n=8)
+            r = requests.get(
+                'https://stats.nba.com/stats/leaguedashplayerstats',
+                params=params, headers=NBA_HEADERS, timeout=30
+            )
+            r.raise_for_status()
+            data = r.json()
+            rows = data['resultSets'][0]['rowSet']
+            if rows:
+                print(f'Using season {season} ({len(rows)} players)')
+                break
+        except Exception as e:
+            print(f'Season {season} failed: {e}')
+            rows = []
+    else:
+        print('No player data available from NBA API')
+        return {}
 
-    headers = data['resultSets'][0]['headers']
-    rows = data['resultSets'][0]['rowSet']
-
-    name_idx = headers.index('PLAYER_NAME')
-    team_idx = headers.index('TEAM_ABBREVIATION')
-    min_idx = headers.index('MIN')
-    gp_idx = headers.index('GP')
+    hdrs = data['resultSets'][0]['headers']
+    name_idx = hdrs.index('PLAYER_NAME')
+    team_idx = hdrs.index('TEAM_ABBREVIATION')
+    min_idx = hdrs.index('MIN')
+    gp_idx = hdrs.index('GP')
 
     players = {}
     raw_list = []
@@ -276,37 +315,45 @@ def fetch_player_minutes():
 
 
 # ── Fetch team pace stats from NBA API ───────────────────────────────────
+# NBA API full name → abbreviation (for team stats which return TEAM_NAME not abbreviation)
+_TEAM_NAME_TO_ABR = {v: k for k, v in ABR_TO_NAME.items()}
+
 def fetch_team_pace():
     """Fetch team pace (possessions per 48 min) from NBA API.
     Returns dict: {team_abr: pace} and league_avg_pace.
     """
-    season = _current_season()
-    url = (
-        'https://stats.nba.com/stats/leaguedashteamstats'
-        f'?Season={season}&SeasonType=Regular+Season'
-        '&MeasureType=Advanced&PerMode=PerGame'
-        '&PaceAdjust=N&PlusMinus=N&Rank=N'
-        '&Outcome=&Location=&Month=0&OpponentTeamID=0'
-        '&Period=0&DateFrom=&DateTo=&VsConference=&VsDivision='
-        '&GameSegment=&LeagueID=00&Conference=&Division='
-        '&TeamID=0&TwoWay=0'
-    )
+    for season in [_current_season(), _previous_season()]:
+        try:
+            params = _nba_team_params(season)
+            r = requests.get(
+                'https://stats.nba.com/stats/leaguedashteamstats',
+                params=params, headers=NBA_HEADERS, timeout=30
+            )
+            r.raise_for_status()
+            data = r.json()
+            rows = data['resultSets'][0]['rowSet']
+            if rows:
+                print(f'Team stats using season {season}')
+                break
+        except Exception as e:
+            print(f'Team stats season {season} failed: {e}')
+            rows = []
+    else:
+        raise Exception('No team pace data available')
 
-    r = requests.get(url, headers=NBA_HEADERS, timeout=30)
-    r.raise_for_status()
-    data = r.json()
+    hdrs = data['resultSets'][0]['headers']
 
-    headers = data['resultSets'][0]['headers']
-    rows = data['resultSets'][0]['rowSet']
-
-    team_idx = headers.index('TEAM_ABBREVIATION')
-    pace_idx = headers.index('PACE')
-    ortg_idx = headers.index('OFF_RATING')
+    # The advanced endpoint returns TEAM_NAME (not TEAM_ABBREVIATION)
+    team_idx = hdrs.index('TEAM_NAME') if 'TEAM_NAME' in hdrs else hdrs.index('TEAM_ABBREVIATION')
+    is_full_name = 'TEAM_NAME' in hdrs and hdrs[team_idx] == 'TEAM_NAME'
+    pace_idx = hdrs.index('PACE')
+    ortg_idx = hdrs.index('OFF_RATING')
 
     paces = {}
     ortgs = {}
     for row in rows:
-        team = row[team_idx]
+        raw_team = row[team_idx]
+        team = _TEAM_NAME_TO_ABR.get(raw_team, raw_team) if is_full_name else raw_team
         paces[team] = row[pace_idx]
         ortgs[team] = row[ortg_idx]
 
@@ -436,19 +483,18 @@ def compute_team_rating(team_abr, darko, minutes):
     """
     team_players = []
 
-    # Match DARKO players to team via minutes data
+    # Match DARKO players to team via minutes data (DARKO has no team column)
     for name_lower, mp in minutes.items():
         if mp['team_abr'] != team_abr:
             continue
-        # Find matching DARKO entry
+        # Find matching DARKO entry by name
         dk = darko.get(name_lower)
         if not dk:
-            # Try fuzzy: last name match
+            # Try fuzzy: last name match (DARKO has no team field)
             parts = name_lower.split()
             if len(parts) >= 2:
                 last = parts[-1]
-                dk = next((d for k, d in darko.items() if last in k and
-                          (d.get('team', '').upper() == team_abr or not d.get('team'))), None)
+                dk = next((d for k, d in darko.items() if k.endswith(last)), None)
         if not dk:
             continue
 
