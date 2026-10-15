@@ -436,12 +436,12 @@ def fetch_team_pace():
 
 
 # ── Fetch today's NBA schedule ───────────────────────────────────────────
-def fetch_schedule():
-    """Fetch today's NBA games from the NBA API scoreboard endpoint.
+def fetch_schedule(target_date=None):
+    """Fetch NBA games for a given date from the NBA API scoreboard endpoint.
     Falls back to cached schedule from Firestore if CDN is blocked.
     Returns list of game dicts.
     """
-    today = today_et()
+    today = target_date or today_et()
 
     # Try scoreboardv3 first (has gameLabel for preseason filtering)
     try:
@@ -747,8 +747,8 @@ def get_minute_overrides():
 
 
 # ── Main ─────────────────────────────────────────────────────────────────
-def run():
-    date = today_et()
+def run(override_date=None):
+    date = override_date or today_et()
     print(f'NBA Pipeline running for {date}')
     print(f'Season: {_current_season()}')
 
@@ -774,7 +774,7 @@ def run():
         league_avg_ortg = LEAGUE_AVG_ORTG
 
     try:
-        games = fetch_schedule()
+        games = fetch_schedule(date)
     except Exception as e:
         print(f'FATAL: Schedule fetch failed: {e}')
         return
@@ -808,7 +808,10 @@ def run():
     novig_pem = os.environ.get('NOVIG_PRIVATE_KEY', '')
     if novig_key_id and novig_pem:
         try:
-            from scripts.novig import NovigClient, get_novig_nba_lines
+            try:
+                from scripts.novig import NovigClient, get_novig_nba_lines
+            except ImportError:
+                from novig import NovigClient, get_novig_nba_lines
             nc = NovigClient(novig_key_id, novig_pem)
             novig_lines = get_novig_nba_lines(nc)
             print(f'Novig: {len(novig_lines)} games with lines')
@@ -1015,4 +1018,6 @@ def run():
 
 
 if __name__ == '__main__':
-    run()
+    import sys
+    date_arg = sys.argv[1] if len(sys.argv) > 1 else None
+    run(override_date=date_arg)

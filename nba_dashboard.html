@@ -404,6 +404,14 @@ input:focus, select:focus { border-color: var(--accent); background: #fff; }
 <!-- ═══════════ GAMES PANEL ═══════════ -->
 <div class="panel active" id="panel-games">
 
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+    <button onclick="shiftDate(-1)" style="font-size:16px;font-weight:700;padding:4px 10px;border:1px solid var(--border2);border-radius:3px;background:var(--surface);cursor:pointer;color:var(--text);">&larr;</button>
+    <input type="date" id="date-picker" style="font-family:var(--mono);font-size:13px;padding:5px 10px;border:1px solid var(--border2);border-radius:3px;background:var(--surface);color:var(--text);cursor:pointer;" />
+    <button onclick="shiftDate(1)" style="font-size:16px;font-weight:700;padding:4px 10px;border:1px solid var(--border2);border-radius:3px;background:var(--surface);cursor:pointer;color:var(--text);">&rarr;</button>
+    <button onclick="goToday()" class="btn bg" style="font-size:11px;">Today</button>
+    <span id="date-label" style="font-size:12px;color:var(--muted);font-family:var(--sans);"></span>
+  </div>
+
   <div class="stat-strip" id="games-strip">
     <div class="stat-strip-item"><div class="sl">Games</div><div class="sv a" id="ss-games">—</div></div>
     <div class="stat-strip-item"><div class="sl">Spread Plays</div><div class="sv g" id="ss-spreads">0</div></div>
@@ -569,6 +577,33 @@ const fbDb   = firebase.firestore();
 const rtdb   = firebase.database();
 const auth   = firebase.auth();
 
+// ── Date helpers ────────────────────────────────────────────────────────
+function todayET() {
+  return new Date().toLocaleDateString('en-CA', {timeZone: 'America/New_York'});
+}
+let selectedDate = todayET();
+let _snapshotUnsub = null;
+
+function setDate(d) {
+  selectedDate = d;
+  document.getElementById('date-picker').value = d;
+  const dt = new Date(d + 'T12:00:00');
+  const dayName = dt.toLocaleDateString('en-US', {weekday: 'long', month: 'short', day: 'numeric', timeZone: 'UTC'});
+  const label = document.getElementById('date-label');
+  label.textContent = d === todayET() ? `${dayName} (Today)` : dayName;
+  loadSlate();
+}
+
+function shiftDate(delta) {
+  const dt = new Date(selectedDate + 'T12:00:00');
+  dt.setDate(dt.getDate() + delta);
+  setDate(dt.toISOString().slice(0, 10));
+}
+
+function goToday() {
+  setDate(todayET());
+}
+
 // ── State ───────────────────────────────────────────────────────────────
 let STATE = {
   games: [],
@@ -618,9 +653,9 @@ function edgeClass(e) {
 
 // ── Load data from Firestore ────────────────────────────────────────────
 async function loadSlate() {
-  const today = new Date().toLocaleDateString('en-CA', {timeZone: 'America/New_York'});
+  const dateKey = selectedDate;
   try {
-    const snap = await fbDb.collection('nba_slate').doc(today).get();
+    const snap = await fbDb.collection('nba_slate').doc(dateKey).get();
     if (!snap.exists) {
       document.getElementById('no-games').style.display = 'block';
       document.getElementById('games-grid').innerHTML = '';
@@ -649,6 +684,8 @@ async function loadSlate() {
     console.error('loadSlate error:', e);
     document.getElementById('no-games').style.display = 'block';
   }
+  // Re-attach real-time listener for the new date
+  setupRealtimeListener();
 }
 
 // ── Render game cards ───────────────────────────────────────────────────
@@ -1082,11 +1119,16 @@ auth.onAuthStateChanged(user => {
 
 // ── Init ────────────────────────────────────────────────────────────────
 async function initApp() {
+  // Init date picker
+  const picker = document.getElementById('date-picker');
+  picker.value = todayET();
+  picker.addEventListener('change', () => setDate(picker.value));
+  setDate(todayET());
+
   loadSettingsUI();
   renderPicks();
   renderOverrides();
   updateKelly();
-  await loadSlate();
 
   // Check Firestore connection
   const fsStatus = document.getElementById('fs-status');
@@ -1098,12 +1140,16 @@ async function initApp() {
     fsStatus.style.color = 'var(--yellow)';
   }
 
-  // Auto-refresh every 5 minutes
-  setInterval(loadSlate, 5 * 60 * 1000);
+  // Auto-refresh every 5 minutes (only for today)
+  setInterval(() => { if (selectedDate === todayET()) loadSlate(); }, 5 * 60 * 1000);
 
-  // Listen for real-time updates
-  const today = new Date().toLocaleDateString('en-CA', {timeZone: 'America/New_York'});
-  fbDb.collection('nba_slate').doc(today).onSnapshot(snap => {
+  // Set up real-time listener for selected date
+  setupRealtimeListener();
+}
+
+function setupRealtimeListener() {
+  if (_snapshotUnsub) _snapshotUnsub();
+  _snapshotUnsub = fbDb.collection('nba_slate').doc(selectedDate).onSnapshot(snap => {
     if (!snap.exists) return;
     const data = snap.data();
     STATE.games = data.games || [];
