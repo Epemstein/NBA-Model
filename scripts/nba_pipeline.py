@@ -7,7 +7,7 @@ Port of the NBA Algo spreadsheet model:
   compare to sportsbook spreads & totals → Telegram alerts on edges.
 """
 
-import os, json, math, time, requests, datetime, re, io, csv
+import os, json, math, time, requests, datetime, re, io, csv, unicodedata
 from zoneinfo import ZoneInfo
 
 import firebase_admin
@@ -89,6 +89,12 @@ ABR_TO_NAME = {v: k for k, v in NAME_TO_ABR.items()}
 ALL_TEAMS = sorted(NAME_TO_ABR.values())
 
 # ── Helpers ──────────────────────────────────────────────────────────────
+def norm_name(name):
+    """Normalize player name: strip accents, lowercase."""
+    s = unicodedata.normalize('NFD', name)
+    s = ''.join(c for c in s if unicodedata.category(c) != 'Mn')
+    return s.lower().strip()
+
 def today_et():
     return datetime.datetime.now(ET).strftime('%Y-%m-%d')
 
@@ -186,7 +192,7 @@ def fetch_darko():
                 'pos': pos,
                 'nba_id': str(columns['nba_id'][i]),
             }
-            players[name.lower()] = entry
+            players[norm_name(name)] = entry
             raw_list.append(entry)
     except Exception as e:
         print(f'darko.app failed ({e}), falling back to Google Sheet...')
@@ -216,7 +222,7 @@ def fetch_darko():
             nba_id = row.get('NBA ID', '')
             entry = {'name': name, 'dpm': dpm, 'o_dpm': o_dpm, 'd_dpm': d_dpm,
                      'pos': pos, 'nba_id': str(nba_id) if nba_id else ''}
-            players[name.lower()] = entry
+            players[norm_name(name)] = entry
             raw_list.append(entry)
 
     print(f'DARKO: {len(players)} players loaded')
@@ -353,7 +359,7 @@ def fetch_projected_minutes():
             continue
 
         entry = {'name': name, 'team_abr': team, 'minutes': round(minutes, 1)}
-        players[name.lower()] = entry
+        players[norm_name(name)] = entry
         raw_list.append(entry)
 
     if players:
@@ -468,7 +474,7 @@ def _fetch_nba_api_minutes(today):
             continue
 
         entry = {'name': name, 'team_abr': team, 'minutes': round(minutes, 1)}
-        players[name.lower()] = entry
+        players[norm_name(name)] = entry
         raw_list.append(entry)
 
     print(f'NBA API minutes: {len(players)} players')
@@ -868,9 +874,9 @@ def get_baselines(team):
                 if isinstance(val, dict):
                     # Position-based: sum all positions
                     total = sum(val.get(p, 0) for p in ['pg', 'sg', 'sf', 'pf', 'c'])
-                    result[name.lower()] = total
+                    result[norm_name(name)] = total
                 else:
-                    result[name.lower()] = val
+                    result[norm_name(name)] = val
             return result
     except:
         pass
@@ -889,7 +895,7 @@ def get_game_overrides(date, away, home, team):
         if doc.exists:
             data = doc.to_dict() or {}
             players = data.get('players', {})
-            return {k.lower(): v for k, v in players.items()}
+            return {norm_name(k): v for k, v in players.items()}
     except:
         pass
     return {}

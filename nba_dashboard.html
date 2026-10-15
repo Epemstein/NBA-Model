@@ -986,18 +986,28 @@ function renderGames() {
       </div>
 
       <div class="gc-proj" style="display:flex;">
-        <div class="gc-proj-item" style="flex:1;border-right:1px solid var(--border);">
-          <div class="proj-label">${g.proj_spread != null && g.proj_spread <= 0 ? g.home : g.away} Spread</div>
-          <div class="proj-val">${g.proj_spread != null ? (g.proj_spread <= 0 ? g.home + ' ' + fmtSpread(g.proj_spread) : g.away + ' ' + fmtSpread(-g.proj_spread)) : '—'}</div>
-          ${g.book_spread != null ? `<div style="font-size:10px;color:var(--muted);margin-top:2px;">Book: ${g.book_spread <= 0 ? g.home + ' ' + fmtSpread(g.book_spread) : g.away + ' ' + fmtSpread(-g.book_spread)}</div>` : ''}
-          ${g.spread_edge != null ? `<div class="edge-chip ${edgeClass(g.spread_edge)}" style="margin-top:3px;">${fmtSpread(g.spread_edge)} edge</div>` : ''}
-        </div>
-        <div class="gc-proj-item" style="flex:1;">
-          <div class="proj-label">Total</div>
-          <div class="proj-val">${g.proj_total != null ? g.proj_total.toFixed(1) : '—'}</div>
-          ${g.book_total != null ? `<div style="font-size:10px;color:var(--muted);margin-top:2px;">Book: ${g.book_total}</div>` : ''}
-          ${g.total_edge != null ? `<div class="edge-chip ${edgeClass(g.total_edge)}" style="margin-top:3px;">${g.total_edge > 0 ? 'O' : 'U'} ${Math.abs(g.total_edge).toFixed(1)} edge</div>` : ''}
-        </div>
+        ${(() => {
+          const homeFav = g.proj_spread != null && g.proj_spread <= 0;
+          const favTeam = homeFav ? g.home : g.away;
+          const favSpread = homeFav ? g.proj_spread : -g.proj_spread;
+          const bookFavSpread = g.book_spread != null ? (homeFav ? g.book_spread : -g.book_spread) : null;
+          const spreadHtml = `<div class="gc-proj-item" style="flex:1;">
+            <div class="proj-label">${favTeam} Spread</div>
+            <div class="proj-val">${g.proj_spread != null ? favTeam + ' ' + fmtSpread(favSpread) : '—'}</div>
+            ${bookFavSpread != null ? `<div style="font-size:10px;color:var(--muted);margin-top:2px;">Book: ${favTeam} ${fmtSpread(bookFavSpread)}</div>` : ''}
+            ${g.spread_edge != null ? `<div class="edge-chip ${edgeClass(g.spread_edge)}" style="margin-top:3px;">${fmtSpread(g.spread_edge)} edge</div>` : ''}
+          </div>`;
+          const totalHtml = `<div class="gc-proj-item" style="flex:1;">
+            <div class="proj-label">Total</div>
+            <div class="proj-val">${g.proj_total != null ? g.proj_total.toFixed(1) : '—'}</div>
+            ${g.book_total != null ? `<div style="font-size:10px;color:var(--muted);margin-top:2px;">Book: ${g.book_total}</div>` : ''}
+            ${g.total_edge != null ? `<div class="edge-chip ${edgeClass(g.total_edge)}" style="margin-top:3px;">${g.total_edge > 0 ? 'O' : 'U'} ${Math.abs(g.total_edge).toFixed(1)} edge</div>` : ''}
+          </div>`;
+          // Spread under favored team, total under underdog
+          // Away is left, home is right
+          if (homeFav) return totalHtml + `<div style="border-left:1px solid var(--border);"></div>` + spreadHtml;
+          return spreadHtml + `<div style="border-left:1px solid var(--border);"></div>` + totalHtml;
+        })()}
       </div>
 
       ${hasEdge ? `

@@ -283,30 +283,11 @@ def get_novig_nba_lines(client, target_date=None):
         # Pick primary spread: midpoint of all available strikes
         # Novig posts alt lines around the primary — the midpoint of the range
         # matches the actual market line. On ties, pick closer to zero.
-        # Pick the spread with the most liquidity (total qty on the book)
-        best_liq = -1
+        # Pick primary spread by midpoint of all alt lines (fast, no API calls)
+        strikes = [float(m['strike']) for m in ev['spreads']]
+        primary = round((min(strikes) + max(strikes)) / 2 * 2) / 2
+        ev['spreads'].sort(key=lambda m: (abs(float(m['strike']) - primary), abs(float(m['strike']))))
         sp = ev['spreads'][0]
-        sp_liq = 0
-        for m in ev['spreads']:
-            try:
-                book = client.get_book(m['marketId'])
-                total_qty = sum(
-                    o.get('qty', 0) if isinstance(o, dict) else 0
-                    for orders in (book.get('orders', {}).values() if book else [])
-                    for o in (orders if isinstance(orders, list) else [])
-                )
-                if total_qty > best_liq:
-                    best_liq = total_qty
-                    sp = m
-                    sp_liq = total_qty
-            except:
-                pass
-        if best_liq <= 0:
-            # Fallback: midpoint of strikes
-            strikes = [float(m['strike']) for m in ev['spreads']]
-            primary = round((min(strikes) + max(strikes)) / 2 * 2) / 2
-            ev['spreads'].sort(key=lambda m: abs(float(m['strike']) - primary))
-            sp = ev['spreads'][0]
         outcomes = sp['outcomes']
 
         # Extract team names from outcomes (e.g. "NYK -5.5", "PHI +5.5")
@@ -326,28 +307,11 @@ def get_novig_nba_lines(client, target_date=None):
         else:
             home_team, away_team = teams[1], teams[0]
 
-        # Pick primary total: most liquidity, fallback to median strike
+        # Pick primary total by median strike (fast, no API calls)
         total_data = None
-        tot_liq = 0
         if ev['totals']:
-            best_tot_liq = -1
-            for m in ev['totals']:
-                try:
-                    book = client.get_book(m['marketId'])
-                    tq = sum(
-                        o.get('qty', 0) if isinstance(o, dict) else 0
-                        for orders in (book.get('orders', {}).values() if book else [])
-                        for o in (orders if isinstance(orders, list) else [])
-                    )
-                    if tq > best_tot_liq:
-                        best_tot_liq = tq
-                        total_data = m
-                        tot_liq = tq
-                except:
-                    pass
-            if best_tot_liq <= 0:
-                ev['totals'].sort(key=lambda m: float(m['strike']))
-                total_data = ev['totals'][len(ev['totals']) // 2]
+            ev['totals'].sort(key=lambda m: float(m['strike']))
+            total_data = ev['totals'][len(ev['totals']) // 2]
 
         # Get best bid + fillable qty for each spread outcome
         sp_book = None
