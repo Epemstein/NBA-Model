@@ -5,6 +5,10 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NBA ALGO v1</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <style>
 :root {
   --bg:       #f5f5f5;
@@ -360,9 +364,31 @@ input:focus, select:focus { border-color: var(--accent); background: #fff; }
 </head>
 <body>
 
+<!-- ═══════════ LOGIN SCREEN ═══════════ -->
+<div id="login-screen" style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#111;">
+  <div style="text-align:center;">
+    <div style="font-size:28px;font-weight:800;color:#fff;margin-bottom:6px;">NBA <span style="color:#f57c00;">ALGO</span></div>
+    <div style="font-size:12px;color:#666;margin-bottom:24px;">Sign in to access the dashboard</div>
+    <button onclick="signInWithGoogle()" style="display:flex;align-items:center;gap:10px;margin:0 auto;padding:10px 24px;border-radius:4px;border:1px solid #444;background:#222;color:#fff;font-size:14px;cursor:pointer;">
+      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="20" height="20" />
+      Sign in with Google
+    </button>
+    <div id="login-error" style="display:none;color:#c62828;font-size:12px;margin-top:12px;"></div>
+  </div>
+</div>
+
+<div id="app-shell" style="display:none;">
+
 <header>
   <div class="logo">NBA <em>ALGO</em></div>
-  <div class="hpill">LAST UPDATE <strong id="last-update">—</strong></div>
+  <div style="display:flex;align-items:center;gap:12px;">
+    <div class="hpill">LAST UPDATE <strong id="last-update">—</strong></div>
+    <div id="hdr-user" style="display:none;align-items:center;gap:6px;">
+      <img id="hdr-photo" width="24" height="24" style="border-radius:50%;object-fit:cover;" />
+      <span id="hdr-name" style="font-size:11px;color:#aaa;"></span>
+      <button onclick="signOut()" style="font-size:10px;color:#888;background:none;border:1px solid #444;border-radius:3px;padding:2px 8px;cursor:pointer;">Out</button>
+    </div>
+  </div>
 </header>
 
 <nav id="nav">
@@ -521,15 +547,27 @@ input:focus, select:focus { border-color: var(--accent); background: #fff; }
 
 </main>
 
+</div><!-- end app-shell -->
+
 <script>
 /* ═══════════════════════════════════════════════════════════════════════
    NBA ALGO DASHBOARD
    ═══════════════════════════════════════════════════════════════════════ */
 
-// ── Firebase config ─────────────────────────────────────────────────────
-// Using Firebase REST API (no SDK needed)
-const FB_PROJECT = 'mlb-model-ace6e';  // same Firestore project as MLB
-const FB_API     = `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents`;
+// ── Firebase ────────────────────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyC2pfd0YtSDf2Ybj6X-uHv7owzZKqn7pmA",
+  authDomain: "mlb-algo-b8923.firebaseapp.com",
+  databaseURL: "https://mlb-algo-b8923-default-rtdb.firebaseio.com",
+  projectId: "mlb-algo-b8923",
+  storageBucket: "mlb-algo-b8923.firebasestorage.app",
+  messagingSenderId: "120593689531",
+  appId: "1:120593689531:web:ae2b2afa087e58eedb729e"
+};
+firebase.initializeApp(firebaseConfig);
+const fbDb   = firebase.firestore();
+const rtdb   = firebase.database();
+const auth   = firebase.auth();
 
 // ── State ───────────────────────────────────────────────────────────────
 let STATE = {
@@ -578,65 +616,39 @@ function edgeClass(e) {
   return 'lo';
 }
 
-// ── Firestore REST helpers ──────────────────────────────────────────────
-function fsVal(v) {
-  if (v === null || v === undefined) return null;
-  if (v.stringValue !== undefined) return v.stringValue;
-  if (v.integerValue !== undefined) return Number(v.integerValue);
-  if (v.doubleValue !== undefined) return v.doubleValue;
-  if (v.booleanValue !== undefined) return v.booleanValue;
-  if (v.timestampValue !== undefined) return v.timestampValue;
-  if (v.arrayValue) return (v.arrayValue.values || []).map(fsVal);
-  if (v.mapValue) {
-    const o = {};
-    for (const [k, mv] of Object.entries(v.mapValue.fields || {})) o[k] = fsVal(mv);
-    return o;
-  }
-  return null;
-}
-
-function fsDoc(doc) {
-  if (!doc || !doc.fields) return null;
-  const o = {};
-  for (const [k, v] of Object.entries(doc.fields)) o[k] = fsVal(v);
-  return o;
-}
-
-async function fsGet(collection, docId) {
-  try {
-    const r = await fetch(`${FB_API}/${collection}/${docId}`);
-    if (!r.ok) return null;
-    return fsDoc(await r.json());
-  } catch { return null; }
-}
-
 // ── Load data from Firestore ────────────────────────────────────────────
 async function loadSlate() {
   const today = new Date().toLocaleDateString('en-CA', {timeZone: 'America/New_York'});
-  const data = await fsGet('nba_slate', today);
-  if (!data) {
+  try {
+    const snap = await fbDb.collection('nba_slate').doc(today).get();
+    if (!snap.exists) {
+      document.getElementById('no-games').style.display = 'block';
+      document.getElementById('games-grid').innerHTML = '';
+      document.getElementById('ss-games').textContent = '0';
+      return;
+    }
+    const data = snap.data();
+
+    STATE.games = data.games || [];
+    STATE.teamRatings = data.team_ratings || {};
+    STATE.leagueAvgPace = data.league_avg_pace || 100;
+    STATE.leagueAvgOrtg = data.league_avg_ortg || 113.1;
+
+    if (data.lastUpdatedMs) {
+      const d = new Date(data.lastUpdatedMs);
+      document.getElementById('last-update').textContent = d.toLocaleTimeString('en-US', {
+        hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York'
+      }) + ' ET';
+      STATE.lastUpdated = d;
+    }
+
+    renderGames();
+    updateStrip();
+    populatePickDropdown();
+  } catch (e) {
+    console.error('loadSlate error:', e);
     document.getElementById('no-games').style.display = 'block';
-    document.getElementById('games-grid').innerHTML = '';
-    document.getElementById('ss-games').textContent = '0';
-    return;
   }
-
-  STATE.games = data.games || [];
-  STATE.teamRatings = data.team_ratings || {};
-  STATE.leagueAvgPace = data.league_avg_pace || 100;
-  STATE.leagueAvgOrtg = data.league_avg_ortg || 113.1;
-
-  if (data.lastUpdatedMs) {
-    const d = new Date(data.lastUpdatedMs);
-    document.getElementById('last-update').textContent = d.toLocaleTimeString('en-US', {
-      hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York'
-    }) + ' ET';
-    STATE.lastUpdated = d;
-  }
-
-  renderGames();
-  updateStrip();
-  populatePickDropdown();
 }
 
 // ── Render game cards ───────────────────────────────────────────────────
@@ -975,8 +987,47 @@ function loadSettingsUI() {
   document.getElementById('set-pace-mult').value = STATE.settings.paceMult;
 }
 
+// ── Auth ────────────────────────────────────────────────────────────────
+function signInWithGoogle() {
+  const provider = new firebase.auth.GoogleAuthProvider();
+  auth.signInWithPopup(provider).catch(e => {
+    const el = document.getElementById('login-error');
+    el.textContent = e.message; el.style.display = '';
+  });
+}
+
+function signOut() {
+  auth.signOut();
+}
+
+auth.onAuthStateChanged(user => {
+  if (user) {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app-shell').style.display = '';
+    const hdrUser = document.getElementById('hdr-user');
+    if (hdrUser) {
+      hdrUser.style.display = 'flex';
+      document.getElementById('hdr-name').textContent = user.displayName?.split(' ')[0] || user.email;
+      document.getElementById('hdr-photo').src = user.photoURL || '';
+    }
+    // Save user profile
+    fbDb.collection('nba_users').doc(user.uid).set({
+      name: user.displayName,
+      email: user.email,
+      photo: user.photoURL,
+      lastSeen: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    initApp();
+  } else {
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('app-shell').style.display = 'none';
+    const hdrUser = document.getElementById('hdr-user');
+    if (hdrUser) hdrUser.style.display = 'none';
+  }
+});
+
 // ── Init ────────────────────────────────────────────────────────────────
-async function init() {
+async function initApp() {
   loadSettingsUI();
   renderPicks();
   renderOverrides();
@@ -995,9 +1046,27 @@ async function init() {
 
   // Auto-refresh every 5 minutes
   setInterval(loadSlate, 5 * 60 * 1000);
-}
 
-init();
+  // Listen for real-time updates
+  const today = new Date().toLocaleDateString('en-CA', {timeZone: 'America/New_York'});
+  fbDb.collection('nba_slate').doc(today).onSnapshot(snap => {
+    if (!snap.exists) return;
+    const data = snap.data();
+    STATE.games = data.games || [];
+    STATE.teamRatings = data.team_ratings || {};
+    STATE.leagueAvgPace = data.league_avg_pace || 100;
+    STATE.leagueAvgOrtg = data.league_avg_ortg || 113.1;
+    if (data.lastUpdatedMs) {
+      const d = new Date(data.lastUpdatedMs);
+      document.getElementById('last-update').textContent = d.toLocaleTimeString('en-US', {
+        hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York'
+      }) + ' ET';
+    }
+    renderGames();
+    updateStrip();
+    populatePickDropdown();
+  });
+}
 </script>
 </body>
 </html>
