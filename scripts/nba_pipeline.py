@@ -182,11 +182,16 @@ def fetch_darko():
                 try: dpm = float(row[key]); break
                 except: pass
 
+        # Position: "c_pos" → "C", "pf_pos" → "PF", etc.
+        pos_raw = row.get('Position', row.get('position', '')).strip()
+        pos = pos_raw.replace('_pos', '').upper() if pos_raw else ''
+
         entry = {
             'name': name,
             'dpm': dpm,
             'o_dpm': o_dpm,
             'd_dpm': d_dpm,
+            'pos': pos,
         }
         players[name.lower()] = entry
         raw_list.append(entry)
@@ -832,7 +837,8 @@ def get_bankroll():
 # ── Minute overrides from Firestore ──────────────────────────────────────
 def get_baselines(team):
     """Fetch baseline minute overrides for a team.
-    Returns dict: {player_name_lower: minutes}
+    Baselines can be a number (total minutes) or {pg, sg, sf, pf, c} (by position).
+    Returns dict: {player_name_lower: total_minutes}
     """
     if not db:
         return {}
@@ -841,7 +847,15 @@ def get_baselines(team):
         if doc.exists:
             data = doc.to_dict() or {}
             players = data.get('players', {})
-            return {k.lower(): v for k, v in players.items()}
+            result = {}
+            for name, val in players.items():
+                if isinstance(val, dict):
+                    # Position-based: sum all positions
+                    total = sum(val.get(p, 0) for p in ['pg', 'sg', 'sf', 'pf', 'c'])
+                    result[name.lower()] = total
+                else:
+                    result[name.lower()] = val
+            return result
     except:
         pass
     return {}
@@ -1139,6 +1153,30 @@ def run(override_date=None):
                 'date': date,
             })
             print(f'\nWrote {len(games_out)} games to Firestore')
+
+            # Write all team rosters (for Teams tab)
+            all_teams = {}
+            for name_lower, mp in player_minutes.items():
+                team = mp['team_abr']
+                if team not in all_teams:
+                    all_teams[team] = []
+                dk = darko.get(name_lower)
+                all_teams[team].append({
+                    'name': mp['name'],
+                    'min': mp['minutes'],
+                    'dpm': round(dk['dpm'], 1) if dk else 0,
+                    'o_dpm': round(dk['o_dpm'], 1) if dk else 0,
+                    'd_dpm': round(dk['d_dpm'], 1) if dk else 0,
+                    'pos': dk.get('pos', '') if dk else '',
+                })
+            for team, players in all_teams.items():
+                players.sort(key=lambda p: -p['min'])
+                db.collection('nba_rosters').document(team).set({
+                    'players': players,
+                    '_ts': int(time.time()),
+                })
+            print(f'Wrote rosters for {len(all_teams)} teams')
+
         except Exception as e:
             print(f'Firestore write failed: {e}')
 

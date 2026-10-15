@@ -596,11 +596,28 @@ input:focus, select:focus { border-color: var(--accent); background: #fff; }
       <div id="team-min-warn" style="font-size:11px;color:var(--yellow);display:none;"></div>
     </div>
     <div class="sw" style="max-height:600px;">
-      <table class="dt">
-        <thead><tr>
-          <th>Player</th><th style="text-align:right">Baseline MIN</th><th style="text-align:right">Source</th>
-          <th style="text-align:right">DPM</th><th style="text-align:right">O-DPM</th><th style="text-align:right">D-DPM</th>
-        </tr></thead>
+      <table class="dt" style="font-size:11px;">
+        <thead>
+          <tr>
+            <th>Player</th><th style="text-align:right">Total</th>
+            <th style="text-align:center;color:var(--accent)">PG</th>
+            <th style="text-align:center;color:var(--accent)">SG</th>
+            <th style="text-align:center;color:var(--accent)">SF</th>
+            <th style="text-align:center;color:var(--accent)">PF</th>
+            <th style="text-align:center;color:var(--accent)">C</th>
+            <th style="text-align:right">DPM</th>
+          </tr>
+          <tr id="team-sums-row" style="background:#f0f7ff;font-weight:700;font-family:var(--mono);font-size:11px;">
+            <td style="font-family:var(--sans);font-size:10px;color:var(--muted)">SUM</td>
+            <td style="text-align:right" id="sum-total">0</td>
+            <td style="text-align:center" id="sum-pg">0</td>
+            <td style="text-align:center" id="sum-sg">0</td>
+            <td style="text-align:center" id="sum-sf">0</td>
+            <td style="text-align:center" id="sum-pf">0</td>
+            <td style="text-align:center" id="sum-c">0</td>
+            <td></td>
+          </tr>
+        </thead>
         <tbody id="team-baseline-body"></tbody>
       </table>
     </div>
@@ -1284,8 +1301,8 @@ function loadSettingsUI() {
 }
 
 // ── Teams Baseline Editor ────────────────────────────────────────────────
-let _teamBaseline = {}; // {player_name: {min, source, dpm, o_dpm, d_dpm}}
-let _teamBaselineOrig = {};
+const POSITIONS = ['PG', 'SG', 'SF', 'PF', 'C'];
+let _teamPlayers = []; // [{name, pos, pg, sg, sf, pf, c, dpm, o_dpm, d_dpm}]
 let _selectedTeam = '';
 
 function initTeamSelector() {
@@ -1301,78 +1318,105 @@ function loadTeamBaseline() {
   if (!team) return;
   _selectedTeam = team;
 
-  // Gather all players for this team from today's game data
-  const players = [];
-  for (const g of STATE.games) {
-    const list = g.away === team ? (g.away_players || []) : g.home === team ? (g.home_players || []) : [];
-    for (const p of list) {
-      if (!players.find(x => x.name === p.name)) players.push({...p});
-    }
-  }
-  players.sort((a, b) => b.min - a.min);
+  // Load roster from nba_rosters/{team}
+  fbDb.collection('nba_rosters').doc(team).get().then(rosterSnap => {
+    const roster = rosterSnap.exists ? (rosterSnap.data().players || []) : [];
 
-  _teamBaselineOrig = {};
-  for (const p of players) _teamBaselineOrig[p.name] = p.min;
+    // Load saved baseline
+    return fbDb.collection('nba_baselines').doc(team).get().then(baseSnap => {
+      const saved = baseSnap.exists ? (baseSnap.data().players || {}) : {};
 
-  // Load saved baseline from Firestore
-  fbDb.collection('nba_baselines').doc(team).get().then(snap => {
-    const saved = snap.exists ? (snap.data().players || {}) : {};
-    _teamBaseline = {};
-    for (const p of players) {
-      _teamBaseline[p.name] = {
-        min: saved[p.name] != null ? saved[p.name] : p.min,
-        origMin: p.min,
-        source: saved[p.name] != null ? 'Saved' : (p.min > 20 ? 'FP' : 'NBA'),
-        dpm: p.dpm, o_dpm: p.o_dpm, d_dpm: p.d_dpm,
-      };
-    }
-    renderTeamBaseline();
+      _teamPlayers = roster.map(p => {
+        const sv = saved[p.name]; // saved = {pg:X, sg:X, sf:X, pf:X, c:X} or a number
+        let pg=0, sg=0, sf=0, pf=0, c=0;
+
+        if (sv && typeof sv === 'object') {
+          pg = sv.pg || 0; sg = sv.sg || 0; sf = sv.sf || 0; pf = sv.pf || 0; c = sv.c || 0;
+        } else {
+          // Default: put all minutes in the player's primary position
+          const defaultMin = (sv != null) ? sv : p.min;
+          const pri = (p.pos || 'SF').toUpperCase();
+          if (pri === 'PG') pg = defaultMin;
+          else if (pri === 'SG') sg = defaultMin;
+          else if (pri === 'SF') sf = defaultMin;
+          else if (pri === 'PF') pf = defaultMin;
+          else if (pri === 'C') c = defaultMin;
+          else sf = defaultMin; // fallback
+        }
+
+        return {
+          name: p.name, pos: p.pos || '',
+          pg, sg, sf, pf, c,
+          dpm: p.dpm, o_dpm: p.o_dpm, d_dpm: p.d_dpm,
+        };
+      });
+
+      // Sort by total minutes desc
+      _teamPlayers.sort((a, b) => (b.pg+b.sg+b.sf+b.pf+b.c) - (a.pg+a.sg+a.sf+a.pf+a.c));
+      renderTeamBaseline();
+    });
   });
 }
 
 function renderTeamBaseline() {
   const tbody = document.getElementById('team-baseline-body');
-  const entries = Object.entries(_teamBaseline).sort((a, b) => b[1].min - a[1].min);
-
-  tbody.innerHTML = entries.map(([name, p]) => {
-    const edited = p.min !== p.origMin;
+  tbody.innerHTML = _teamPlayers.map((p, i) => {
+    const total = p.pg + p.sg + p.sf + p.pf + p.c;
     return `<tr>
-      <td style="font-family:var(--sans);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;">${name}</td>
-      <td style="text-align:right;">
-        <input type="number" value="${p.min}" min="0" max="48" step="0.5"
-          class="${edited ? 'edited' : ''}" style="width:55px;"
-          onchange="updateTeamMin('${name.replace(/'/g, "\\'")}', this.value)" />
+      <td style="font-family:var(--sans);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;">
+        ${p.name} <span style="font-size:9px;color:var(--muted)">${p.pos}</span>
       </td>
-      <td style="text-align:right;font-size:10px;color:var(--muted)">${p.source}</td>
+      <td style="text-align:right;font-family:var(--mono);font-weight:700;">${total.toFixed(1)}</td>
+      <td style="text-align:center"><input type="number" value="${p.pg||''}" min="0" max="48" step="0.5" style="width:42px;text-align:center;font-size:11px;" onchange="updatePosMin(${i},'pg',this.value)" placeholder="0"></td>
+      <td style="text-align:center"><input type="number" value="${p.sg||''}" min="0" max="48" step="0.5" style="width:42px;text-align:center;font-size:11px;" onchange="updatePosMin(${i},'sg',this.value)" placeholder="0"></td>
+      <td style="text-align:center"><input type="number" value="${p.sf||''}" min="0" max="48" step="0.5" style="width:42px;text-align:center;font-size:11px;" onchange="updatePosMin(${i},'sf',this.value)" placeholder="0"></td>
+      <td style="text-align:center"><input type="number" value="${p.pf||''}" min="0" max="48" step="0.5" style="width:42px;text-align:center;font-size:11px;" onchange="updatePosMin(${i},'pf',this.value)" placeholder="0"></td>
+      <td style="text-align:center"><input type="number" value="${p.c||''}" min="0" max="48" step="0.5" style="width:42px;text-align:center;font-size:11px;" onchange="updatePosMin(${i},'c',this.value)" placeholder="0"></td>
       <td style="text-align:right;font-family:var(--mono);color:${p.dpm>=0?'var(--green)':'var(--red)'}">${p.dpm>0?'+':''}${p.dpm}</td>
-      <td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--text2)">${p.o_dpm>0?'+':''}${p.o_dpm}</td>
-      <td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--text2)">${p.d_dpm>0?'+':''}${p.d_dpm}</td>
     </tr>`;
   }).join('');
-
-  updateTeamTotalMin();
+  updateTeamSums();
 }
 
-function updateTeamMin(name, val) {
-  if (_teamBaseline[name]) {
-    _teamBaseline[name].min = parseFloat(val) || 0;
-    _teamBaseline[name].source = 'Edited';
+function updatePosMin(idx, pos, val) {
+  _teamPlayers[idx][pos] = parseFloat(val) || 0;
+  // Update total in the row
+  const p = _teamPlayers[idx];
+  const total = p.pg + p.sg + p.sf + p.pf + p.c;
+  const rows = document.querySelectorAll('#team-baseline-body tr');
+  if (rows[idx]) {
+    rows[idx].querySelector('td:nth-child(2)').textContent = total.toFixed(1);
   }
-  updateTeamTotalMin();
+  updateTeamSums();
 }
 
-function updateTeamTotalMin() {
-  const total = Object.values(_teamBaseline).reduce((s, p) => s + p.min, 0);
-  document.getElementById('team-total-min').textContent = total.toFixed(0);
+function updateTeamSums() {
+  let sumTotal=0, sumPg=0, sumSg=0, sumSf=0, sumPf=0, sumC=0;
+  for (const p of _teamPlayers) {
+    sumPg += p.pg; sumSg += p.sg; sumSf += p.sf; sumPf += p.pf; sumC += p.c;
+  }
+  sumTotal = sumPg + sumSg + sumSf + sumPf + sumC;
+
+  const clr = (v, target) => v > target + 1 ? 'var(--red)' : v < target - 1 ? 'var(--yellow)' : 'var(--green)';
+  document.getElementById('sum-total').textContent = sumTotal.toFixed(0);
+  document.getElementById('sum-total').style.color = clr(sumTotal, 240);
+  document.getElementById('sum-pg').textContent = sumPg.toFixed(0);
+  document.getElementById('sum-pg').style.color = clr(sumPg, 48);
+  document.getElementById('sum-sg').textContent = sumSg.toFixed(0);
+  document.getElementById('sum-sg').style.color = clr(sumSg, 48);
+  document.getElementById('sum-sf').textContent = sumSf.toFixed(0);
+  document.getElementById('sum-sf').style.color = clr(sumSf, 48);
+  document.getElementById('sum-pf').textContent = sumPf.toFixed(0);
+  document.getElementById('sum-pf').style.color = clr(sumPf, 48);
+  document.getElementById('sum-c').textContent = sumC.toFixed(0);
+  document.getElementById('sum-c').style.color = clr(sumC, 48);
+
+  document.getElementById('team-total-min').textContent = sumTotal.toFixed(0);
   const warn = document.getElementById('team-min-warn');
-  if (total > 250) {
-    warn.textContent = `${(total - 240).toFixed(0)} min over 240`;
+  if (Math.abs(sumTotal - 240) > 10) {
+    warn.textContent = sumTotal > 240 ? `${(sumTotal-240).toFixed(0)} over 240` : `${(240-sumTotal).toFixed(0)} under 240`;
     warn.style.display = '';
-    warn.style.color = 'var(--red)';
-  } else if (total < 230) {
-    warn.textContent = `${(240 - total).toFixed(0)} min under 240`;
-    warn.style.display = '';
-    warn.style.color = 'var(--yellow)';
+    warn.style.color = sumTotal > 240 ? 'var(--red)' : 'var(--yellow)';
   } else {
     warn.style.display = 'none';
   }
@@ -1381,29 +1425,19 @@ function updateTeamTotalMin() {
 function saveTeamBaseline() {
   if (!_selectedTeam) return;
   const players = {};
-  for (const [name, p] of Object.entries(_teamBaseline)) {
-    players[name] = p.min;
+  for (const p of _teamPlayers) {
+    players[p.name] = { pg: p.pg, sg: p.sg, sf: p.sf, pf: p.pf, c: p.c };
   }
   fbDb.collection('nba_baselines').doc(_selectedTeam).set({ players })
-    .then(() => {
-      // Update sources to "Saved"
-      for (const p of Object.values(_teamBaseline)) p.source = 'Saved';
-      renderTeamBaseline();
-      alert(`${_selectedTeam} baseline saved`);
-    })
+    .then(() => alert(`${_selectedTeam} baseline saved`))
     .catch(e => alert('Save failed: ' + e.message));
 }
 
 function resetTeamBaseline() {
-  for (const [name, p] of Object.entries(_teamBaseline)) {
-    p.min = p.origMin;
-    p.source = p.origMin > 20 ? 'FP' : 'NBA';
-  }
-  renderTeamBaseline();
+  loadTeamBaseline(); // reload from Firestore/defaults
 }
 
 function openTeamTab(team) {
-  // Switch to Teams tab and select the team
   document.querySelectorAll('#nav button').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelector('#nav button[data-tab="teams"]').classList.add('active');
