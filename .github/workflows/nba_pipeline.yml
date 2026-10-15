@@ -1,0 +1,34 @@
+name: NBA Pipeline
+
+on:
+  schedule:
+    # Every 20 minutes, 11am–midnight ET (15:00–04:00 UTC)
+    # NBA games typically 7pm-midnight ET, but early games start ~12pm
+    - cron: '0,20,40 15-23 * * *'
+    - cron: '0,20,40 0-4 * * *'
+  workflow_dispatch:  # allow manual trigger
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests firebase-admin pandas
+
+      - name: Run pipeline
+        env:
+          FIREBASE_SA_JSON: ${{ secrets.FIREBASE_SA_JSON }}
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          TG_CHAT: ${{ secrets.TG_CHAT }}
+        run: python scripts/nba_pipeline.py
