@@ -1,3 +1,4 @@
 requests
 firebase-admin
 pandas
+cryptography

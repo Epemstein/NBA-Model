@@ -780,7 +780,20 @@ def run():
         return
 
     if not games:
-        print('No games today')
+        print('No games today (regular season)')
+        # Clear stale data from Firestore
+        if db:
+            try:
+                db.collection('nba_slate').document(date).set({
+                    'games': [],
+                    'team_ratings': {},
+                    'lastUpdated': firestore.SERVER_TIMESTAMP,
+                    'lastUpdatedMs': int(time.time() * 1000),
+                    'date': date,
+                    'message': 'No regular season games today',
+                })
+                print('Cleared stale Firestore data')
+            except: pass
         return
 
     # Apply minute overrides (injuries, etc.)
@@ -790,8 +803,38 @@ def run():
             player_minutes[name_lower]['minutes'] = mins
         # If set to 0, effectively removes the player
 
-    # 2. Fetch odds
-    fetch_odds(games)
+    # 2. Fetch odds — try Novig first, fall back to The Odds API
+    novig_key_id = os.environ.get('NOVIG_KEY_ID', '')
+    novig_pem = os.environ.get('NOVIG_PRIVATE_KEY', '')
+    if novig_key_id and novig_pem:
+        try:
+            from scripts.novig import NovigClient, get_novig_nba_lines
+            nc = NovigClient(novig_key_id, novig_pem)
+            novig_lines = get_novig_nba_lines(nc)
+            print(f'Novig: {len(novig_lines)} games with lines')
+            for gm in games:
+                aw, hw = gm['away'], gm['home']
+                key = f'{aw}@{hw}'
+                nl = novig_lines.get(key)
+                if not nl:
+                    continue
+                sp = nl.get('spread', {})
+                tot = nl.get('total', {})
+                if sp.get('strike') is not None:
+                    gm['book_spread'] = sp['strike']
+                    gm['novig_spread_home_oid'] = sp.get('home_outcome_id')
+                    gm['novig_spread_away_oid'] = sp.get('away_outcome_id')
+                if tot.get('strike') is not None:
+                    gm['book_total'] = tot['strike']
+                    gm['novig_total_over_oid'] = tot.get('over_outcome_id')
+                    gm['novig_total_under_oid'] = tot.get('under_outcome_id')
+                gm['odds_source'] = 'Novig'
+                print(f'  {aw}@{hw}: spread={gm["book_spread"]} total={gm["book_total"]}')
+        except Exception as e:
+            print(f'Novig fetch failed: {e}')
+            fetch_odds(games)
+    else:
+        fetch_odds(games)
 
     # 3. Compute team ratings for all teams in today's games
     teams_today = set()

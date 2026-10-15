@@ -23,7 +23,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install requests firebase-admin pandas
+        run: pip install requests firebase-admin pandas cryptography
 
       - name: Run pipeline
         env:
@@ -32,4 +32,6 @@ jobs:
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_CHAT: ${{ secrets.TG_CHAT }}
           RENDER_URL: ${{ secrets.RENDER_URL }}
+          NOVIG_KEY_ID: ${{ secrets.NOVIG_KEY_ID }}
+          NOVIG_PRIVATE_KEY: ${{ secrets.NOVIG_PRIVATE_KEY }}
         run: python scripts/nba_pipeline.py
