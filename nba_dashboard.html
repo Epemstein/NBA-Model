@@ -542,6 +542,7 @@ input[type=number] { -moz-appearance: textfield; }
         <div class="ct" style="margin:0;padding:0;border:none;">Odds Summary</div>
         <div style="display:flex;gap:2px;">
           <button class="btn bg odds-tab active" data-odds="spread" onclick="switchOddsTab('spread')" style="font-size:10px;padding:4px 10px;">Spread</button>
+          <button class="btn bg odds-tab" data-odds="ml" onclick="switchOddsTab('ml')" style="font-size:10px;padding:4px 10px;">ML</button>
           <button class="btn bg odds-tab" data-odds="total" onclick="switchOddsTab('total')" style="font-size:10px;padding:4px 10px;">Total</button>
         </div>
       </div>
@@ -1159,6 +1160,45 @@ function renderOddsSummary() {
       </tr>`;
     }
     tbody.innerHTML = html;
+  } else if (_oddsTab === 'ml') {
+    thead.innerHTML = '<tr><th>Game</th><th>Team</th><th>Book</th><th>Model</th><th>Win%</th><th>Edge</th><th>Avail</th></tr>';
+    let html = '';
+    for (const g of STATE.games) {
+      // Book ML from Novig price (probability → American)
+      const awBookProb = g.away_ml_price;
+      const hwBookProb = g.home_ml_price;
+      const awBookML = awBookProb != null ? fmtML(probToML(awBookProb)) : '—';
+      const hwBookML = hwBookProb != null ? fmtML(probToML(hwBookProb)) : '—';
+      // Model ML from spread
+      const awModelProb = g.proj_spread != null ? spreadToWinProb(-g.proj_spread) : null;
+      const hwModelProb = g.proj_spread != null ? spreadToWinProb(g.proj_spread) : null;
+      const awModelML = awModelProb != null ? fmtML(probToML(awModelProb)) : '—';
+      const hwModelML = hwModelProb != null ? fmtML(probToML(hwModelProb)) : '—';
+      // Edge in probability points
+      const awEdge = (awModelProb != null && awBookProb != null) ? Math.round((awModelProb - awBookProb) * 1000) / 10 : null;
+      const hwEdge = (hwModelProb != null && hwBookProb != null) ? Math.round((hwModelProb - hwBookProb) * 1000) / 10 : null;
+
+      html += `<tr style="border-bottom:none;">
+        <td rowspan="2" style="font-family:var(--sans);font-weight:600;font-size:10px;vertical-align:middle;border-bottom:2px solid var(--border);white-space:nowrap;">
+          ${g.away} @<br>${g.home}<br><span style="color:var(--muted);font-weight:400;font-size:9px;">${g.game_time_et || ''}</span>
+        </td>
+        <td style="font-family:var(--sans);font-size:10px;">${g.away}</td>
+        <td style="font-family:var(--mono);">${awBookML}</td>
+        <td style="font-family:var(--mono);color:var(--accent);">${awModelML}</td>
+        <td style="font-size:10px;color:var(--text2);">${awModelProb != null ? (awModelProb*100).toFixed(0)+'%' : '—'}</td>
+        <td>${awEdge != null && awEdge > 1 ? `<span class="edge-chip ${awEdge>=5?'hi':awEdge>=2?'mid':'lo'}">${awEdge.toFixed(1)}%</span>` : ''}</td>
+        <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.away_ml_fill)}</td>
+      </tr>`;
+      html += `<tr style="border-bottom:2px solid var(--border);">
+        <td style="font-family:var(--sans);font-size:10px;font-weight:600;">${g.home}</td>
+        <td style="font-family:var(--mono);font-weight:600;">${hwBookML}</td>
+        <td style="font-family:var(--mono);color:var(--accent);font-weight:600;">${hwModelML}</td>
+        <td style="font-size:10px;color:var(--text2);font-weight:600;">${hwModelProb != null ? (hwModelProb*100).toFixed(0)+'%' : '—'}</td>
+        <td>${hwEdge != null && hwEdge > 1 ? `<span class="edge-chip ${hwEdge>=5?'hi':hwEdge>=2?'mid':'lo'}">${hwEdge.toFixed(1)}%</span>` : ''}</td>
+        <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.home_ml_fill)}</td>
+      </tr>`;
+    }
+    tbody.innerHTML = html;
   } else {
     thead.innerHTML = '<tr><th>Game</th><th>Side</th><th>Line</th><th>Price</th><th>MDL</th><th>Edge</th><th>Avail</th></tr>';
     let html = '';
@@ -1610,7 +1650,13 @@ function recalcGamesWithBaselines() {
       for (const side of ['away', 'home']) {
         const team = g[side];
         const bl = baselines[team] || {};
-        if (!Object.keys(bl).length) continue; // No baseline saved for this team — keep pipeline defaults
+        if (!Object.keys(bl).length) {
+          // No baseline saved — zero out all minutes (user must fill in baselines)
+          for (const p of playerList) p.min = 0;
+          g[`${side}_off`] = 0;
+          g[`${side}_def`] = 0;
+          continue;
+        }
         anyChanged = true;
         const playerList = g[`${side}_players`] || [];
 

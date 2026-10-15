@@ -973,6 +973,12 @@ def run(override_date=None):
                     gm['over_fill'] = tot.get('over_fillable', 0)
                     gm['under_price'] = tot.get('under_price')
                     gm['under_fill'] = tot.get('under_fillable', 0)
+                ml = nl.get('money', {})
+                if ml.get('home_price') is not None:
+                    gm['home_ml_price'] = ml['home_price']
+                    gm['home_ml_fill'] = ml.get('home_fillable', 0)
+                    gm['away_ml_price'] = ml.get('away_price')
+                    gm['away_ml_fill'] = ml.get('away_fillable', 0)
                 gm['odds_source'] = 'Novig'
                 print(f'  {aw}@{hw}: spread={gm["book_spread"]} total={gm["book_total"]}')
         except Exception as e:

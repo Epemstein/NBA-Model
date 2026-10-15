@@ -232,6 +232,7 @@ def get_novig_nba_lines(client, target_date=None):
     spreads = client.get_nba_markets(market_type='SPREAD')
     totals = client.get_nba_markets(market_type='TOTAL')
     moneys = client.get_nba_markets(market_type='MONEY')
+    moneys = client.get_nba_markets(market_type='MONEY')
 
     if not spreads and not totals:
         return {}
@@ -247,7 +248,7 @@ def get_novig_nba_lines(client, target_date=None):
                 if game_date != target_date:
                     continue
         if eid not in events:
-            events[eid] = {'spreads': [], 'totals': []}
+            events[eid] = {'spreads': [], 'totals': [], 'money': None}
         events[eid]['spreads'].append(m)
 
     for m in totals:
@@ -259,8 +260,20 @@ def get_novig_nba_lines(client, target_date=None):
                 if game_date != target_date:
                     continue
         if eid not in events:
-            events[eid] = {'spreads': [], 'totals': []}
+            events[eid] = {'spreads': [], 'totals': [], 'money': None}
         events[eid]['totals'].append(m)
+
+    for m in moneys:
+        eid = m['eventId']
+        if target_date:
+            ts = m.get('startsTs', 0)
+            if ts:
+                game_date = dt.fromtimestamp(ts / 1000).strftime('%Y-%m-%d')
+                if game_date != target_date:
+                    continue
+        if eid not in events:
+            events[eid] = {'spreads': [], 'totals': [], 'money': None}
+        events[eid]['money'] = m
 
     lines = {}
     for eid, ev in events.items():
@@ -424,6 +437,38 @@ def get_novig_nba_lines(client, target_date=None):
             under_fillable = round(under_ask * over_bid_qty / 100) if under_ask and over_bid_qty else 0
             entry['total']['under_price'] = under_ask
             entry['total']['under_fillable'] = under_fillable
+
+        # Moneyline
+        ml_market = ev.get('money')
+        if ml_market:
+            ml_book = None
+            try:
+                ml_book = client.get_book(ml_market['marketId'])
+            except:
+                pass
+            entry['money'] = {'market_id': ml_market['marketId']}
+            # desc is just team name like "DET"
+            for o in ml_market.get('outcomes', []):
+                oname = o['name'].strip()
+                bid_price, bid_qty = _best_bid(ml_book, o['outcomeId'])
+                # To buy this ML: cross with the OTHER side's bids
+                other_oid = [x['outcomeId'] for x in ml_market['outcomes'] if x['outcomeId'] != o['outcomeId']]
+                if other_oid:
+                    other_bid, other_qty = _best_bid(ml_book, other_oid[0])
+                    ask = round(1 - other_bid, 3) if other_bid else None
+                    fillable = round(ask * other_qty / 100) if ask and other_qty else 0
+                else:
+                    ask = None
+                    fillable = 0
+
+                if oname == home_team:
+                    entry['money']['home_price'] = ask
+                    entry['money']['home_fillable'] = fillable
+                    entry['money']['home_outcome_id'] = o['outcomeId']
+                else:
+                    entry['money']['away_price'] = ask
+                    entry['money']['away_fillable'] = fillable
+                    entry['money']['away_outcome_id'] = o['outcomeId']
 
         lines[key] = entry
 
