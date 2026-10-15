@@ -1192,18 +1192,14 @@ def run(override_date=None):
             print(f'\nWrote {len(games_out)} games to Firestore')
 
             # Write all team rosters (for Teams tab) — deduplicate by normalized name
+            # When duplicates exist, prefer the one with a DARKO match
             all_teams = {}
-            seen = {}  # {(team, norm_name): True}
+            seen = {}  # {(team, norm_name): index in all_teams[team]}
             for name_key, mp in player_minutes.items():
                 team = mp['team_abr']
                 nk = norm_name(mp['name'])
-                if (team, nk) in seen:
-                    continue
-                seen[(team, nk)] = True
-                if team not in all_teams:
-                    all_teams[team] = []
                 dk = darko.get(nk) or darko.get(name_key)
-                all_teams[team].append({
+                entry = {
                     'name': mp['name'],
                     'min': mp['minutes'],
                     'dpm': round(dk['dpm'], 1) if dk else 0,
@@ -1211,7 +1207,17 @@ def run(override_date=None):
                     'd_dpm': round(dk['d_dpm'], 1) if dk else 0,
                     'pos': dk.get('pos', '') if dk else '',
                     'nba_id': dk.get('nba_id', '') if dk else '',
-                })
+                }
+                if team not in all_teams:
+                    all_teams[team] = []
+                if (team, nk) in seen:
+                    # Duplicate — replace if this one has DARKO data and existing doesn't
+                    idx = seen[(team, nk)]
+                    if dk and all_teams[team][idx]['dpm'] == 0:
+                        all_teams[team][idx] = entry
+                    continue
+                seen[(team, nk)] = len(all_teams[team])
+                all_teams[team].append(entry)
             for team, players in all_teams.items():
                 players.sort(key=lambda p: -p['min'])
                 db.collection('nba_rosters').document(team).set({
