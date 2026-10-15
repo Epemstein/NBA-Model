@@ -949,18 +949,20 @@ function renderGames() {
       <div class="gc-time">${g.game_time_et || g.status_text || ''}</div>
       <div class="gc-teams">
         <div class="gc-team-hdr away" style="background:${awColor};cursor:pointer;" onclick="openRoster(${i},'away')">
-          <span class="team-hdr-name">${g.away}</span>
+          <img src="${teamLogo(g.away)}" style="position:absolute;left:6px;top:50%;transform:translateY(-50%);width:62px;height:62px;object-fit:contain;opacity:.45;pointer-events:none;filter:brightness(1.05) drop-shadow(0 0 2px rgba(0,0,0,.15));" onerror="this.style.display='none'" />
+          <span class="team-hdr-name" style="padding-left:52px;">${g.away}</span>
           <div style="text-align:right;position:relative;z-index:1;">
             <div class="team-hdr-proj">${g.away_proj != null ? g.away_proj : '—'}</div>
             ${g.proj_spread != null ? `<div style="font-size:10px;font-family:var(--mono);opacity:.8;margin-top:1px;">${(spreadToWinProb(-g.proj_spread)*100).toFixed(0)}% · ${fmtML(spreadToML(-g.proj_spread))}</div>` : ''}
           </div>
         </div>
         <div class="gc-team-hdr home" style="background:${hwColor};cursor:pointer;" onclick="openRoster(${i},'home')">
-          <span class="team-hdr-name">${g.home}</span>
-          <div style="text-align:right;position:relative;z-index:1;">
+          <div style="text-align:left;position:relative;z-index:1;">
             <div class="team-hdr-proj">${g.home_proj != null ? g.home_proj : '—'}</div>
             ${g.proj_spread != null ? `<div style="font-size:10px;font-family:var(--mono);opacity:.8;margin-top:1px;">${(spreadToWinProb(g.proj_spread)*100).toFixed(0)}% · ${fmtML(spreadToML(g.proj_spread))}</div>` : ''}
           </div>
+          <span class="team-hdr-name" style="padding-right:52px;">${g.home}</span>
+          <img src="${teamLogo(g.home)}" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);width:62px;height:62px;object-fit:contain;opacity:.45;pointer-events:none;filter:brightness(1.05) drop-shadow(0 0 2px rgba(0,0,0,.15));" onerror="this.style.display='none'" />
         </div>
       </div>
 
