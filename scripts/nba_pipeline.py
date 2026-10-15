@@ -350,12 +350,24 @@ def fetch_player_minutes():
     """
     today = today_et()
 
-    # Try FantasyPros projected minutes first (best source)
+    # FantasyPros projected minutes as primary (covers ~265 top players)
     proj = fetch_projected_minutes()
-    if proj:
-        return proj
 
-    # Fall back to Firestore cache (refresh every 4 hours)
+    # Also fetch NBA API data for full roster coverage
+    nba_players = _fetch_nba_api_minutes(today)
+
+    # Merge: FantasyPros takes priority, NBA API fills the gaps
+    if proj and nba_players:
+        merged = dict(nba_players)  # start with full NBA roster
+        merged.update(proj)         # overwrite with FP projections for top players
+        print(f'Merged minutes: {len(proj)} from FantasyPros + {len(nba_players)} from NBA API = {len(merged)} total')
+        return merged
+    elif proj:
+        return proj
+    elif nba_players:
+        return nba_players
+
+    # Fall back to Firestore cache
     if db:
         try:
             snap = db.collection('nba_minutes').document(today).get()
@@ -368,9 +380,12 @@ def fetch_player_minutes():
         except Exception as e:
             print(f'Minutes cache miss: {e}')
 
-    print('Fetching player minutes from NBA API...')
+    print('No minutes data available')
+    return {}
 
-    # Try: current regular season → current preseason → previous regular season
+
+def _fetch_nba_api_minutes(today):
+    """Fetch minutes from NBA API (preseason/regular season) for full roster coverage."""
     season_attempts = [
         (_current_season(), 'Regular Season'),
         (_current_season(), 'Pre Season'),
@@ -382,30 +397,30 @@ def fetch_player_minutes():
             params = _nba_player_params(season, last_n=8)
             params['SeasonType'] = season_type
             if season_type == 'Pre Season':
-                params['LastNGames'] = '0'  # all preseason games
+                params['LastNGames'] = '0'
             r = _nba_get('https://stats.nba.com/stats/leaguedashplayerstats',
                          params=params, timeout=45)
             data = r.json()
             rows = data['resultSets'][0]['rowSet']
             if rows:
-                print(f'Using {season} {season_type} ({len(rows)} players)')
+                print(f'NBA API: {season} {season_type} ({len(rows)} players)')
                 break
         except Exception as e:
             print(f'{season} {season_type} failed: {e}')
             rows = []
-    else:
-        # Fall back to stale Firestore cache (any age)
+
+    if not rows:
+        # Try Firestore cache
         if db:
             try:
-                snap = db.collection('nba_minutes').document(today).get()
+                snap = db.collection('nba_minutes').document('nba_api').get()
                 if snap.exists:
-                    data = snap.to_dict()
-                    if data.get('players'):
-                        print(f'Minutes loaded from stale Firestore cache ({len(data["players"])} players)')
-                        return {p['name'].lower(): p for p in data['players']}
+                    d = snap.to_dict()
+                    if d.get('players'):
+                        print(f'NBA API minutes from cache ({len(d["players"])} players)')
+                        return {p['name'].lower(): p for p in d['players']}
             except: pass
-        print('No player data available from NBA API')
-        return {}
+        return None
 
     hdrs = data['resultSets'][0]['headers']
     name_idx = hdrs.index('PLAYER_NAME')
@@ -428,12 +443,12 @@ def fetch_player_minutes():
         players[name.lower()] = entry
         raw_list.append(entry)
 
-    print(f'Minutes: {len(players)} players')
+    print(f'NBA API minutes: {len(players)} players')
 
     # Cache
     if db and raw_list:
         try:
-            db.collection('nba_minutes').document(today).set({
+            db.collection('nba_minutes').document('nba_api').set({
                 'players': raw_list,
                 '_ts': int(time.time()),
             })
