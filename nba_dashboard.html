@@ -966,7 +966,19 @@ function renderGames() {
 
     return `
     <div class="gc ${hasEdge ? 'has-edge' : ''}">
-      <div class="gc-time">${g.game_time_et || g.status_text || ''}</div>
+      ${(() => {
+        const awMin = (g.away_players||[]).reduce((s,p) => s+p.min, 0);
+        const hwMin = (g.home_players||[]).reduce((s,p) => s+p.min, 0);
+        const awBad = Math.abs(awMin - 240) > 0.5;
+        const hwBad = Math.abs(hwMin - 240) > 0.5;
+        if (awBad || hwBad) {
+          const msgs = [];
+          if (awBad) msgs.push(`${g.away} DOES NOT HAVE 240 MINUTES (${awMin.toFixed(0)})`);
+          if (hwBad) msgs.push(`${g.home} DOES NOT HAVE 240 MINUTES (${hwMin.toFixed(0)})`);
+          return `<div style="background:#c62828;color:#fff;padding:6px 12px;text-align:center;font-size:11px;font-weight:700;letter-spacing:.02em;">${msgs.join(' &nbsp;|&nbsp; ')}</div>`;
+        }
+        return `<div class="gc-time">${g.game_time_et || g.status_text || ''}</div>`;
+      })()}
       <div class="gc-teams">
         <div class="gc-team-hdr away" style="background:${awColor};cursor:pointer;" onclick="openRoster(${i},'away')">
           <img src="${teamLogo(g.away)}" style="position:absolute;left:6px;top:50%;transform:translateY(-50%);width:62px;height:62px;object-fit:contain;opacity:.45;pointer-events:none;filter:brightness(1.05) drop-shadow(0 0 2px rgba(0,0,0,.15));" onerror="this.style.display='none'" />
