@@ -1026,51 +1026,7 @@ function renderGames() {
       </div>
 
       <div class="gc-drawer" id="players-${i}">
-        <div class="gc-drawer-inner">
-          <div class="math-cols">
-            <div>
-              <div class="math-col-title">${g.away} Rotation</div>
-              <table style="width:100%;border-collapse:collapse;font-size:11px;">
-                <tr style="border-bottom:1px solid var(--border);">
-                  <th style="text-align:left;font-size:9px;color:var(--muted);padding:2px 0;">PLAYER</th>
-                  <th style="text-align:right;font-size:9px;color:var(--muted);padding:2px 4px;">MIN</th>
-                  <th style="text-align:right;font-size:9px;color:var(--muted);padding:2px 4px;">DPM</th>
-                </tr>
-                ${(g.away_players||[]).filter(p=>p.min>0).map(p => `
-                <tr style="border-bottom:1px solid #f0f0f0;">
-                  <td style="padding:3px 0;font-family:var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;">
-                    <div style="display:flex;align-items:center;gap:4px;">
-                      <img src="${p.nba_id ? `https://cdn.nba.com/headshots/nba/latest/260x190/${p.nba_id}.png` : ''}" style="width:24px;height:18px;object-fit:cover;object-position:top;border-radius:2px;background:#e0e0e0;flex-shrink:0;" onerror="this.src='data:image/svg+xml,<%3Fxml version=%221.0%22%3F><svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2224%22 height=%2218%22><rect fill=%22%23ddd%22 width=%2224%22 height=%2218%22/><circle cx=%2212%22 cy=%227%22 r=%223.5%22 fill=%22%23bbb%22/><ellipse cx=%2212%22 cy=%2218%22 rx=%226%22 ry=%225%22 fill=%22%23bbb%22/></svg>'" />
-                      ${p.name}
-                    </div>
-                  </td>
-                  <td style="text-align:right;padding:3px 4px;font-family:var(--mono);font-weight:600;">${p.min}</td>
-                  <td style="text-align:right;padding:3px 4px;font-family:var(--mono);color:${p.dpm>=0?'var(--green)':'var(--red)'}">${p.dpm>0?'+':''}${p.dpm}</td>
-                </tr>`).join('')}
-              </table>
-            </div>
-            <div>
-              <div class="math-col-title">${g.home} Rotation</div>
-              <table style="width:100%;border-collapse:collapse;font-size:11px;">
-                <tr style="border-bottom:1px solid var(--border);">
-                  <th style="text-align:left;font-size:9px;color:var(--muted);padding:2px 0;">PLAYER</th>
-                  <th style="text-align:right;font-size:9px;color:var(--muted);padding:2px 4px;">MIN</th>
-                  <th style="text-align:right;font-size:9px;color:var(--muted);padding:2px 4px;">DPM</th>
-                </tr>
-                ${(g.home_players||[]).filter(p=>p.min>0).map(p => `
-                <tr style="border-bottom:1px solid #f0f0f0;">
-                  <td style="padding:3px 0;font-family:var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;">
-                    <div style="display:flex;align-items:center;gap:4px;">
-                      <img src="${p.nba_id ? `https://cdn.nba.com/headshots/nba/latest/260x190/${p.nba_id}.png` : ''}" style="width:24px;height:18px;object-fit:cover;object-position:top;border-radius:2px;background:#e0e0e0;flex-shrink:0;" onerror="this.src='data:image/svg+xml,<%3Fxml version=%221.0%22%3F><svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2224%22 height=%2218%22><rect fill=%22%23ddd%22 width=%2224%22 height=%2218%22/><circle cx=%2212%22 cy=%227%22 r=%223.5%22 fill=%22%23bbb%22/><ellipse cx=%2212%22 cy=%2218%22 rx=%226%22 ry=%225%22 fill=%22%23bbb%22/></svg>'" />
-                      ${p.name}
-                    </div>
-                  </td>
-                  <td style="text-align:right;padding:3px 4px;font-family:var(--mono);font-weight:600;">${p.min}</td>
-                  <td style="text-align:right;padding:3px 4px;font-family:var(--mono);color:${p.dpm>=0?'var(--green)':'var(--red)'}">${p.dpm>0?'+':''}${p.dpm}</td>
-                </tr>`).join('')}
-              </table>
-            </div>
-          </div>
+        <div class="gc-drawer-inner" id="players-inner-${i}">
         </div>
       </div>
 
@@ -1110,7 +1066,229 @@ function toggleDrawer(i) {
 
 function togglePlayers(i) {
   const d = document.getElementById('players-' + i);
+  const wasOpen = d.classList.contains('open');
   d.classList.toggle('open');
+  if (!wasOpen) renderPlayersPanel(i);
+}
+
+let _editingPlayers = {}; // {`${gameIdx}_${side}`: true}
+
+function renderPlayersPanel(i) {
+  const g = STATE.games[i];
+  const container = document.getElementById('players-inner-' + i);
+  const headshot = (id) => id ? `https://cdn.nba.com/headshots/nba/latest/260x190/${id}.png` : '';
+  const placeholder = `data:image/svg+xml,<%3Fxml version=%221.0%22%3F><svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2224%22 height=%2218%22><rect fill=%22%23ddd%22 width=%2224%22 height=%2218%22/><circle cx=%2212%22 cy=%227%22 r=%223.5%22 fill=%22%23bbb%22/><ellipse cx=%2212%22 cy=%2218%22 rx=%226%22 ry=%225%22 fill=%22%23bbb%22/></svg>`;
+
+  function renderSide(side) {
+    const team = g[side];
+    const players = (g[`${side}_players`] || []).filter(p => p.min > 0);
+    const editing = _editingPlayers[`${i}_${side}`];
+    const totalMin = players.reduce((s, p) => s + p.min, 0);
+
+    if (editing) {
+      // Edit mode — load full roster from Firestore baselines
+      return `<div>
+        <div class="math-col-title" style="display:flex;align-items:center;justify-content:space-between;">
+          ${team} Rotation
+          <button class="btn bg" style="font-size:9px;padding:2px 6px;" onclick="toggleEditPlayers(${i},'${side}')">Done</button>
+        </div>
+        <div id="edit-roster-${i}-${side}">Loading...</div>
+      </div>`;
+    }
+
+    return `<div>
+      <div class="math-col-title" style="display:flex;align-items:center;justify-content:space-between;">
+        ${team} Rotation <span style="font-size:9px;color:var(--muted);font-weight:400;">${totalMin.toFixed(0)} min</span>
+        <button class="btn bg" style="font-size:9px;padding:2px 6px;" onclick="toggleEditPlayers(${i},'${side}')">Edit</button>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:11px;">
+        <tr style="border-bottom:1px solid var(--border);">
+          <th style="text-align:left;font-size:9px;color:var(--muted);padding:2px 0;">PLAYER</th>
+          <th style="text-align:right;font-size:9px;color:var(--muted);padding:2px 4px;">MIN</th>
+          <th style="text-align:right;font-size:9px;color:var(--muted);padding:2px 4px;">DPM</th>
+        </tr>
+        ${players.map(p => `
+        <tr style="border-bottom:1px solid #f0f0f0;">
+          <td style="padding:3px 0;font-family:var(--sans);white-space:nowrap;">
+            <div style="display:flex;align-items:center;gap:4px;">
+              <img src="${headshot(p.nba_id)}" style="width:24px;height:18px;object-fit:cover;object-position:top;border-radius:2px;background:#e0e0e0;flex-shrink:0;" onerror="this.src='${placeholder}'" />
+              ${p.name}
+            </div>
+          </td>
+          <td style="text-align:right;padding:3px 4px;font-family:var(--mono);font-weight:600;">${p.min}</td>
+          <td style="text-align:right;padding:3px 4px;font-family:var(--mono);color:${p.dpm>=0?'var(--green)':'var(--red)'}">${p.dpm>0?'+':''}${p.dpm}</td>
+        </tr>`).join('')}
+      </table>
+    </div>`;
+  }
+
+  container.innerHTML = `<div class="math-cols">${renderSide('away')}${renderSide('home')}</div>`;
+
+  // If either side is in edit mode, load the full roster
+  for (const side of ['away', 'home']) {
+    if (_editingPlayers[`${i}_${side}`]) {
+      loadEditRoster(i, side);
+    }
+  }
+}
+
+function toggleEditPlayers(gameIdx, side) {
+  const key = `${gameIdx}_${side}`;
+  _editingPlayers[key] = !_editingPlayers[key];
+  renderPlayersPanel(gameIdx);
+}
+
+function loadEditRoster(gameIdx, side) {
+  const g = STATE.games[gameIdx];
+  const team = g[side];
+  const el = document.getElementById(`edit-roster-${gameIdx}-${side}`);
+  if (!el) return;
+
+  // Load full roster from nba_rosters + existing game overrides
+  Promise.all([
+    fbDb.collection('nba_rosters').doc(team).get(),
+    fbDb.collection('nba_baselines').doc(team).get(),
+    fbDb.collection('nba_game_overrides').doc(`${selectedDate}_${g.away}_${g.home}_${team}`).get(),
+  ]).then(([rosterSnap, baseSnap, overSnap]) => {
+    const roster = rosterSnap.exists ? rosterSnap.data().players || [] : [];
+    const baselines = baseSnap.exists ? baseSnap.data().players || {} : {};
+    const overrides = overSnap.exists ? overSnap.data().players || {} : {};
+
+    // Build player list with resolved minutes
+    const players = roster.map(p => {
+      let min = 0;
+      const bl = baselines[p.name];
+      if (bl && typeof bl === 'object') min = (bl.pg||0)+(bl.sg||0)+(bl.sf||0)+(bl.pf||0)+(bl.c||0);
+      else if (bl != null) min = bl;
+      // Game override wins
+      if (overrides[p.name] != null) min = overrides[p.name];
+      return { ...p, gameMin: min, origMin: min };
+    }).sort((a, b) => b.gameMin - a.gameMin);
+
+    const totalMin = players.reduce((s, p) => s + p.gameMin, 0);
+    const headshot = (id) => id ? `https://cdn.nba.com/headshots/nba/latest/260x190/${id}.png` : '';
+    const placeholder = `data:image/svg+xml,<%3Fxml version=%221.0%22%3F><svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2224%22 height=%2218%22><rect fill=%22%23ddd%22 width=%2224%22 height=%2218%22/><circle cx=%2212%22 cy=%227%22 r=%223.5%22 fill=%22%23bbb%22/><ellipse cx=%2212%22 cy=%2218%22 rx=%226%22 ry=%225%22 fill=%22%23bbb%22/></svg>`;
+
+    // Store for saving
+    window[`_editPlayers_${gameIdx}_${side}`] = players;
+
+    el.innerHTML = `
+      <table style="width:100%;border-collapse:collapse;font-size:10px;">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface);z-index:1;">
+            <th style="text-align:left;font-size:8px;color:var(--muted);padding:2px 0;">PLAYER</th>
+            <th style="text-align:right;font-size:8px;color:var(--muted);padding:2px 2px;">MIN</th>
+            <th style="text-align:right;font-size:8px;color:var(--muted);padding:2px 2px;">DPM</th>
+            <th style="text-align:center;font-size:8px;padding:2px 2px;width:16px;"></th>
+          </tr>
+          <tr style="background:#f0f7ff;font-weight:700;font-family:var(--mono);font-size:10px;position:sticky;top:20px;z-index:1;">
+            <td style="font-family:var(--sans);font-size:9px;color:var(--muted);">SUM</td>
+            <td style="text-align:right;" id="edit-sum-${gameIdx}-${side}">${totalMin.toFixed(0)}</td>
+            <td></td><td></td>
+          </tr>
+        </thead>
+        <tbody>
+          ${players.map((p, j) => `
+          <tr style="border-bottom:1px solid #f0f0f0;${p.gameMin === 0 ? 'opacity:0.4;' : ''}">
+            <td style="padding:2px 0;font-family:var(--sans);white-space:nowrap;">
+              <div style="display:flex;align-items:center;gap:3px;">
+                <img src="${headshot(p.nba_id)}" style="width:20px;height:15px;object-fit:cover;object-position:top;border-radius:2px;background:#e0e0e0;flex-shrink:0;" onerror="this.src='${placeholder}'" />
+                <span style="overflow:hidden;text-overflow:ellipsis;max-width:80px;">${p.name}</span>
+              </div>
+            </td>
+            <td style="text-align:right;padding:2px 2px;">
+              <input type="number" value="${p.gameMin}" min="0" max="48" step="1"
+                style="width:36px;text-align:center;font-size:10px;padding:1px 2px;"
+                onchange="updateGameMin(${gameIdx},'${side}',${j},this.value)" />
+            </td>
+            <td style="text-align:right;padding:2px 2px;font-family:var(--mono);color:${p.dpm>=0?'var(--green)':'var(--red)'};">${p.dpm>0?'+':''}${p.dpm}</td>
+            <td style="text-align:center;padding:2px 2px;">
+              ${p.gameMin > 0 ? `<button style="font-size:8px;color:var(--red);background:none;border:none;cursor:pointer;padding:0;" onclick="zeroGameMin(${gameIdx},'${side}',${j})">X</button>` : ''}
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+  });
+}
+
+function updateGameMin(gameIdx, side, playerIdx, val) {
+  const players = window[`_editPlayers_${gameIdx}_${side}`];
+  if (!players) return;
+  players[playerIdx].gameMin = parseFloat(val) || 0;
+  // Update sum
+  const total = players.reduce((s, p) => s + p.gameMin, 0);
+  const sumEl = document.getElementById(`edit-sum-${gameIdx}-${side}`);
+  if (sumEl) {
+    sumEl.textContent = total.toFixed(0);
+    sumEl.style.color = Math.abs(total - 240) > 10 ? 'var(--red)' : 'var(--green)';
+  }
+  // Auto-save game override
+  saveGameOverride(gameIdx, side);
+}
+
+function zeroGameMin(gameIdx, side, playerIdx) {
+  const players = window[`_editPlayers_${gameIdx}_${side}`];
+  if (!players) return;
+  players[playerIdx].gameMin = 0;
+  loadEditRoster(gameIdx, side); // re-render
+  saveGameOverride(gameIdx, side);
+}
+
+let _gameOverrideSaveTimer = null;
+function saveGameOverride(gameIdx, side) {
+  clearTimeout(_gameOverrideSaveTimer);
+  _gameOverrideSaveTimer = setTimeout(() => {
+    const players = window[`_editPlayers_${gameIdx}_${side}`];
+    const g = STATE.games[gameIdx];
+    const team = g[side];
+    if (!players) return;
+    const overrides = {};
+    for (const p of players) {
+      if (p.gameMin !== p.origMin) {
+        overrides[p.name] = p.gameMin;
+      }
+    }
+    const key = `${selectedDate}_${g.away}_${g.home}_${team}`;
+    if (Object.keys(overrides).length > 0) {
+      fbDb.collection('nba_game_overrides').doc(key).set({ players: overrides }, { merge: true })
+        .then(() => console.log(`Game override saved: ${key}`));
+    }
+    // Update the game's player list and recalc
+    const playerList = g[`${side}_players`] || [];
+    for (const p of playerList) {
+      const edited = players.find(ep => ep.name === p.name);
+      if (edited) p.min = edited.gameMin;
+    }
+    playerList.sort((a, b) => b.min - a.min);
+    // Recalc team rating
+    const totalRaw = playerList.reduce((s, p) => s + p.min / 48, 0);
+    const scale = totalRaw > 0 ? 5.0 / totalRaw : 0;
+    let off = 0, def = 0;
+    for (const p of playerList) {
+      const w = (p.min / 48) * scale;
+      off += (p.o_dpm || 0) * w;
+      def += (p.d_dpm || 0) * w;
+    }
+    g[`${side}_off`] = Math.round(off * 100) / 100;
+    g[`${side}_def`] = Math.round(def * 100) / 100;
+    // Recalc projections
+    const avgOrtg = STATE.leagueAvgOrtg || 114.8;
+    const paceMult = STATE.settings.paceMult || 1.0;
+    const rawPace = (g.matchup_pace || 95) / paceMult; // already adjusted
+    const pace = rawPace;
+    const hca = (STATE.settings.hca || 1.5) / 2;
+    const awPP100 = avgOrtg + g.away_off - g.home_def;
+    const hwPP100 = avgOrtg + g.home_off - g.away_def;
+    g.away_proj = Math.round((awPP100 / 100 * pace - hca) * 10) / 10;
+    g.home_proj = Math.round((hwPP100 / 100 * pace + hca) * 10) / 10;
+    g.proj_spread = Math.round((g.away_proj - g.home_proj) * 10) / 10;
+    g.proj_total = Math.round((g.away_proj + g.home_proj) * 10) / 10;
+    if (g.book_spread != null) g.spread_edge = Math.round((g.proj_spread - g.book_spread) * 10) / 10;
+    if (g.book_total != null) g.total_edge = Math.round((g.proj_total - g.book_total) * 10) / 10;
+    renderGames();
+    renderOddsSummary();
+    updateStrip();
+  }, 500);
 }
 
 // ── Odds Summary Sidebar ────────────────────────────────────────────────
