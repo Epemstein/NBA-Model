@@ -719,14 +719,8 @@ def compute_team_rating(team_abr, darko, minutes):
     for name_lower, mp in minutes.items():
         if mp['team_abr'] != team_abr:
             continue
-        # Find matching DARKO entry by name
+        # Find matching DARKO entry by exact name only
         dk = darko.get(name_lower)
-        if not dk:
-            # Try fuzzy: last name match (DARKO has no team field)
-            parts = name_lower.split()
-            if len(parts) >= 2:
-                last = parts[-1]
-                dk = next((d for k, d in darko.items() if k.endswith(last)), None)
         if not dk:
             continue
 
