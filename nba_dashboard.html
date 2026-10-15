@@ -985,31 +985,18 @@ function renderGames() {
         </div>
       </div>
 
-      <div class="gc-proj">
-        <div class="gc-proj-item">
-          <div class="proj-label">Model Spread</div>
-          <div class="proj-val">${g.proj_spread != null ? fmtSpread(g.proj_spread) : '—'}</div>
+      <div class="gc-proj" style="display:flex;">
+        <div class="gc-proj-item" style="flex:1;border-right:1px solid var(--border);">
+          <div class="proj-label">${g.proj_spread != null && g.proj_spread <= 0 ? g.home : g.away} Spread</div>
+          <div class="proj-val">${g.proj_spread != null ? (g.proj_spread <= 0 ? g.home + ' ' + fmtSpread(g.proj_spread) : g.away + ' ' + fmtSpread(-g.proj_spread)) : '—'}</div>
+          ${g.book_spread != null ? `<div style="font-size:10px;color:var(--muted);margin-top:2px;">Book: ${g.book_spread <= 0 ? g.home + ' ' + fmtSpread(g.book_spread) : g.away + ' ' + fmtSpread(-g.book_spread)}</div>` : ''}
+          ${g.spread_edge != null ? `<div class="edge-chip ${edgeClass(g.spread_edge)}" style="margin-top:3px;">${fmtSpread(g.spread_edge)} edge</div>` : ''}
         </div>
-        <div class="gc-proj-item">
-          <div class="proj-label">Model Total</div>
+        <div class="gc-proj-item" style="flex:1;">
+          <div class="proj-label">Total</div>
           <div class="proj-val">${g.proj_total != null ? g.proj_total.toFixed(1) : '—'}</div>
-        </div>
-        <div class="gc-proj-item">
-          <div class="proj-label">Pace</div>
-          <div class="proj-val">${g.matchup_pace != null ? g.matchup_pace.toFixed(1) : '—'}</div>
-        </div>
-      </div>
-
-      <div class="gc-odds">
-        <div class="gc-odds-cell">
-          <div class="odds-label">Book Spread</div>
-          <div class="odds-val">${g.book_spread != null ? fmtSpread(g.book_spread) : '—'}</div>
-          ${g.spread_edge != null ? `<div class="edge-chip ${edgeClass(g.spread_edge)}">${fmtSpread(g.spread_edge)} edge</div>` : ''}
-        </div>
-        <div class="gc-odds-cell">
-          <div class="odds-label">Book Total</div>
-          <div class="odds-val">${g.book_total != null ? g.book_total : '—'}</div>
-          ${g.total_edge != null ? `<div class="edge-chip ${edgeClass(g.total_edge)}">${fmtSpread(g.total_edge)} edge</div>` : ''}
+          ${g.book_total != null ? `<div style="font-size:10px;color:var(--muted);margin-top:2px;">Book: ${g.book_total}</div>` : ''}
+          ${g.total_edge != null ? `<div class="edge-chip ${edgeClass(g.total_edge)}" style="margin-top:3px;">${g.total_edge > 0 ? 'O' : 'U'} ${Math.abs(g.total_edge).toFixed(1)} edge</div>` : ''}
         </div>
       </div>
 
