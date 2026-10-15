@@ -125,11 +125,14 @@ class NovigClient:
         r = self._request('POST', '/v3/account/subaccounts', body={'label': label})
         return r.status_code, r.json() if r.ok else r.text
 
-    def get_nba_markets(self):
-        """Get all NBA markets (spreads, totals, moneylines).
+    def get_nba_markets(self, market_type=None):
+        """Get NBA markets, optionally filtered by type (SPREAD, TOTAL, MONEY).
         Returns list of market dicts.
         """
-        r = self._request('GET', '/v3/catalog/markets', params={'league': 'NBA'})
+        params = {'league': 'NBA', 'limit': '1000'}
+        if market_type:
+            params['marketType'] = market_type
+        r = self._request('GET', '/v3/catalog/markets', params=params)
         if not r.ok:
             print(f'Novig markets failed: {r.status_code} {r.text[:200]}')
             return []
@@ -215,69 +218,82 @@ def extract_novig_lines(markets):
 
 
 # ── Parse Novig lines for NBA model ──────────────────────────────────────
-def get_novig_nba_lines(client):
-    """Fetch Novig NBA markets and extract spread/total lines with best prices.
-    Returns dict: {
-        'NYK_TOR': {
-            'spread': {'strike': -10.5, 'home_team': 'NYK', 'away_team': 'TOR',
-                        'home_outcome_id': '...', 'away_outcome_id': '...'},
-            'total': {'strike': 232.5, 'over_outcome_id': '...', 'under_outcome_id': '...'},
-            'event_id': '...',
-        }
-    }
+def get_novig_nba_lines(client, target_date=None):
+    """Fetch Novig NBA spreads and totals, pick the primary line per game.
+    Novig has multiple alt lines per game — we pick the one with the smallest
+    absolute strike for spreads (closest to pick'em) and the median total.
+
+    target_date: 'YYYY-MM-DD' to filter by game date (optional)
+
+    Returns dict: { 'BOS@DET': { spread: {...}, total: {...}, event_id: '...' } }
     """
-    markets = client.get_nba_markets()
-    if not markets:
+    from datetime import datetime as dt
+
+    spreads = client.get_nba_markets(market_type='SPREAD')
+    totals = client.get_nba_markets(market_type='TOTAL')
+
+    if not spreads and not totals:
         return {}
 
-    # Group by eventId
+    # Group by eventId, optionally filtering by date
     events = {}
-    for m in markets:
+    for m in spreads:
         eid = m['eventId']
-        mtype = m['marketType']
-        if mtype not in ('SPREAD', 'TOTAL'):
-            continue
+        if target_date:
+            ts = m.get('startsTs', 0)
+            if ts:
+                game_date = dt.fromtimestamp(ts / 1000).strftime('%Y-%m-%d')
+                if game_date != target_date:
+                    continue
         if eid not in events:
-            events[eid] = {'spreads': [], 'totals': [], 'event_id': eid}
-        if mtype == 'SPREAD':
-            events[eid]['spreads'].append(m)
-        elif mtype == 'TOTAL':
-            events[eid]['totals'].append(m)
+            events[eid] = {'spreads': [], 'totals': []}
+        events[eid]['spreads'].append(m)
+
+    for m in totals:
+        eid = m['eventId']
+        if target_date:
+            ts = m.get('startsTs', 0)
+            if ts:
+                game_date = dt.fromtimestamp(ts / 1000).strftime('%Y-%m-%d')
+                if game_date != target_date:
+                    continue
+        if eid not in events:
+            events[eid] = {'spreads': [], 'totals': []}
+        events[eid]['totals'].append(m)
 
     lines = {}
     for eid, ev in events.items():
-        # Find the main spread (closest to 0, or the primary one)
         if not ev['spreads']:
             continue
 
-        # Parse teams from spread description (e.g. "NYK -10.5")
-        sp = ev['spreads'][0]  # primary spread
-        desc = sp['description']
+        # Pick primary spread: smallest absolute strike (closest to pick'em)
+        ev['spreads'].sort(key=lambda m: abs(float(m['strike'])))
+        sp = ev['spreads'][0]
         outcomes = sp['outcomes']
 
-        # Extract team names from outcomes (e.g. "NYK -10.5", "TOR +10.5")
+        # Extract team names from outcomes (e.g. "NYK -5.5", "PHI +5.5")
         teams = []
         for o in outcomes:
             parts = o['name'].split()
             if parts:
                 teams.append(parts[0])
-
         if len(teams) != 2:
             continue
 
-        # Determine home/away from description
-        # The team in the description is typically the home team for spread notation
         strike = float(sp['strike'])
-        home_team = teams[0]  # team listed first in the spread description
-        away_team = teams[1]
+        # The description team (first word in "NYK -5.5") is the home team
+        desc_team = sp['description'].split()[0]
+        if desc_team == teams[0]:
+            home_team, away_team = teams[0], teams[1]
+        else:
+            home_team, away_team = teams[1], teams[0]
 
-        # Find primary total (closest to the expected total)
-        total_strike = None
+        # Pick primary total: median strike
         total_data = None
         if ev['totals']:
-            # Pick the total with the most common strike
-            total_data = ev['totals'][0]
-            total_strike = float(total_data['strike'])
+            ev['totals'].sort(key=lambda m: float(m['strike']))
+            mid = len(ev['totals']) // 2
+            total_data = ev['totals'][mid]
 
         key = f'{away_team}@{home_team}'
         entry = {
@@ -289,8 +305,6 @@ def get_novig_nba_lines(client):
                 'away_team': away_team,
             },
         }
-
-        # Map outcome IDs
         for o in outcomes:
             if o['name'].startswith(home_team):
                 entry['spread']['home_outcome_id'] = o['outcomeId']
@@ -299,7 +313,7 @@ def get_novig_nba_lines(client):
 
         if total_data:
             entry['total'] = {
-                'strike': total_strike,
+                'strike': float(total_data['strike']),
                 'market_id': total_data['marketId'],
             }
             for o in total_data['outcomes']:

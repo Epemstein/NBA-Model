@@ -813,7 +813,7 @@ def run(override_date=None):
             except ImportError:
                 from novig import NovigClient, get_novig_nba_lines
             nc = NovigClient(novig_key_id, novig_pem)
-            novig_lines = get_novig_nba_lines(nc)
+            novig_lines = get_novig_nba_lines(nc, target_date=date)
             print(f'Novig: {len(novig_lines)} games with lines')
             for gm in games:
                 aw, hw = gm['away'], gm['home']
