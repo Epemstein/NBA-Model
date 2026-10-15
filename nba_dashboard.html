@@ -861,6 +861,7 @@ document.querySelectorAll('#nav button').forEach(btn => {
 });
 
 // ── Format helpers ──────────────────────────────────────────────────────
+function normName(s) { return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim(); }
 function fmtSpread(n) { return n > 0 ? `+${n.toFixed(1)}` : n.toFixed(1); }
 function fmtRating(n) { return n > 0 ? `+${n.toFixed(1)}` : n.toFixed(1); }
 function fmtMoney(n) { return '$' + Math.abs(n).toLocaleString(); }
@@ -1957,9 +1958,13 @@ function recalcGamesWithBaselines() {
         anyChanged = true;
 
         // Apply baselines first, then game overrides on top
+        // Build normalized lookup maps
+        const blNorm = {}; for (const [k,v] of Object.entries(bl)) blNorm[normName(k)] = v;
+        const goNorm = {}; for (const [k,v] of Object.entries(go)) goNorm[normName(k)] = v;
         for (const p of playerList) {
-          const sv = bl[p.name];
-          const gv = go[p.name];
+          const nn = normName(p.name);
+          const sv = blNorm[nn];
+          const gv = goNorm[nn];
           // Game override wins over baseline; if neither exists, zero out
           if (gv != null) {
             if (typeof gv === 'object') {
