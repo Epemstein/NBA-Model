@@ -455,7 +455,7 @@ input:focus, select:focus { border-color: var(--accent); background: #fff; }
   <button class="active" data-tab="games">Games</button>
   <button data-tab="picks">Picks</button>
   <button data-tab="kelly">Kelly Tracker</button>
-  <button data-tab="overrides">Overrides</button>
+  <button data-tab="teams">Teams</button>
   <button data-tab="settings">Settings</button>
 </nav>
 
@@ -578,26 +578,35 @@ input:focus, select:focus { border-color: var(--accent); background: #fff; }
 
 </div>
 
-<!-- ═══════════ OVERRIDES PANEL ═══════════ -->
-<div class="panel" id="panel-overrides">
+<!-- ═══════════ TEAMS PANEL ═══════════ -->
+<div class="panel" id="panel-teams">
 
   <div class="card">
-    <div class="ct">Minute Overrides</div>
+    <div class="ct">Team Baseline Minutes</div>
     <p style="font-size:12px;color:var(--text2);margin-bottom:12px;">
-      Set a player's minutes to 0 for injuries, or override projected minutes. Changes take effect on the next pipeline run.
+      Set baseline projected minutes for each team. These persist across all games. Use game-level overrides (click team header on a game card) for single-game changes like injuries.
     </p>
-    <div class="fr">
-      <div class="fg"><label class="fl">Player Name</label><input id="ov-player" placeholder="e.g. Joel Embiid"></div>
-      <div class="fg"><label class="fl">Minutes</label><input id="ov-minutes" type="number" value="0" min="0" max="48"></div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+      <select id="team-select" onchange="loadTeamBaseline()" style="font-size:14px;font-weight:600;padding:8px 12px;min-width:200px;">
+        <option value="">Select team...</option>
+      </select>
+      <div style="font-family:var(--mono);font-size:12px;color:var(--muted);">
+        Total: <strong id="team-total-min" style="color:var(--text)">—</strong> / 240 min
+      </div>
+      <div id="team-min-warn" style="font-size:11px;color:var(--yellow);display:none;"></div>
     </div>
-    <div style="display:flex;gap:8px;margin-bottom:16px;">
-      <button class="btn bp" onclick="addOverride()">Add Override</button>
-    </div>
-    <div class="sw">
+    <div class="sw" style="max-height:600px;">
       <table class="dt">
-        <thead><tr><th>Player</th><th>Minutes</th><th></th></tr></thead>
-        <tbody id="overrides-body"></tbody>
+        <thead><tr>
+          <th>Player</th><th style="text-align:right">Baseline MIN</th><th style="text-align:right">Source</th>
+          <th style="text-align:right">DPM</th><th style="text-align:right">O-DPM</th><th style="text-align:right">D-DPM</th>
+        </tr></thead>
+        <tbody id="team-baseline-body"></tbody>
       </table>
+    </div>
+    <div style="margin-top:10px;display:flex;gap:8px;">
+      <button class="btn bp" onclick="saveTeamBaseline()">Save Baseline</button>
+      <button class="btn bg" onclick="resetTeamBaseline()">Reset to Defaults</button>
     </div>
   </div>
 
@@ -644,7 +653,10 @@ input:focus, select:focus { border-color: var(--accent); background: #fff; }
   <div class="roster-modal">
     <div class="roster-header">
       <h3 id="roster-title">—</h3>
-      <button class="roster-close" onclick="closeRoster()">&times;</button>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button id="roster-baseline-link" class="btn bg" style="font-size:10px;padding:3px 8px;">Edit Baseline</button>
+        <button class="roster-close" onclick="closeRoster()">&times;</button>
+      </div>
     </div>
     <div class="roster-body">
       <table>
@@ -1271,6 +1283,135 @@ function loadSettingsUI() {
   document.getElementById('set-pace-mult').value = STATE.settings.paceMult;
 }
 
+// ── Teams Baseline Editor ────────────────────────────────────────────────
+let _teamBaseline = {}; // {player_name: {min, source, dpm, o_dpm, d_dpm}}
+let _teamBaselineOrig = {};
+let _selectedTeam = '';
+
+function initTeamSelector() {
+  const sel = document.getElementById('team-select');
+  const teams = Object.keys(COLORS).sort();
+  for (const t of teams) {
+    sel.innerHTML += `<option value="${t}">${t}</option>`;
+  }
+}
+
+function loadTeamBaseline() {
+  const team = document.getElementById('team-select').value;
+  if (!team) return;
+  _selectedTeam = team;
+
+  // Gather all players for this team from today's game data
+  const players = [];
+  for (const g of STATE.games) {
+    const list = g.away === team ? (g.away_players || []) : g.home === team ? (g.home_players || []) : [];
+    for (const p of list) {
+      if (!players.find(x => x.name === p.name)) players.push({...p});
+    }
+  }
+  players.sort((a, b) => b.min - a.min);
+
+  _teamBaselineOrig = {};
+  for (const p of players) _teamBaselineOrig[p.name] = p.min;
+
+  // Load saved baseline from Firestore
+  fbDb.collection('nba_baselines').doc(team).get().then(snap => {
+    const saved = snap.exists ? (snap.data().players || {}) : {};
+    _teamBaseline = {};
+    for (const p of players) {
+      _teamBaseline[p.name] = {
+        min: saved[p.name] != null ? saved[p.name] : p.min,
+        origMin: p.min,
+        source: saved[p.name] != null ? 'Saved' : (p.min > 20 ? 'FP' : 'NBA'),
+        dpm: p.dpm, o_dpm: p.o_dpm, d_dpm: p.d_dpm,
+      };
+    }
+    renderTeamBaseline();
+  });
+}
+
+function renderTeamBaseline() {
+  const tbody = document.getElementById('team-baseline-body');
+  const entries = Object.entries(_teamBaseline).sort((a, b) => b[1].min - a[1].min);
+
+  tbody.innerHTML = entries.map(([name, p]) => {
+    const edited = p.min !== p.origMin;
+    return `<tr>
+      <td style="font-family:var(--sans);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;">${name}</td>
+      <td style="text-align:right;">
+        <input type="number" value="${p.min}" min="0" max="48" step="0.5"
+          class="${edited ? 'edited' : ''}" style="width:55px;"
+          onchange="updateTeamMin('${name.replace(/'/g, "\\'")}', this.value)" />
+      </td>
+      <td style="text-align:right;font-size:10px;color:var(--muted)">${p.source}</td>
+      <td style="text-align:right;font-family:var(--mono);color:${p.dpm>=0?'var(--green)':'var(--red)'}">${p.dpm>0?'+':''}${p.dpm}</td>
+      <td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--text2)">${p.o_dpm>0?'+':''}${p.o_dpm}</td>
+      <td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--text2)">${p.d_dpm>0?'+':''}${p.d_dpm}</td>
+    </tr>`;
+  }).join('');
+
+  updateTeamTotalMin();
+}
+
+function updateTeamMin(name, val) {
+  if (_teamBaseline[name]) {
+    _teamBaseline[name].min = parseFloat(val) || 0;
+    _teamBaseline[name].source = 'Edited';
+  }
+  updateTeamTotalMin();
+}
+
+function updateTeamTotalMin() {
+  const total = Object.values(_teamBaseline).reduce((s, p) => s + p.min, 0);
+  document.getElementById('team-total-min').textContent = total.toFixed(0);
+  const warn = document.getElementById('team-min-warn');
+  if (total > 250) {
+    warn.textContent = `${(total - 240).toFixed(0)} min over 240`;
+    warn.style.display = '';
+    warn.style.color = 'var(--red)';
+  } else if (total < 230) {
+    warn.textContent = `${(240 - total).toFixed(0)} min under 240`;
+    warn.style.display = '';
+    warn.style.color = 'var(--yellow)';
+  } else {
+    warn.style.display = 'none';
+  }
+}
+
+function saveTeamBaseline() {
+  if (!_selectedTeam) return;
+  const players = {};
+  for (const [name, p] of Object.entries(_teamBaseline)) {
+    players[name] = p.min;
+  }
+  fbDb.collection('nba_baselines').doc(_selectedTeam).set({ players })
+    .then(() => {
+      // Update sources to "Saved"
+      for (const p of Object.values(_teamBaseline)) p.source = 'Saved';
+      renderTeamBaseline();
+      alert(`${_selectedTeam} baseline saved`);
+    })
+    .catch(e => alert('Save failed: ' + e.message));
+}
+
+function resetTeamBaseline() {
+  for (const [name, p] of Object.entries(_teamBaseline)) {
+    p.min = p.origMin;
+    p.source = p.origMin > 20 ? 'FP' : 'NBA';
+  }
+  renderTeamBaseline();
+}
+
+function openTeamTab(team) {
+  // Switch to Teams tab and select the team
+  document.querySelectorAll('#nav button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelector('#nav button[data-tab="teams"]').classList.add('active');
+  document.getElementById('panel-teams').classList.add('active');
+  document.getElementById('team-select').value = team;
+  loadTeamBaseline();
+}
+
 // ── Roster Editor ───────────────────────────────────────────────────────
 let _rosterState = { gameIdx: null, side: null, players: [], origPlayers: [] };
 
@@ -1287,7 +1428,8 @@ function openRoster(gameIdx, side) {
   };
 
   document.getElementById('roster-title').innerHTML =
-    `<span style="color:${color}">${team}</span> Rotation`;
+    `<span style="color:${color}">${team}</span> Game Override`;
+  document.getElementById('roster-baseline-link').onclick = () => { closeRoster(); openTeamTab(team); };
 
   renderRosterTable();
   document.getElementById('roster-overlay').classList.add('open');
@@ -1357,7 +1499,7 @@ function resetRoster() {
 }
 
 function saveRoster() {
-  // Save minute overrides to Firestore for the pipeline to pick up
+  // Save GAME-LEVEL minute overrides (only for this specific game)
   const overrides = {};
   for (let i = 0; i < _rosterState.players.length; i++) {
     const p = _rosterState.players[i];
@@ -1372,24 +1514,16 @@ function saveRoster() {
     return;
   }
 
-  // Merge with existing overrides
-  const merged = {...STATE.overrides, ...overrides};
-  // Remove overrides that are back to original
-  for (const [name, mins] of Object.entries(merged)) {
-    if (mins === null || mins === undefined) delete merged[name];
-  }
+  // Build game-specific key: date_away_home_team
+  const g = STATE.games[_rosterState.gameIdx];
+  const key = `${selectedDate}_${g.away}_${g.home}_${_rosterState.team}`;
 
-  STATE.overrides = merged;
-  localStorage.setItem('nba_overrides', JSON.stringify(merged));
-
-  // Write to Firestore
-  fbDb.collection('nba_overrides').doc('minutes').set(
-    { players: merged }, { merge: true }
+  fbDb.collection('nba_game_overrides').doc(key).set(
+    { players: overrides }, { merge: true }
   ).then(() => {
-    console.log('Overrides saved to Firestore');
-  }).catch(e => console.error('Override save failed:', e));
+    console.log(`Game override saved: ${key}`);
+  }).catch(e => console.error('Game override save failed:', e));
 
-  renderOverrides();
   closeRoster();
 }
 
@@ -1442,7 +1576,7 @@ async function initApp() {
 
   loadSettingsUI();
   renderPicks();
-  renderOverrides();
+  initTeamSelector();
   updateKelly();
 
   // Check Firestore connection

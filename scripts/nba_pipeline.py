@@ -830,22 +830,38 @@ def get_bankroll():
 
 
 # ── Minute overrides from Firestore ──────────────────────────────────────
-def get_minute_overrides():
-    """Fetch manual minute overrides (e.g. injuries → 0 min).
+def get_baselines(team):
+    """Fetch baseline minute overrides for a team.
     Returns dict: {player_name_lower: minutes}
     """
     if not db:
         return {}
     try:
-        doc = db.collection('nba_overrides').document('minutes').get()
+        doc = db.collection('nba_baselines').document(team).get()
         if doc.exists:
             data = doc.to_dict() or {}
-            overrides = data.get('players', {})
-            if overrides:
-                print(f'Minute overrides: {len(overrides)} entries')
-            return {k.lower(): v for k, v in overrides.items()}
-    except Exception as e:
-        print(f'Minute overrides fetch failed: {e}')
+            players = data.get('players', {})
+            return {k.lower(): v for k, v in players.items()}
+    except:
+        pass
+    return {}
+
+
+def get_game_overrides(date, away, home, team):
+    """Fetch game-specific minute overrides for a team in a specific game.
+    Returns dict: {player_name_lower: minutes}
+    """
+    if not db:
+        return {}
+    try:
+        key = f'{date}_{away}_{home}_{team}'
+        doc = db.collection('nba_game_overrides').document(key).get()
+        if doc.exists:
+            data = doc.to_dict() or {}
+            players = data.get('players', {})
+            return {k.lower(): v for k, v in players.items()}
+    except:
+        pass
     return {}
 
 
@@ -899,12 +915,7 @@ def run(override_date=None):
             except: pass
         return
 
-    # Apply minute overrides (injuries, etc.)
-    overrides = get_minute_overrides()
-    for name_lower, mins in overrides.items():
-        if name_lower in player_minutes:
-            player_minutes[name_lower]['minutes'] = mins
-        # If set to 0, effectively removes the player
+    # Overrides are now applied per-team per-game below (baseline + game-level)
 
     # 2. Fetch odds — try Novig first, fall back to The Odds API
     novig_key_id = os.environ.get('NOVIG_KEY_ID', '')
@@ -951,26 +962,44 @@ def run(override_date=None):
     else:
         fetch_odds(games)
 
-    # 3. Compute team ratings for all teams in today's games
-    teams_today = set()
-    for g in games:
-        teams_today.add(g['away'])
-        teams_today.add(g['home'])
-
-    team_ratings = {}
-    for team in teams_today:
-        off, def_, players = compute_team_rating(team, darko, player_minutes)
-        team_ratings[team] = {'off': off, 'def': def_, 'players': players}
-        print(f'  {team}: OFF={off:+.2f} DEF={def_:+.2f} ({len(players)} players)')
-
-    # 4. Project each game
+    # 3. Project each game (team ratings computed per-game with overrides)
     bankroll, kelly_frac, kelly_max = get_bankroll()
     alerts = []
+    team_ratings = {}  # for Firestore output
 
     for gm in games:
         aw, hw = gm['away'], gm['home']
-        aw_r = team_ratings.get(aw, {'off': 0, 'def': 0, 'players': []})
-        hw_r = team_ratings.get(hw, {'off': 0, 'def': 0, 'players': []})
+
+        # Build per-game minutes: start with fetched, overlay baseline, then game-level
+        def _apply_overrides(team):
+            team_mins = {k: dict(v) for k, v in player_minutes.items()
+                        if v.get('team_abr') == team}
+            baselines = get_baselines(team)
+            game_ovs = get_game_overrides(date, aw, hw, team)
+            for name_lower, mins in baselines.items():
+                if name_lower in team_mins:
+                    team_mins[name_lower]['minutes'] = mins
+            for name_lower, mins in game_ovs.items():
+                if name_lower in team_mins:
+                    team_mins[name_lower]['minutes'] = mins
+            return team_mins
+
+        aw_mins = _apply_overrides(aw)
+        hw_mins = _apply_overrides(hw)
+
+        # Merge back into a combined dict for compute_team_rating
+        game_minutes = {**player_minutes}
+        game_minutes.update(aw_mins)
+        game_minutes.update(hw_mins)
+
+        aw_off, aw_def, aw_players = compute_team_rating(aw, darko, game_minutes)
+        hw_off, hw_def, hw_players = compute_team_rating(hw, darko, game_minutes)
+        aw_r = {'off': aw_off, 'def': aw_def, 'players': aw_players}
+        hw_r = {'off': hw_off, 'def': hw_def, 'players': hw_players}
+        team_ratings[aw] = {'off': aw_off, 'def': aw_def}
+        team_ratings[hw] = {'off': hw_off, 'def': hw_def}
+        print(f'  {aw}: OFF={aw_off:+.2f} DEF={aw_def:+.2f} ({len(aw_players)} players)')
+        print(f'  {hw}: OFF={hw_off:+.2f} DEF={hw_def:+.2f} ({len(hw_players)} players)')
 
         aw_pace = team_paces.get(aw, league_avg_pace)
         hw_pace = team_paces.get(hw, league_avg_pace)
