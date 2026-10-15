@@ -731,9 +731,9 @@ def compute_team_rating(team_abr, darko, minutes):
         team_players.append({
             'name': mp['name'],
             'minutes': mp['minutes'],
-            'o_dpm': dk['o_dpm'] if dk else 0.0,
-            'd_dpm': dk['d_dpm'] if dk else 0.0,
-            'dpm': dk['dpm'] if dk else 0.0,
+            'o_dpm': dk['o_dpm'] if dk else None,
+            'd_dpm': dk['d_dpm'] if dk else None,
+            'dpm': dk['dpm'] if dk else None,
             'nba_id': dk.get('nba_id', '') if dk else '',
         })
 
@@ -755,8 +755,8 @@ def compute_team_rating(team_abr, darko, minutes):
     def_rating = 0.0
     for p in team_players:
         w = (p['minutes'] / 48) * scale
-        off_rating += p['o_dpm'] * w
-        def_rating += p['d_dpm'] * w
+        off_rating += (p['o_dpm'] or 0) * w
+        def_rating += (p['d_dpm'] or 0) * w
 
     return round(off_rating, 2), round(def_rating, 2), team_players
 
@@ -1074,14 +1074,18 @@ def run(override_date=None):
 
         # Attach player rosters (top 10 by minutes)
         gm['away_players'] = [
-            {'name': p['name'], 'min': p['minutes'], 'dpm': round(p['dpm'], 1),
-             'o_dpm': round(p['o_dpm'], 1), 'd_dpm': round(p['d_dpm'], 1),
+            {'name': p['name'], 'min': p['minutes'],
+             'dpm': round(p['dpm'], 1) if p['dpm'] is not None else None,
+             'o_dpm': round(p['o_dpm'], 1) if p['o_dpm'] is not None else None,
+             'd_dpm': round(p['d_dpm'], 1) if p['d_dpm'] is not None else None,
              'nba_id': p.get('nba_id', '')}
             for p in aw_r.get('players', [])
         ]
         gm['home_players'] = [
-            {'name': p['name'], 'min': p['minutes'], 'dpm': round(p['dpm'], 1),
-             'o_dpm': round(p['o_dpm'], 1), 'd_dpm': round(p['d_dpm'], 1),
+            {'name': p['name'], 'min': p['minutes'],
+             'dpm': round(p['dpm'], 1) if p['dpm'] is not None else None,
+             'o_dpm': round(p['o_dpm'], 1) if p['o_dpm'] is not None else None,
+             'd_dpm': round(p['d_dpm'], 1) if p['d_dpm'] is not None else None,
              'nba_id': p.get('nba_id', '')}
             for p in hw_r.get('players', [])
         ]
@@ -1219,9 +1223,9 @@ def run(override_date=None):
                 entry = {
                     'name': mp['name'],
                     'min': mp['minutes'],
-                    'dpm': round(dk['dpm'], 1) if dk else 0,
-                    'o_dpm': round(dk['o_dpm'], 1) if dk else 0,
-                    'd_dpm': round(dk['d_dpm'], 1) if dk else 0,
+                    'dpm': round(dk['dpm'], 1) if dk else None,
+                    'o_dpm': round(dk['o_dpm'], 1) if dk else None,
+                    'd_dpm': round(dk['d_dpm'], 1) if dk else None,
                     'pos': dk.get('pos', '') if dk else '',
                     'nba_id': dk.get('nba_id', '') if dk else '',
                 }

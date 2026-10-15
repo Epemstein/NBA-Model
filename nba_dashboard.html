@@ -862,6 +862,8 @@ document.querySelectorAll('#nav button').forEach(btn => {
 
 // ── Format helpers ──────────────────────────────────────────────────────
 function normName(s) { return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim(); }
+function fmtDpm(v) { if (v == null) return 'N/A'; return (v > 0 ? '+' : '') + v.toFixed(1); }
+function dpmColor(v) { if (v == null) return 'var(--muted)'; return v >= 0 ? 'var(--green)' : 'var(--red)'; }
 function fmtSpread(n) { return n > 0 ? `+${n.toFixed(1)}` : n.toFixed(1); }
 function fmtRating(n) { return n > 0 ? `+${n.toFixed(1)}` : n.toFixed(1); }
 function fmtMoney(n) { return '$' + Math.abs(n).toLocaleString(); }
@@ -1147,7 +1149,7 @@ function renderPlayersPanel(i) {
             </div>
           </td>
           <td style="text-align:right;padding:3px 4px;font-family:var(--mono);font-weight:600;">${p.min}</td>
-          <td style="text-align:right;padding:3px 4px;font-family:var(--mono);color:${p.dpm>=0?'var(--green)':'var(--red)'}">${p.dpm>0?'+':''}${p.dpm.toFixed(1)}</td>
+          <td style="text-align:right;padding:3px 4px;font-family:var(--mono);color:${dpmColor(p.dpm)}">${fmtDpm(p.dpm)}</td>
         </tr>`).join('')}
       </table>
     </div>`;
@@ -1799,15 +1801,13 @@ function renderTeamBaseline() {
     const bg = total > 0 ? `rgba(${rgb}, ${opacity})` : 'transparent';
     const hsUrl = p.nba_id ? playerHeadshot(p.nba_id) : '';
     const placeholder = `data:image/svg+xml,<%3Fxml version=%221.0%22%3F><svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2236%22 height=%2228%22><rect fill=%22%23ddd%22 width=%2236%22 height=%2228%22/><circle cx=%2218%22 cy=%2210%22 r=%225%22 fill=%22%23bbb%22/><ellipse cx=%2218%22 cy=%2228%22 rx=%229%22 ry=%228%22 fill=%22%23bbb%22/></svg>`;
-    const dpmColor = p.dpm >= 0 ? 'var(--green)' : 'var(--red)';
-
     return `<tr style="background:${bg};height:40px;${total === 0 ? 'opacity:0.35;' : ''}">
       <td style="font-family:var(--sans);font-weight:500;white-space:nowrap;padding:6px 8px;">
         <div style="display:flex;align-items:center;gap:8px;">
           <img src="${hsUrl || placeholder}" style="width:36px;height:28px;object-fit:cover;object-position:top;border-radius:3px;background:#e0e0e0;flex-shrink:0;" onerror="this.src='${placeholder}'" />
           <div>
             <div style="font-size:14px;font-weight:600;">${p.name}</div>
-            <div style="font-size:11px;"><span style="color:var(--muted);">${p.pos}</span> <span style="font-family:var(--mono);color:${dpmColor};font-weight:600;">${p.dpm>0?'+':''}${p.dpm}</span></div>
+            <div style="font-size:11px;"><span style="color:var(--muted);">${p.pos}</span> <span style="font-family:var(--mono);color:${dpmColor(p.dpm)};font-weight:600;">${fmtDpm(p.dpm)}</span></div>
           </div>
         </div>
       </td>
@@ -1817,8 +1817,8 @@ function renderTeamBaseline() {
       <td style="text-align:center;padding:4px 2px;"><input type="number" value="${p.sf||''}" min="0" max="48" step="0.5" style="width:44px;text-align:center;font-size:13px;padding:4px 2px;" onchange="updatePosMin(${i},'sf',this.value)" placeholder="0"></td>
       <td style="text-align:center;padding:4px 2px;"><input type="number" value="${p.pf||''}" min="0" max="48" step="0.5" style="width:44px;text-align:center;font-size:13px;padding:4px 2px;" onchange="updatePosMin(${i},'pf',this.value)" placeholder="0"></td>
       <td style="text-align:center;padding:4px 2px;"><input type="number" value="${p.c||''}" min="0" max="48" step="0.5" style="width:44px;text-align:center;font-size:13px;padding:4px 2px;" onchange="updatePosMin(${i},'c',this.value)" placeholder="0"></td>
-      <td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--text2);padding:6px 4px;">${p.o_dpm>0?'+':''}${p.o_dpm}</td>
-      <td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--text2);padding:6px 4px;">${p.d_dpm>0?'+':''}${p.d_dpm}</td>
+      <td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--text2);padding:6px 4px;">${fmtDpm(p.o_dpm)}</td>
+      <td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--text2);padding:6px 4px;">${fmtDpm(p.d_dpm)}</td>
     </tr>`;
   }).join('');
   updateTeamSums();
@@ -2125,7 +2125,7 @@ function renderRosterTable() {
       <td style="text-align:center"><input type="number" value="${p.sf||''}" min="0" max="48" step="1" style="width:36px;text-align:center;font-size:10px;" onchange="updateRosterPos(${i},'sf',this.value)" placeholder="0"></td>
       <td style="text-align:center"><input type="number" value="${p.pf||''}" min="0" max="48" step="1" style="width:36px;text-align:center;font-size:10px;" onchange="updateRosterPos(${i},'pf',this.value)" placeholder="0"></td>
       <td style="text-align:center"><input type="number" value="${p.c||''}" min="0" max="48" step="1" style="width:36px;text-align:center;font-size:10px;" onchange="updateRosterPos(${i},'c',this.value)" placeholder="0"></td>
-      <td style="text-align:right;font-family:var(--mono);font-size:10px;color:${p.dpm>=0?'var(--green)':'var(--red)'}">${p.dpm>0?'+':''}${p.dpm}</td>
+      <td style="text-align:right;font-family:var(--mono);font-size:10px;color:${dpmColor(p.dpm)}">${fmtDpm(p.dpm)}</td>
     </tr>`;
   }).join('');
 
