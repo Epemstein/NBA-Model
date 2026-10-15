@@ -86,7 +86,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def _proxy(self, url, headers):
         try:
             req = urllib.request.Request(url, headers=headers)
-            resp = urllib.request.urlopen(req, timeout=30)
+            resp = urllib.request.urlopen(req, timeout=60)
             data = resp.read()
             self.send_response(200)
             self._cors()

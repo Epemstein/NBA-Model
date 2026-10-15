@@ -302,6 +302,16 @@ def fetch_player_minutes():
             print(f'Season {season} failed: {e}')
             rows = []
     else:
+        # Fall back to stale Firestore cache (any age)
+        if db:
+            try:
+                snap = db.collection('nba_minutes').document(today).get()
+                if snap.exists:
+                    data = snap.to_dict()
+                    if data.get('players'):
+                        print(f'Minutes loaded from stale Firestore cache ({len(data["players"])} players)')
+                        return {p['name'].lower(): p for p in data['players']}
+            except: pass
         print('No player data available from NBA API')
         return {}
 
@@ -347,8 +357,23 @@ _TEAM_NAME_TO_ABR = {v: k for k, v in ABR_TO_NAME.items()}
 
 def fetch_team_pace():
     """Fetch team pace (possessions per 48 min) from NBA API.
+    Falls back to Firestore cache if NBA API is unreachable (cloud IP blocks).
     Returns dict: {team_abr: pace} and league_avg_pace.
     """
+    # Try Firestore cache first (refreshed by successful API calls)
+    if db:
+        try:
+            snap = db.collection('nba_pace').document('current').get()
+            if snap.exists:
+                data = snap.to_dict()
+                ts = data.get('_ts', 0)
+                # Use cache if less than 24 hours old
+                if time.time() - ts < 86400 and data.get('paces'):
+                    print(f'Pace loaded from Firestore cache ({len(data["paces"])} teams)')
+                    return data['paces'], data.get('league_avg_pace', 100.0), data.get('league_avg_ortg', LEAGUE_AVG_ORTG)
+        except Exception as e:
+            print(f'Pace cache miss: {e}')
+
     for season in [_current_season(), _previous_season()]:
         try:
             params = _nba_team_params(season)
@@ -363,6 +388,16 @@ def fetch_team_pace():
             print(f'Team stats season {season} failed: {e}')
             rows = []
     else:
+        # Last resort: try stale Firestore cache (any age)
+        if db:
+            try:
+                snap = db.collection('nba_pace').document('current').get()
+                if snap.exists:
+                    data = snap.to_dict()
+                    if data.get('paces'):
+                        print(f'Pace loaded from stale Firestore cache')
+                        return data['paces'], data.get('league_avg_pace', 100.0), data.get('league_avg_ortg', LEAGUE_AVG_ORTG)
+            except: pass
         raise Exception('No team pace data available')
 
     hdrs = data['resultSets'][0]['headers']
@@ -384,6 +419,18 @@ def fetch_team_pace():
     league_avg_pace = sum(paces.values()) / len(paces) if paces else 100.0
     league_avg_ortg = sum(ortgs.values()) / len(ortgs) if ortgs else LEAGUE_AVG_ORTG
 
+    # Cache to Firestore for CI runs
+    if db and paces:
+        try:
+            db.collection('nba_pace').document('current').set({
+                'paces': paces,
+                'league_avg_pace': league_avg_pace,
+                'league_avg_ortg': league_avg_ortg,
+                '_ts': int(time.time()),
+            })
+        except Exception as e:
+            print(f'Pace cache write failed: {e}')
+
     print(f'Pace: {len(paces)} teams, avg={league_avg_pace:.1f}, avg_ortg={league_avg_ortg:.1f}')
     return paces, league_avg_pace, league_avg_ortg
 
@@ -391,13 +438,26 @@ def fetch_team_pace():
 # ── Fetch today's NBA schedule ───────────────────────────────────────────
 def fetch_schedule():
     """Fetch today's NBA games from the NBA API scoreboard endpoint.
+    Falls back to cached schedule from Firestore if CDN is blocked.
     Returns list of game dicts.
     """
     today = today_et()
-    url = 'https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json'
 
-    r = _nba_get(url, timeout=15)
-    data = r.json()
+    try:
+        url = 'https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json'
+        r = _nba_get(url, timeout=15)
+        data = r.json()
+    except Exception as e:
+        print(f'NBA CDN failed ({e}), trying Firestore cache...')
+        # Fall back to last cached slate (which has game schedule info)
+        if db:
+            snap = db.collection('nba_slate').document(today).get()
+            if snap.exists:
+                cached = snap.to_dict()
+                if cached.get('games'):
+                    print(f'Schedule loaded from Firestore cache ({len(cached["games"])} games)')
+                    return cached['games']
+        raise
 
     games = []
     for g in data.get('scoreboard', {}).get('games', []):
