@@ -717,6 +717,7 @@ def compute_team_rating(team_abr, darko, minutes):
             'o_dpm': dk['o_dpm'],
             'd_dpm': dk['d_dpm'],
             'dpm': dk['dpm'],
+            'nba_id': dk.get('nba_id', ''),
         })
 
     if not team_players:
@@ -1044,12 +1045,14 @@ def run(override_date=None):
         # Attach player rosters (top 10 by minutes)
         gm['away_players'] = [
             {'name': p['name'], 'min': p['minutes'], 'dpm': round(p['dpm'], 1),
-             'o_dpm': round(p['o_dpm'], 1), 'd_dpm': round(p['d_dpm'], 1)}
+             'o_dpm': round(p['o_dpm'], 1), 'd_dpm': round(p['d_dpm'], 1),
+             'nba_id': p.get('nba_id', '')}
             for p in aw_r.get('players', [])
         ]
         gm['home_players'] = [
             {'name': p['name'], 'min': p['minutes'], 'dpm': round(p['dpm'], 1),
-             'o_dpm': round(p['o_dpm'], 1), 'd_dpm': round(p['d_dpm'], 1)}
+             'o_dpm': round(p['o_dpm'], 1), 'd_dpm': round(p['d_dpm'], 1),
+             'nba_id': p.get('nba_id', '')}
             for p in hw_r.get('players', [])
         ]
 

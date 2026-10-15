@@ -987,16 +987,17 @@ function renderGames() {
                   <th style="text-align:left;font-size:9px;color:var(--muted);padding:2px 0;">PLAYER</th>
                   <th style="text-align:right;font-size:9px;color:var(--muted);padding:2px 4px;">MIN</th>
                   <th style="text-align:right;font-size:9px;color:var(--muted);padding:2px 4px;">DPM</th>
-                  <th style="text-align:right;font-size:9px;color:var(--muted);padding:2px 4px;">O-DPM</th>
-                  <th style="text-align:right;font-size:9px;color:var(--muted);padding:2px 4px;">D-DPM</th>
                 </tr>
                 ${(g.away_players||[]).filter(p=>p.min>0).map(p => `
                 <tr style="border-bottom:1px solid #f0f0f0;">
-                  <td style="padding:3px 0;font-family:var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100px;">${p.name}</td>
+                  <td style="padding:3px 0;font-family:var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;">
+                    <div style="display:flex;align-items:center;gap:4px;">
+                      ${p.nba_id ? `<img src="https://cdn.nba.com/headshots/nba/latest/260x190/${p.nba_id}.png" style="width:24px;height:18px;object-fit:cover;object-position:top;border-radius:2px;background:#f0f0f0;" onerror="this.style.display='none'" />` : ''}
+                      ${p.name}
+                    </div>
+                  </td>
                   <td style="text-align:right;padding:3px 4px;font-family:var(--mono);font-weight:600;">${p.min}</td>
                   <td style="text-align:right;padding:3px 4px;font-family:var(--mono);color:${p.dpm>=0?'var(--green)':'var(--red)'}">${p.dpm>0?'+':''}${p.dpm}</td>
-                  <td style="text-align:right;padding:3px 4px;font-family:var(--mono);font-size:10px;color:var(--text2)">${p.o_dpm>0?'+':''}${p.o_dpm}</td>
-                  <td style="text-align:right;padding:3px 4px;font-family:var(--mono);font-size:10px;color:var(--text2)">${p.d_dpm>0?'+':''}${p.d_dpm}</td>
                 </tr>`).join('')}
               </table>
             </div>
@@ -1007,16 +1008,17 @@ function renderGames() {
                   <th style="text-align:left;font-size:9px;color:var(--muted);padding:2px 0;">PLAYER</th>
                   <th style="text-align:right;font-size:9px;color:var(--muted);padding:2px 4px;">MIN</th>
                   <th style="text-align:right;font-size:9px;color:var(--muted);padding:2px 4px;">DPM</th>
-                  <th style="text-align:right;font-size:9px;color:var(--muted);padding:2px 4px;">O-DPM</th>
-                  <th style="text-align:right;font-size:9px;color:var(--muted);padding:2px 4px;">D-DPM</th>
                 </tr>
                 ${(g.home_players||[]).filter(p=>p.min>0).map(p => `
                 <tr style="border-bottom:1px solid #f0f0f0;">
-                  <td style="padding:3px 0;font-family:var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100px;">${p.name}</td>
+                  <td style="padding:3px 0;font-family:var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;">
+                    <div style="display:flex;align-items:center;gap:4px;">
+                      ${p.nba_id ? `<img src="https://cdn.nba.com/headshots/nba/latest/260x190/${p.nba_id}.png" style="width:24px;height:18px;object-fit:cover;object-position:top;border-radius:2px;background:#f0f0f0;" onerror="this.style.display='none'" />` : ''}
+                      ${p.name}
+                    </div>
+                  </td>
                   <td style="text-align:right;padding:3px 4px;font-family:var(--mono);font-weight:600;">${p.min}</td>
                   <td style="text-align:right;padding:3px 4px;font-family:var(--mono);color:${p.dpm>=0?'var(--green)':'var(--red)'}">${p.dpm>0?'+':''}${p.dpm}</td>
-                  <td style="text-align:right;padding:3px 4px;font-family:var(--mono);font-size:10px;color:var(--text2)">${p.o_dpm>0?'+':''}${p.o_dpm}</td>
-                  <td style="text-align:right;padding:3px 4px;font-family:var(--mono);font-size:10px;color:var(--text2)">${p.d_dpm>0?'+':''}${p.d_dpm}</td>
                 </tr>`).join('')}
               </table>
             </div>
@@ -1565,15 +1567,16 @@ function recalcGamesWithBaselines() {
       for (const side of ['away', 'home']) {
         const team = g[side];
         const bl = baselines[team] || {};
-        if (!Object.keys(bl).length) continue;
+        if (!Object.keys(bl).length) continue; // No baseline saved for this team — keep pipeline defaults
         anyChanged = true;
         const playerList = g[`${side}_players`] || [];
 
-        // Apply baselines to player minutes
+        // Apply baselines: players IN the baseline get their saved minutes,
+        // players NOT in the baseline keep their original minutes
         for (const p of playerList) {
           const sv = bl[p.name];
-          if (sv != null) {
-            if (typeof sv === 'object') {
+          if (sv == null) continue; // Not in baseline — keep original
+          if (typeof sv === 'object') {
               p.min = (sv.pg||0) + (sv.sg||0) + (sv.sf||0) + (sv.pf||0) + (sv.c||0);
             } else {
               p.min = sv;
