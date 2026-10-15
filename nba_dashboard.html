@@ -1960,7 +1960,7 @@ function recalcGamesWithBaselines() {
         for (const p of playerList) {
           const sv = bl[p.name];
           const gv = go[p.name];
-          // Game override wins over baseline
+          // Game override wins over baseline; if neither exists, zero out
           if (gv != null) {
             if (typeof gv === 'object') {
               p.min = (gv.pg||0)+(gv.sg||0)+(gv.sf||0)+(gv.pf||0)+(gv.c||0);
@@ -1973,6 +1973,9 @@ function recalcGamesWithBaselines() {
             } else {
               p.min = sv;
             }
+          } else {
+            // Player not in baseline or game override — zero out
+            p.min = 0;
           }
         }
         // Sort by minutes
