@@ -663,6 +663,8 @@ input[type=number] { -moz-appearance: textfield; }
             <th style="text-align:center;color:var(--accent)">PF</th>
             <th style="text-align:center;color:var(--accent)">C</th>
             <th style="text-align:right">DPM</th>
+            <th style="text-align:right">OFF</th>
+            <th style="text-align:right">DEF</th>
           </tr>
           <tr id="team-sums-row" style="background:#f0f7ff;font-weight:700;font-family:var(--mono);font-size:11px;">
             <td style="font-family:var(--sans);font-size:10px;color:var(--muted)">SUM</td>
@@ -672,7 +674,7 @@ input[type=number] { -moz-appearance: textfield; }
             <td style="text-align:center" id="sum-sf">0</td>
             <td style="text-align:center" id="sum-pf">0</td>
             <td style="text-align:center" id="sum-c">0</td>
-            <td></td>
+            <td></td><td></td><td></td>
           </tr>
         </thead>
         <tbody id="team-baseline-body"></tbody>
@@ -1558,6 +1560,8 @@ function renderTeamBaseline() {
       <td style="text-align:center"><input type="number" value="${p.pf||''}" min="0" max="48" step="0.5" style="width:42px;text-align:center;font-size:11px;" onchange="updatePosMin(${i},'pf',this.value)" placeholder="0"></td>
       <td style="text-align:center"><input type="number" value="${p.c||''}" min="0" max="48" step="0.5" style="width:42px;text-align:center;font-size:11px;" onchange="updatePosMin(${i},'c',this.value)" placeholder="0"></td>
       <td style="text-align:right;font-family:var(--mono);color:${p.dpm>=0?'var(--green)':'var(--red)'}">${p.dpm>0?'+':''}${p.dpm}</td>
+      <td style="text-align:right;font-family:var(--mono);font-size:10px;color:var(--text2)">${p.o_dpm>0?'+':''}${p.o_dpm}</td>
+      <td style="text-align:right;font-family:var(--mono);font-size:10px;color:var(--text2)">${p.d_dpm>0?'+':''}${p.d_dpm}</td>
     </tr>`;
   }).join('');
   updateTeamSums();
