@@ -666,7 +666,7 @@ input[type=number] { -moz-appearance: textfield; }
             <th style="text-align:right">OFF</th>
             <th style="text-align:right">DEF</th>
           </tr>
-          <tr id="team-sums-row" style="background:#f0f7ff;font-weight:700;font-family:var(--mono);font-size:11px;">
+          <tr id="team-sums-row" style="background:#f0f7ff;font-weight:700;font-family:var(--mono);font-size:11px;position:sticky;top:28px;z-index:1;">
             <td style="font-family:var(--sans);font-size:10px;color:var(--muted)">SUM</td>
             <td style="text-align:right" id="sum-total">0</td>
             <td style="text-align:center" id="sum-pg">0</td>
@@ -1573,6 +1573,8 @@ function updatePosMin(idx, pos, val) {
   // Re-sort by total minutes and re-render
   _teamPlayers.sort((a, b) => (b.pg+b.sg+b.sf+b.pf+b.c) - (a.pg+a.sg+a.sf+a.pf+a.c));
   renderTeamBaseline();
+  // Auto-save baseline on every edit
+  autoSaveBaseline();
 }
 
 function updateTeamSums() {
@@ -1609,7 +1611,14 @@ function updateTeamSums() {
   }
 }
 
-function saveTeamBaseline() {
+let _autoSaveTimer = null;
+function autoSaveBaseline() {
+  // Debounce: save 500ms after last edit
+  clearTimeout(_autoSaveTimer);
+  _autoSaveTimer = setTimeout(() => saveTeamBaseline(true), 500);
+}
+
+function saveTeamBaseline(silent) {
   if (!_selectedTeam) return;
   const players = {};
   for (const p of _teamPlayers) {
@@ -1617,14 +1626,22 @@ function saveTeamBaseline() {
   }
   fbDb.collection('nba_baselines').doc(_selectedTeam).set({ players })
     .then(() => {
-      console.log(`${_selectedTeam} baseline saved`);
+      console.log(`${_selectedTeam} baseline auto-saved`);
       recalcGamesWithBaselines();
     })
-    .catch(e => alert('Save failed: ' + e.message));
+    .catch(e => { if (!silent) alert('Save failed: ' + e.message); });
 }
 
 function resetTeamBaseline() {
-  loadTeamBaseline(); // reload from Firestore/defaults
+  if (!confirm(`Reset ${_selectedTeam} baseline to all zeros? This cannot be undone.`)) return;
+  // Delete the baseline from Firestore
+  fbDb.collection('nba_baselines').doc(_selectedTeam).delete()
+    .then(() => {
+      console.log(`${_selectedTeam} baseline reset`);
+      loadTeamBaseline();
+      recalcGamesWithBaselines();
+    })
+    .catch(e => alert('Reset failed: ' + e.message));
 }
 
 function openTeamTab(team) {
