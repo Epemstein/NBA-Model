@@ -1577,10 +1577,9 @@ function recalcGamesWithBaselines() {
           const sv = bl[p.name];
           if (sv == null) continue; // Not in baseline — keep original
           if (typeof sv === 'object') {
-              p.min = (sv.pg||0) + (sv.sg||0) + (sv.sf||0) + (sv.pf||0) + (sv.c||0);
-            } else {
-              p.min = sv;
-            }
+            p.min = (sv.pg||0) + (sv.sg||0) + (sv.sf||0) + (sv.pf||0) + (sv.c||0);
+          } else {
+            p.min = sv;
           }
         }
         // Sort by minutes
