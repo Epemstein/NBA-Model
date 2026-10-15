@@ -721,16 +721,14 @@ def compute_team_rating(team_abr, darko, minutes):
             continue
         # Find matching DARKO entry by exact name only
         dk = darko.get(name_lower)
-        if not dk:
-            continue
 
         team_players.append({
             'name': mp['name'],
             'minutes': mp['minutes'],
-            'o_dpm': dk['o_dpm'],
-            'd_dpm': dk['d_dpm'],
-            'dpm': dk['dpm'],
-            'nba_id': dk.get('nba_id', ''),
+            'o_dpm': dk['o_dpm'] if dk else 0.0,
+            'd_dpm': dk['d_dpm'] if dk else 0.0,
+            'dpm': dk['dpm'] if dk else 0.0,
+            'nba_id': dk.get('nba_id', '') if dk else '',
         })
 
     if not team_players:
