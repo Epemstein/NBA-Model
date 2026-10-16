@@ -1500,7 +1500,7 @@ function renderOddsSummary() {
         <td>${awL}</td>
         <td style="font-family:var(--mono);color:var(--accent);">${awModelML}</td>
         <td style="font-family:var(--mono);">${awBookML}</td>
-        <td>${awEdge != null && awEdge > 1 ? `<span class="edge-chip ${awEdge>=5?'hi':awEdge>=2?'mid':'lo'}">${awEdge.toFixed(1)}%</span>` : ''}</td>
+        <td>${awEdge != null && awEdge > 0 ? `<span class="edge-chip ${awEdge>=5?'hi':awEdge>=2?'mid':'lo'}">${awEdge.toFixed(1)}%</span>` : ''}</td>
         <td style="font-size:10px;color:var(--text2);">${awModelProb != null ? (awModelProb*100).toFixed(0)+'%' : '—'}</td>
         <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.away_ml_fill)}</td>
       </tr>`;
@@ -1508,7 +1508,7 @@ function renderOddsSummary() {
         <td>${hwL}</td>
         <td style="font-family:var(--mono);color:var(--accent);font-weight:600;">${hwModelML}</td>
         <td style="font-family:var(--mono);font-weight:600;">${hwBookML}</td>
-        <td>${hwEdge != null && hwEdge > 1 ? `<span class="edge-chip ${hwEdge>=5?'hi':hwEdge>=2?'mid':'lo'}">${hwEdge.toFixed(1)}%</span>` : ''}</td>
+        <td>${hwEdge != null && hwEdge > 0 ? `<span class="edge-chip ${hwEdge>=5?'hi':hwEdge>=2?'mid':'lo'}">${hwEdge.toFixed(1)}%</span>` : ''}</td>
         <td style="font-size:10px;color:var(--text2);font-weight:600;">${hwModelProb != null ? (hwModelProb*100).toFixed(0)+'%' : '—'}</td>
         <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.home_ml_fill)}</td>
       </tr>`;
