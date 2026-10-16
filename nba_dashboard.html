@@ -1138,17 +1138,19 @@ function renderGames() {
     const hasTotalEdge = gVal(g,"total_edge") != null && Math.abs(gVal(g,"total_edge")) >= STATE.settings.totalEdge;
     const hasEdge = hasSpreadEdge || hasTotalEdge;
 
-    const awColor = COLORS[g.away] || '#333';
-    const hwColor = COLORS[g.home] || '#333';
+    const awMin = (g.away_players||[]).reduce((s,p) => s+p.min, 0);
+    const hwMin = (g.home_players||[]).reduce((s,p) => s+p.min, 0);
+    const awBad = Math.abs(awMin - 240) > 0.5;
+    const hwBad = Math.abs(hwMin - 240) > 0.5;
+    const anyBad = awBad || hwBad;
+
+    const awColor = anyBad ? (awBad ? '#999' : COLORS[g.away] || '#333') : COLORS[g.away] || '#333';
+    const hwColor = anyBad ? (hwBad ? '#999' : COLORS[g.home] || '#333') : COLORS[g.home] || '#333';
 
     return `
-    <div class="gc ${hasEdge ? 'has-edge' : ''}">
+    <div class="gc ${hasEdge && !anyBad ? 'has-edge' : ''}" style="${anyBad ? 'opacity:0.6;' : ''}">
       ${(() => {
-        const awMin = (g.away_players||[]).reduce((s,p) => s+p.min, 0);
-        const hwMin = (g.home_players||[]).reduce((s,p) => s+p.min, 0);
-        const awBad = Math.abs(awMin - 240) > 0.5;
-        const hwBad = Math.abs(hwMin - 240) > 0.5;
-        if (awBad || hwBad) {
+        if (anyBad) {
           const msgs = [];
           if (awBad) msgs.push(`${g.away} DOES NOT HAVE 240 MINUTES (${awMin.toFixed(0)})`);
           if (hwBad) msgs.push(`${g.home} DOES NOT HAVE 240 MINUTES (${hwMin.toFixed(0)})`);
@@ -1158,7 +1160,7 @@ function renderGames() {
       })()}
       <div class="gc-teams">
         <div class="gc-team-hdr away" style="background:${awColor};cursor:pointer;" onclick="openRoster(${i},'away')">
-          <img src="${teamLogo(g.away)}" style="position:absolute;left:6px;top:50%;transform:translateY(-50%);width:62px;height:62px;object-fit:contain;opacity:.45;pointer-events:none;filter:brightness(1.05) drop-shadow(0 0 2px rgba(0,0,0,.15));" onerror="this.style.display='none'" />
+          <img src="${teamLogo(g.away)}" style="position:absolute;left:6px;top:50%;transform:translateY(-50%);width:62px;height:62px;object-fit:contain;opacity:.45;pointer-events:none;filter:brightness(1.05) drop-shadow(0 0 2px rgba(0,0,0,.15));${awBad ? 'filter:grayscale(1);' : ''}" onerror="this.style.display='none'" />
           <span class="team-hdr-name" style="padding-left:52px;">${g.away}</span>
           <div style="text-align:right;position:relative;z-index:1;">
             <div class="team-hdr-proj">${gVal(g,"away_proj") != null ? gVal(g,"away_proj") : '—'}</div>
@@ -1171,7 +1173,7 @@ function renderGames() {
             ${gVal(g,"proj_spread") != null ? `<div style="font-size:10px;font-family:var(--mono);opacity:.8;margin-top:1px;">${(spreadToWinProb(gVal(g,"proj_spread"))*100).toFixed(0)}% · ${fmtML(spreadToML(gVal(g,"proj_spread")))}</div>` : ''}
           </div>
           <span class="team-hdr-name" style="padding-right:52px;">${g.home}</span>
-          <img src="${teamLogo(g.home)}" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);width:62px;height:62px;object-fit:contain;opacity:.45;pointer-events:none;filter:brightness(1.05) drop-shadow(0 0 2px rgba(0,0,0,.15));" onerror="this.style.display='none'" />
+          <img src="${teamLogo(g.home)}" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);width:62px;height:62px;object-fit:contain;opacity:.45;pointer-events:none;filter:brightness(1.05) drop-shadow(0 0 2px rgba(0,0,0,.15));${hwBad ? 'filter:grayscale(1);' : ''}" onerror="this.style.display='none'" />
         </div>
       </div>
 

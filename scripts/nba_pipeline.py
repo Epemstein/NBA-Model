@@ -1125,10 +1125,12 @@ def run(override_date=None):
             baselines = get_baselines(team)
             game_ovs = get_game_overrides(date, aw, hw, team)
 
+            # ALWAYS zero out first — never use raw NBA API defaults
+            # If baselines fail to load (quota), players get 0 min (shows error banner)
+            for k in team_mins:
+                team_mins[k]['minutes'] = 0
+
             if baselines or game_ovs:
-                # If baseline exists, zero out everyone first, then apply
-                for k in team_mins:
-                    team_mins[k]['minutes'] = 0
                 # Apply baselines
                 for name_lower, mins in baselines.items():
                     if name_lower in team_mins:
