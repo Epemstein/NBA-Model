@@ -396,110 +396,36 @@ def _nba_get(base_url, params=None, timeout=30):
     return r
 
 
-# ── Fetch player minutes (last 8 games avg) from NBA API ────────────────
-# ── FantasyPros team abbreviation mapping ────────────────────────────────
-_FP_TEAM_MAP = {
-    'SA': 'SAS', 'GS': 'GSW', 'NY': 'NYK', 'NO': 'NOP', 'CHA': 'CHA',
-    'PHO': 'PHX', 'WSH': 'WAS', 'BKN': 'BKN', 'LAL': 'LAL', 'LAC': 'LAC',
-}
-
-def fetch_projected_minutes():
-    """Fetch projected minutes per game from FantasyPros.
-    Returns dict: {player_name_lower: {name, team_abr, minutes}} or None if fails.
-    """
-    import re as _re
-
-    url = 'https://www.fantasypros.com/nba/projections/avg-overall.php'
-    try:
-        r = requests.get(url, headers={
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }, timeout=20)
-        r.raise_for_status()
-    except Exception as e:
-        print(f'FantasyPros fetch failed: {e}')
-        return None
-
-    table = _re.search(r'<table[^>]*id="data"[^>]*>(.*?)</table>', r.text, _re.DOTALL)
-    if not table:
-        print('FantasyPros: no data table found')
-        return None
-
-    tbody = _re.search(r'<tbody>(.*?)</tbody>', table.group(1), _re.DOTALL)
-    if not tbody:
-        return None
-
-    rows = _re.findall(r'<tr[^>]*>(.*?)</tr>', tbody.group(1), _re.DOTALL)
-    players = {}
-    raw_list = []
-
-    for row in rows:
-        cells = _re.findall(r'<td[^>]*>(.*?)</td>', row, _re.DOTALL)
-        if len(cells) < 11:
-            continue
-        clean = [_re.sub(r'<[^>]+>', '', c).strip() for c in cells]
-
-        # Parse player name and team: "Jayson Tatum (BOS - SF,PF)"
-        player_cell = clean[0]
-        match = _re.match(r'^(.+?)\s*\((\w+)\s*-', player_cell)
-        if not match:
-            continue
-        name = match.group(1).strip()
-        team_raw = match.group(2).strip()
-        team = _FP_TEAM_MAP.get(team_raw, team_raw)
-
-        try:
-            minutes = float(clean[10])  # MIN column (index 10)
-        except (ValueError, IndexError):
-            continue
-
-        if minutes < 1:
-            continue
-
-        entry = {'name': name, 'team_abr': team, 'minutes': round(minutes, 1)}
-        players[norm_name(name)] = entry
-        raw_list.append(entry)
-
-    if players:
-        print(f'FantasyPros projected minutes: {len(players)} players')
-        # Cache to Firestore
-        if db:
-            try:
-                db.collection('nba_minutes').document('projected').set({
-                    'players': raw_list,
-                    '_ts': int(time.time()),
-                    'source': 'fantasypros',
-                })
-            except: pass
-
-    return players if players else None
-
-
 def fetch_player_minutes():
-    """Fetch player minutes from NBA API (for team assignments + default minutes).
-    Baselines override these minutes — this is just a fallback for teams without baselines.
-    Returns dict: {norm_name: {name, team_abr, minutes, nba_id}}
+    """Fetch player team assignments from NBA API.
+    Minutes are ALWAYS 0 — baselines are the only source of minutes.
+    Returns dict: {norm_name: {name, team_abr, minutes=0, nba_id}}
     """
     today = today_et()
 
-    # Fetch NBA API data for roster/team assignments
     nba_players = _fetch_nba_api_minutes(today)
     if nba_players:
+        # Zero out all minutes — baselines are the only source
+        for p in nba_players.values():
+            p['minutes'] = 0
         return nba_players
 
     # Fall back to Firestore cache
     if db:
         try:
-            snap = db.collection('nba_minutes').document(today).get()
+            snap = db.collection('nba_minutes').document('nba_api').get()
             if snap.exists:
-                data = snap.to_dict()
-                ts = data.get('_ts', 0)
-                if time.time() - ts < 14400 and data.get('players'):
-                    print(f'Minutes loaded from cache ({len(data["players"])} players)')
-                    return {p['name'].lower(): p for p in data['players']}
-        except Exception as e:
-            print(f'Minutes cache miss: {e}')
+                d = snap.to_dict()
+                if d.get('players'):
+                    print(f'Team assignments from cache ({len(d["players"])} players)')
+                    result = {}
+                    for p in d['players']:
+                        p['minutes'] = 0  # Zero — baselines only
+                        result[norm_name(p['name'])] = p
+                    return result
+        except: pass
 
-    print('No minutes data available')
+    print('No team assignment data available')
     return {}
 
 
