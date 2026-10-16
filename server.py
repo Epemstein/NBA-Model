@@ -61,6 +61,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._refresh_odds()
             return
 
+        if self.path.startswith('/load-date'):
+            self._load_date()
+            return
+
         for prefix, upstream_base in PROXY_RULES.items():
             if self.path.startswith(prefix):
                 tail = self.path[len(prefix):]
@@ -108,6 +112,102 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps({'error': str(e)}).encode())
+
+    def _load_date(self):
+        """Fetch ESPN schedule for a date and write basic game data to Firestore."""
+        import datetime, time, requests as req
+        from urllib.parse import urlparse, parse_qs
+        from zoneinfo import ZoneInfo
+
+        qs = parse_qs(urlparse(self.path).query)
+        ET = ZoneInfo('America/New_York')
+        target_date = qs.get('date', [datetime.datetime.now(ET).strftime('%Y-%m-%d')])[0]
+        espn_date = target_date.replace('-', '')
+
+        sa_json = os.environ.get('FIREBASE_SA_JSON', '')
+
+        try:
+            # Fetch ESPN schedule
+            r = req.get(f'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates={espn_date}', timeout=15)
+            r.raise_for_status()
+            events = r.json().get('events', [])
+
+            ESPN_ABR = {'GS':'GSW','SA':'SAS','NY':'NYK','NO':'NOP','WSH':'WAS','UTAH':'UTA'}
+            NBA_ABR_TO_NAME = {
+                'ATL':'Atlanta Hawks','BOS':'Boston Celtics','BKN':'Brooklyn Nets','CHA':'Charlotte Hornets',
+                'CHI':'Chicago Bulls','CLE':'Cleveland Cavaliers','DAL':'Dallas Mavericks','DEN':'Denver Nuggets',
+                'DET':'Detroit Pistons','GSW':'Golden State Warriors','HOU':'Houston Rockets','IND':'Indiana Pacers',
+                'LAC':'Los Angeles Clippers','LAL':'Los Angeles Lakers','MEM':'Memphis Grizzlies','MIA':'Miami Heat',
+                'MIL':'Milwaukee Bucks','MIN':'Minnesota Timberwolves','NOP':'New Orleans Pelicans','NYK':'New York Knicks',
+                'OKC':'Oklahoma City Thunder','ORL':'Orlando Magic','PHI':'Philadelphia 76ers','PHX':'Phoenix Suns',
+                'POR':'Portland Trail Blazers','SAC':'Sacramento Kings','SAS':'San Antonio Spurs','TOR':'Toronto Raptors',
+                'UTA':'Utah Jazz','WAS':'Washington Wizards',
+            }
+
+            games = []
+            for ev in events:
+                comps = ev.get('competitions', [{}])[0]
+                competitors = comps.get('competitors', [])
+                away_comp = next((c for c in competitors if c.get('homeAway') == 'away'), {})
+                home_comp = next((c for c in competitors if c.get('homeAway') == 'home'), {})
+                aw_raw = away_comp.get('team', {}).get('abbreviation', '')
+                hw_raw = home_comp.get('team', {}).get('abbreviation', '')
+                aw = ESPN_ABR.get(aw_raw, aw_raw)
+                hw = ESPN_ABR.get(hw_raw, hw_raw)
+                game_time = ev.get('date', '')
+                status = ev.get('status', {}).get('type', {}).get('shortDetail', '')
+
+                # Format time
+                try:
+                    from datetime import datetime as dt
+                    d = dt.fromisoformat(game_time.replace('Z', '+00:00'))
+                    time_et = d.astimezone(ET).strftime('%-I:%M %p ET')
+                except:
+                    time_et = status
+
+                games.append({
+                    'id': ev.get('id', ''),
+                    'away': aw, 'home': hw,
+                    'away_name': NBA_ABR_TO_NAME.get(aw, aw),
+                    'home_name': NBA_ABR_TO_NAME.get(hw, hw),
+                    'game_time_utc': game_time,
+                    'game_time_et': time_et,
+                    'status': 1, 'status_text': status,
+                    'is_preseason': ev.get('season', {}).get('type', 0) == 1,
+                    'away_proj': None, 'home_proj': None,
+                    'proj_spread': None, 'proj_total': None,
+                    'away_off': None, 'away_def': None,
+                    'home_off': None, 'home_def': None,
+                    'matchup_pace': None,
+                    'book_spread': None, 'book_total': None,
+                    'spread_edge': None, 'total_edge': None,
+                    'away_players': [], 'home_players': [],
+                })
+
+            # Write to Firestore
+            if sa_json and games:
+                try:
+                    import firebase_admin
+                    from firebase_admin import credentials, firestore as fs
+                    if not firebase_admin._apps:
+                        cred = credentials.Certificate(json.loads(sa_json))
+                        firebase_admin.initialize_app(cred)
+                    db = fs.client()
+                    db.collection('nba_slate').document(target_date).set({
+                        'games': games,
+                        'team_ratings': {},
+                        'lastUpdated': fs.SERVER_TIMESTAMP,
+                        'lastUpdatedMs': int(time.time() * 1000),
+                        'date': target_date,
+                    })
+                except Exception as e:
+                    print(f'Firestore write failed: {e}')
+
+            self._json_response(200, {'games': len(games), 'date': target_date})
+        except Exception as e:
+            print(f'Load date failed: {e}')
+            import traceback; traceback.print_exc()
+            self._json_response(500, {'error': str(e)})
 
     def _refresh_odds(self):
         """Fetch live Novig odds and write to Firestore for the dashboard."""

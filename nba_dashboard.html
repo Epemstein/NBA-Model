@@ -563,8 +563,10 @@ input[type=number] { -moz-appearance: textfield; }
     <!-- Game Cards Grid -->
     <div style="flex:1;min-width:0;">
       <div class="gg" id="games-grid"></div>
-      <div id="no-games" style="display:none;text-align:center;padding:40px;color:var(--muted);">
-        No games today. Check back later or run the pipeline manually.
+      <div id="no-games" style="display:none;text-align:center;padding:40px;">
+        <div style="color:var(--muted);margin-bottom:12px;">No games loaded for this date.</div>
+        <button class="btn bp" onclick="loadDateGames()" id="load-games-btn">Load Games</button>
+        <span id="load-games-status" style="font-size:11px;color:var(--muted);margin-left:8px;"></span>
       </div>
     </div>
 
@@ -1383,6 +1385,40 @@ function saveGameOverride(gameIdx, side) {
 let _oddsTab = 'spread';
 
 const RENDER_URL = 'https://nba-model-7qcb.onrender.com';
+
+async function loadDateGames() {
+  const btn = document.getElementById('load-games-btn');
+  const status = document.getElementById('load-games-status');
+  btn.disabled = true;
+  btn.textContent = '...';
+  status.textContent = 'Fetching schedule...';
+  status.style.color = 'var(--yellow)';
+  try {
+    const r = await fetch(`${RENDER_URL}/load-date?date=${selectedDate}`);
+    const data = await r.json();
+    if (r.ok && data.games > 0) {
+      status.textContent = `${data.games} games loaded — refreshing odds...`;
+      // Also fetch odds
+      try {
+        await fetch(`${RENDER_URL}/refresh-odds?date=${selectedDate}`);
+      } catch {}
+      status.textContent = `${data.games} games ready`;
+      status.style.color = 'var(--green)';
+      // Firestore snapshot will auto-refresh
+    } else if (r.ok && data.games === 0) {
+      status.textContent = 'No NBA games on this date';
+      status.style.color = 'var(--muted)';
+    } else {
+      status.textContent = data.error || 'Failed';
+      status.style.color = 'var(--red)';
+    }
+  } catch (e) {
+    status.textContent = 'Network error — Render may be cold (wait 30s, try again)';
+    status.style.color = 'var(--red)';
+  }
+  btn.disabled = false;
+  btn.textContent = 'Load Games';
+}
 
 async function refreshOdds() {
   const btn = document.getElementById('refresh-odds-btn');
