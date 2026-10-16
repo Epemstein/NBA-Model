@@ -887,7 +887,7 @@ document.querySelectorAll('#nav button').forEach(btn => {
 });
 
 // ── Format helpers ──────────────────────────────────────────────────────
-function normName(s) { return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim(); }
+function normName(s) { return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\./g,'').toLowerCase().trim().replace(/ (jr|sr|iv|iii|ii)$/,''); }
 function fmtDpm(v) { if (v == null) return 'N/A'; return (v > 0 ? '+' : '') + v.toFixed(1); }
 function dpmColor(v) { if (v == null) return 'var(--muted)'; return v >= 0 ? 'var(--green)' : 'var(--red)'; }
 function fmtSpread(n) { return n > 0 ? `+${n.toFixed(1)}` : n.toFixed(1); }

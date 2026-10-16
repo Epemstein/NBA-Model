@@ -90,10 +90,16 @@ ALL_TEAMS = sorted(NAME_TO_ABR.values())
 
 # ── Helpers ──────────────────────────────────────────────────────────────
 def norm_name(name):
-    """Normalize player name: strip accents, lowercase."""
+    """Normalize player name: strip accents, periods, suffixes, lowercase."""
     s = unicodedata.normalize('NFD', name)
     s = ''.join(c for c in s if unicodedata.category(c) != 'Mn')
-    return s.lower().strip()
+    s = s.lower().strip()
+    s = s.replace('.', '')
+    # Strip common suffixes
+    for suffix in [' jr', ' sr', ' iv', ' iii', ' ii']:
+        if s.endswith(suffix):
+            s = s[:-len(suffix)].strip()
+    return s
 
 def today_et():
     return datetime.datetime.now(ET).strftime('%Y-%m-%d')
