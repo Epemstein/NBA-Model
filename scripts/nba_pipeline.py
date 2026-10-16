@@ -387,27 +387,15 @@ def fetch_projected_minutes():
 
 
 def fetch_player_minutes():
-    """Fetch projected minutes from FantasyPros as primary source.
-    Falls back to NBA API preseason/regular season stats.
-    Returns dict: {player_name_lower: {name, team_abr, minutes}}
+    """Fetch player minutes from NBA API (for team assignments + default minutes).
+    Baselines override these minutes — this is just a fallback for teams without baselines.
+    Returns dict: {norm_name: {name, team_abr, minutes, nba_id}}
     """
     today = today_et()
 
-    # FantasyPros projected minutes as primary (covers ~265 top players)
-    proj = fetch_projected_minutes()
-
-    # Also fetch NBA API data for full roster coverage
+    # Fetch NBA API data for roster/team assignments
     nba_players = _fetch_nba_api_minutes(today)
-
-    # Merge: FantasyPros takes priority, NBA API fills the gaps
-    if proj and nba_players:
-        merged = dict(nba_players)  # start with full NBA roster
-        merged.update(proj)         # overwrite with FP projections for top players
-        print(f'Merged minutes: {len(proj)} from FantasyPros + {len(nba_players)} from NBA API = {len(merged)} total')
-        return merged
-    elif proj:
-        return proj
-    elif nba_players:
+    if nba_players:
         return nba_players
 
     # Fall back to Firestore cache
@@ -1274,7 +1262,23 @@ def run(override_date=None):
                 existing_ids = {p.get('nba_id', '') for p in all_teams.get(team_abr, []) if p.get('nba_id')}
                 existing_names = {norm_name(p['name']) for p in all_teams.get(team_abr, [])}
                 for pname, pid in roster_list:
-                    if pid in existing_ids or norm_name(pname) in existing_names:
+                    if pid in existing_ids:
+                        continue
+                    nn = norm_name(pname)
+                    if nn in existing_names:
+                        # Name exists but might be missing NBA ID / DARKO — backfill
+                        for ep in all_teams[team_abr]:
+                            if norm_name(ep['name']) == nn and not ep.get('nba_id'):
+                                dk = darko.get(f'id:{pid}')
+                                if dk:
+                                    ep['nba_id'] = dk.get('nba_id', pid)
+                                    ep['dpm'] = round(dk['dpm'], 1)
+                                    ep['o_dpm'] = round(dk['o_dpm'], 1)
+                                    ep['d_dpm'] = round(dk['d_dpm'], 1)
+                                    ep['pos'] = dk.get('pos', ep.get('pos', ''))
+                                else:
+                                    ep['nba_id'] = pid
+                                break
                         continue
                     dk = darko.get(f'id:{pid}') or darko.get(norm_name(pname))
                     all_teams[team_abr].append({
