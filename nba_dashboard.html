@@ -706,14 +706,13 @@ input[type=number] { -moz-appearance: textfield; }
       </div>
     </div>
     <div class="sw" style="max-height:800px;">
-      <table class="dt" id="standings-table" style="font-size:13px;">
+      <table class="dt" id="standings-table" style="font-size:12px;max-width:700px;">
         <thead><tr>
-          <th style="width:30px;cursor:pointer;" onclick="sortStandings('rank')">#</th>
-          <th style="cursor:pointer;width:200px;" onclick="sortStandings('team')">Team</th>
-          <th style="text-align:right;width:70px;cursor:pointer;" onclick="sortStandings('total')">Total</th>
-          <th style="text-align:right;width:70px;cursor:pointer;" onclick="sortStandings('off')">OFF</th>
-          <th style="text-align:right;width:70px;cursor:pointer;" onclick="sortStandings('def')">DEF</th>
-          <th style="text-align:right;width:40px;">Min</th>
+          <th style="width:24px;cursor:pointer;" onclick="sortStandings('rank')">#</th>
+          <th style="cursor:pointer;width:100px;" onclick="sortStandings('team')">Team</th>
+          <th style="text-align:right;width:55px;cursor:pointer;" onclick="sortStandings('total')">Total</th>
+          <th style="text-align:right;width:55px;cursor:pointer;" onclick="sortStandings('off')">OFF</th>
+          <th style="text-align:right;width:55px;cursor:pointer;" onclick="sortStandings('def')">DEF</th>
         </tr></thead>
         <tbody id="standings-body">
           <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;">Loading...</td></tr>
@@ -2535,15 +2534,12 @@ function renderStandings() {
     const fullName = FULL_NAMES[t.team] || t.team;
     const minOk = Math.abs(t.totalMin - 240) <= 1;
 
-    return `<tr style="height:44px;${!minOk ? 'opacity:0.4;' : ''}">
-      <td style="font-family:var(--mono);font-weight:700;font-size:16px;text-align:center;color:${rank<=3?'var(--green)':rank>=28?'var(--red)':'var(--text)'};">${rank}</td>
-      <td style="padding:8px;cursor:pointer;" onclick="openTeamTab('${t.team}')">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <img src="${teamLogo(t.team)}" style="width:28px;height:28px;object-fit:contain;" onerror="this.style.display='none'" />
-          <div>
-            <div style="font-size:14px;font-weight:700;color:${color};">${t.team}</div>
-            <div style="font-size:10px;color:var(--muted);">${fullName}</div>
-          </div>
+    return `<tr style="height:32px;${!minOk ? 'opacity:0.4;' : ''}">
+      <td style="font-family:var(--mono);font-weight:700;font-size:13px;text-align:center;padding:2px 4px;color:${rank<=3?'var(--green)':rank>=28?'var(--red)':'var(--text)'};">${rank}</td>
+      <td style="padding:3px 6px;cursor:pointer;" onclick="openTeamTab('${t.team}')">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <img src="${teamLogo(t.team)}" style="width:20px;height:20px;object-fit:contain;" onerror="this.style.display='none'" />
+          <span style="font-size:13px;font-weight:700;color:${color};">${t.team}</span>
         </div>
       </td>
       <td style="text-align:right;padding:4px 6px;">
@@ -2558,7 +2554,6 @@ function renderStandings() {
         <span style="font-family:var(--mono);font-size:13px;color:${t.def>=0?'var(--green)':'var(--red)'};">${t.def>=0?'+':''}${t.def.toFixed(1)}</span>
         <span style="font-size:9px;color:var(--muted);margin-left:2px;">#${defRank}</span>
       </td>
-      <td style="text-align:right;padding:4px 6px;font-family:var(--mono);font-size:11px;color:${minOk?'var(--green)':'var(--red)'};">${t.totalMin}</td>
     </tr>`;
   }).join('');
 }
