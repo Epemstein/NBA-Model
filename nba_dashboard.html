@@ -1753,7 +1753,9 @@ function loadSettingsUI() {
 
 // ── Logo/headshot helpers ────────────────────────────────────────────────
 function teamLogo(abr) {
-  return `https://a.espncdn.com/i/teamlogos/nba/500/${abr.toLowerCase()}.png`;
+  const espnMap = {NOP:'no',UTA:'utah',BKN:'bkn',PHX:'phx',SAS:'sa',GSW:'gs',NYK:'ny'};
+  const code = espnMap[abr] || abr.toLowerCase();
+  return `https://a.espncdn.com/i/teamlogos/nba/500/${code}.png`;
 }
 function playerHeadshot(nbaId) {
   if (!nbaId) return '';
