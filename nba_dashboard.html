@@ -509,6 +509,7 @@ input[type=number] { -moz-appearance: textfield; }
   <button data-tab="picks">Picks</button>
   <button data-tab="kelly">Kelly Tracker</button>
   <button data-tab="teams">Teams</button>
+  <button data-tab="standings">Standings</button>
   <button data-tab="history">History</button>
   <button data-tab="settings">Settings</button>
 </nav>
@@ -693,6 +694,28 @@ input[type=number] { -moz-appearance: textfield; }
 </div>
 
 <!-- ═══════════ SETTINGS PANEL ═══════════ -->
+<!-- ═══════════ STANDINGS PANEL ═══════════ -->
+<div class="panel" id="panel-standings">
+  <div class="card">
+    <div class="ct">Power Rankings</div>
+    <div class="sw" style="max-height:800px;">
+      <table class="dt" id="standings-table" style="font-size:13px;">
+        <thead><tr>
+          <th style="width:40px;cursor:pointer;" onclick="sortStandings('rank')">#</th>
+          <th style="cursor:pointer;" onclick="sortStandings('team')">Team</th>
+          <th style="text-align:right;cursor:pointer;" onclick="sortStandings('total')">Total</th>
+          <th style="text-align:right;cursor:pointer;" onclick="sortStandings('off')">OFF</th>
+          <th style="text-align:right;cursor:pointer;" onclick="sortStandings('def')">DEF</th>
+          <th style="text-align:right;width:60px;">Min</th>
+        </tr></thead>
+        <tbody id="standings-body">
+          <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════ HISTORY PANEL ═══════════ -->
 <div class="panel" id="panel-history">
   <div class="card">
@@ -2419,6 +2442,105 @@ function saveRoster(silent) {
   if (!silent) closeRoster();
 }
 
+// ── Standings ────────────────────────────────────────────────────────────
+let _standingsData = [];
+let _standingsSort = 'total';
+let _standingsSortDir = -1; // -1 = desc
+
+function loadStandings() {
+  const allTeams = Object.keys(COLORS);
+  Promise.all(allTeams.map(t =>
+    Promise.all([
+      fbDb.collection('nba_baselines').doc(t).get(),
+      fbDb.collection('nba_rosters').doc(t).get(),
+    ]).then(([blSnap, roSnap]) => {
+      const bl = blSnap.exists ? blSnap.data().players || {} : {};
+      const roster = roSnap.exists ? roSnap.data().players || [] : [];
+      const players = roster.map(p => {
+        const nn = normName(p.name);
+        let pg=0,sg=0,sf=0,pf=0,c=0;
+        // Find baseline by normalized name
+        for (const [k,v] of Object.entries(bl)) {
+          if (normName(k) === nn && typeof v === 'object') {
+            pg=v.pg||0;sg=v.sg||0;sf=v.sf||0;pf=v.pf||0;c=v.c||0;
+            break;
+          }
+        }
+        return { pg,sg,sf,pf,c, o_dpm:p.o_dpm||0, d_dpm:p.d_dpm||0 };
+      });
+      const r = calcTeamRating(players);
+      const totalMin = players.reduce((s,p) => s+p.pg+p.sg+p.sf+p.pf+p.c, 0);
+      return { team: t, ...r, totalMin };
+    })
+  )).then(teams => {
+    _standingsData = teams;
+    renderStandings();
+  });
+}
+
+function sortStandings(col) {
+  if (_standingsSort === col) {
+    _standingsSortDir *= -1;
+  } else {
+    _standingsSort = col;
+    _standingsSortDir = col === 'team' ? 1 : -1;
+  }
+  renderStandings();
+}
+
+function renderStandings() {
+  const tbody = document.getElementById('standings-body');
+  const data = [..._standingsData];
+
+  // Sort
+  data.sort((a, b) => {
+    let va = a[_standingsSort], vb = b[_standingsSort];
+    if (_standingsSort === 'team') return _standingsSortDir * va.localeCompare(vb);
+    if (_standingsSort === 'rank') return _standingsSortDir * (a.total - b.total);
+    return _standingsSortDir * ((va||0) - (vb||0));
+  });
+
+  // Compute ranks for each category
+  const offRanked = [...data].sort((a,b) => b.off - a.off);
+  const defRanked = [...data].sort((a,b) => b.def - a.def);
+  const totRanked = [...data].sort((a,b) => b.total - a.total);
+
+  tbody.innerHTML = data.map((t, i) => {
+    const rank = totRanked.findIndex(x => x.team === t.team) + 1;
+    const offRank = offRanked.findIndex(x => x.team === t.team) + 1;
+    const defRank = defRanked.findIndex(x => x.team === t.team) + 1;
+    const color = COLORS[t.team] || '#333';
+    const fullName = FULL_NAMES[t.team] || t.team;
+    const minOk = Math.abs(t.totalMin - 240) <= 1;
+
+    return `<tr style="height:44px;${!minOk ? 'opacity:0.4;' : ''}">
+      <td style="font-family:var(--mono);font-weight:700;font-size:16px;text-align:center;color:${rank<=3?'var(--green)':rank>=28?'var(--red)':'var(--text)'};">${rank}</td>
+      <td style="padding:8px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <img src="${teamLogo(t.team)}" style="width:28px;height:28px;object-fit:contain;" onerror="this.style.display='none'" />
+          <div>
+            <div style="font-size:14px;font-weight:700;color:${color};">${t.team}</div>
+            <div style="font-size:10px;color:var(--muted);">${fullName}</div>
+          </div>
+        </div>
+      </td>
+      <td style="text-align:right;padding:8px;">
+        <div style="font-family:var(--mono);font-weight:700;font-size:15px;color:${t.total>=0?'var(--green)':'var(--red)'};">${t.total>=0?'+':''}${t.total.toFixed(1)}</div>
+        <div style="font-size:9px;color:var(--muted);">#${rank}</div>
+      </td>
+      <td style="text-align:right;padding:8px;">
+        <div style="font-family:var(--mono);font-size:13px;color:${t.off>=0?'var(--green)':'var(--red)'};">${t.off>=0?'+':''}${t.off.toFixed(1)}</div>
+        <div style="font-size:9px;color:var(--muted);">#${offRank}</div>
+      </td>
+      <td style="text-align:right;padding:8px;">
+        <div style="font-family:var(--mono);font-size:13px;color:${t.def>=0?'var(--green)':'var(--red)'};">${t.def>=0?'+':''}${t.def.toFixed(1)}</div>
+        <div style="font-size:9px;color:var(--muted);">#${defRank}</div>
+      </td>
+      <td style="text-align:right;font-family:var(--mono);font-size:11px;color:${minOk?'var(--green)':'var(--red)'};">${t.totalMin}</td>
+    </tr>`;
+  }).join('');
+}
+
 // ── Activity Log ────────────────────────────────────────────────────────
 let _currentUser = null;
 
@@ -2567,6 +2689,7 @@ async function initApp() {
   renderPicks();
   initTeamSelector();
   setupHistoryListener();
+  loadStandings();
   updateKelly();
 
   // Check Firestore connection
