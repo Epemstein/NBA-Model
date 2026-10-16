@@ -1258,8 +1258,9 @@ def run(override_date=None):
                 if team_abr not in all_teams:
                     all_teams[team_abr] = []
                 existing_ids = {p.get('nba_id', '') for p in all_teams.get(team_abr, []) if p.get('nba_id')}
+                existing_names = {norm_name(p['name']) for p in all_teams.get(team_abr, [])}
                 for pname, pid in roster_list:
-                    if pid in existing_ids:
+                    if pid in existing_ids or norm_name(pname) in existing_names:
                         continue
                     dk = darko.get(f'id:{pid}') or darko.get(norm_name(pname))
                     all_teams[team_abr].append({
