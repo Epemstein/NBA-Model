@@ -1926,7 +1926,13 @@ function saveTeamBaseline(silent) {
           }
         }
         if (changes.length) {
-          logActivity(`${_selectedTeam} baseline: ${changes.join(', ')}`, _selectedTeam);
+          const pids = [];
+          for (const p of _teamPlayers) {
+            const newT = p.pg + p.sg + p.sf + p.pf + p.c;
+            const oldT = _baselineSnapshot[p.name];
+            if (oldT != null && oldT !== newT && p.nba_id) pids.push(p.nba_id);
+          }
+          logActivity(`${_selectedTeam} baseline: ${changes.join(', ')}`, _selectedTeam, pids);
           captureBaselineSnapshot();
         }
       }, 2000);  // Wait 2s after last save to batch changes
@@ -2302,8 +2308,14 @@ function saveRoster(silent) {
       if (changes.length) {
         const g = STATE.games[_rosterState.gameIdx];
         const matchup = g ? `${g.away}@${g.home}` : '';
-        logActivity(`${matchup} ${selectedDate}: ${changes.join(', ')}`, _rosterState.team);
-        captureRosterSnapshot();  // Reset snapshot so next save only logs new changes
+        const pids = [];
+        for (const p of _rosterState.players) {
+          const newT = p.pg+p.sg+p.sf+p.pf+p.c;
+          const oldT = _rosterLastSnapshot[p.name];
+          if (oldT != null && oldT !== newT && p.nba_id) pids.push(p.nba_id);
+        }
+        logActivity(`${matchup} ${selectedDate}: ${changes.join(', ')}`, _rosterState.team, pids);
+        captureRosterSnapshot();
       }
       // Update game player minutes and recalc
       const side = _rosterState.side;
@@ -2347,7 +2359,7 @@ function saveRoster(silent) {
 // ── Activity Log ────────────────────────────────────────────────────────
 let _currentUser = null;
 
-function logActivity(action, team) {
+function logActivity(action, team, playerIds) {
   if (!_currentUser) return;
   fbDb.collection('nba_activity').add({
     uid: _currentUser.uid,
@@ -2355,6 +2367,7 @@ function logActivity(action, team) {
     photo: _currentUser.photoURL || '',
     action,
     team: team || '',
+    playerIds: playerIds || [],  // NBA IDs for headshots
     ts: firebase.firestore.FieldValue.serverTimestamp(),
     tsMs: Date.now(),
   }).catch(e => console.error('Activity log error:', e));
@@ -2387,7 +2400,10 @@ function setupHistoryListener() {
           <td style="font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap;padding:8px;">${time}</td>
           <td style="font-family:var(--sans);font-size:13px;font-weight:600;color:var(--accent);padding:8px;">${photo}${firstName}</td>
           <td style="font-size:13px;font-weight:600;padding:8px;">${logo}${d.team}</td>
-          <td style="font-family:var(--sans);font-size:13px;padding:8px;">${action}</td>
+          <td style="font-family:var(--sans);font-size:13px;padding:8px;">
+            ${(d.playerIds||[]).map(id => `<img src="https://cdn.nba.com/headshots/nba/latest/260x190/${id}.png" style="width:22px;height:16px;object-fit:cover;object-position:top;border-radius:2px;vertical-align:middle;margin-right:2px;" onerror="this.style.display='none'" />`).join('')}
+            ${action}
+          </td>
         </tr>`;
       }).join('');
     });
