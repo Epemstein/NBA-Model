@@ -969,20 +969,72 @@ function switchRating(source) {
   });
   const active = document.querySelector(`.rating-toggle[data-rating="${source}"]`);
   if (active) { active.style.background = '#333'; active.style.color = '#fff'; }
+  recomputeProjections();
   renderGames();
   renderOddsSummary();
   updateStrip();
 }
 
-// Helper: get the right field based on rating source
-function gVal(g, darkoField) {
-  if (_ratingSource === 'lebron') {
-    const lbField = 'lb_' + darkoField;
-    return g[lbField] != null ? g[lbField] : g[darkoField];
+function pDpm(p) { return _ratingSource === 'lebron' ? (p.lb_dpm != null ? p.lb_dpm : p.dpm) : p.dpm; }
+function gVal(g, field) { return g[field]; }  // projections are recomputed in-place
+
+// ── Client-side projection engine ───────────────────────────────────────
+// Computes team ratings + score projections from player-level data
+// Uses whichever rating source is selected (DARKO or LEBRON)
+// No Firestore reads needed — works from data already in STATE.games
+function recomputeProjections() {
+  const avgOrtg = STATE.leagueAvgOrtg || 114.8;
+  const paceMult = STATE.settings?.paceMult || 1.0;
+  const hca = (STATE.settings?.hca || 1.5) / 2;
+
+  for (const g of STATE.games) {
+    for (const side of ['away', 'home']) {
+      const players = g[`${side}_players`] || [];
+      const totalRaw = players.reduce((s, p) => s + (p.min || 0) / 48, 0);
+      const scale = totalRaw > 0 ? 5.0 / totalRaw : 0;
+      let off = 0, def = 0;
+      for (const p of players) {
+        const w = ((p.min || 0) / 48) * scale;
+        if (_ratingSource === 'lebron' && p.lb_dpm != null) {
+          // Split LEBRON total using DARKO o/d ratio
+          const dkO = p.o_dpm || 0, dkD = p.d_dpm || 0;
+          const dkAbs = Math.abs(dkO) + Math.abs(dkD);
+          if (dkAbs > 0) {
+            off += p.lb_dpm * (Math.abs(dkO) / dkAbs) * (dkO >= 0 ? 1 : -1) * w;
+            def += p.lb_dpm * (Math.abs(dkD) / dkAbs) * (dkD >= 0 ? 1 : -1) * w;
+          } else {
+            off += (p.lb_dpm / 2) * w;
+            def += (p.lb_dpm / 2) * w;
+          }
+        } else {
+          off += (p.o_dpm || 0) * w;
+          def += (p.d_dpm || 0) * w;
+        }
+      }
+      g[`${side}_off`] = Math.round(off * 100) / 100;
+      g[`${side}_def`] = Math.round(def * 100) / 100;
+    }
+
+    // Pace
+    if (!g._rawPace) g._rawPace = (g.matchup_pace || 95) / (paceMult || 1);
+    const pace = g._rawPace * paceMult;
+    g.matchup_pace = Math.round(pace * 10) / 10;
+
+    // Score projection
+    const awPP100 = avgOrtg + g.away_off - g.home_def;
+    const hwPP100 = avgOrtg + g.home_off - g.away_def;
+    g.away_proj = Math.round((awPP100 / 100 * pace - hca) * 10) / 10;
+    g.home_proj = Math.round((hwPP100 / 100 * pace + hca) * 10) / 10;
+    g.proj_spread = Math.round((g.away_proj - g.home_proj) * 10) / 10;
+    g.proj_total = Math.round((g.away_proj + g.home_proj) * 10) / 10;
+    g.away_pp100 = Math.round(awPP100 * 10) / 10;
+    g.home_pp100 = Math.round(hwPP100 * 10) / 10;
+
+    // Edges
+    if (g.book_spread != null) g.spread_edge = Math.round((g.proj_spread - g.book_spread) * 10) / 10;
+    if (g.book_total != null) g.total_edge = Math.round((g.proj_total - g.book_total) * 10) / 10;
   }
-  return g[darkoField];
 }
-function pDpm(p) { return _ratingSource === 'lebron' ? p.lb_dpm : p.dpm; }
 function fmtDpm(v) { if (v == null) return 'N/A'; return (v > 0 ? '+' : '') + v.toFixed(1); }
 function dpmColor(v) { if (v == null) return 'var(--muted)'; return v >= 0 ? 'var(--green)' : 'var(--red)'; }
 function fmtSpread(n) { return n > 0 ? `+${n.toFixed(1)}` : n.toFixed(1); }
@@ -1055,6 +1107,7 @@ async function loadSlate() {
       STATE.lastUpdated = d;
     }
 
+    recomputeProjections();
     renderGames();
     renderOddsSummary();
     updateStrip();
@@ -2941,6 +2994,7 @@ function setupRealtimeListener() {
         hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York'
       }) + ' ET';
     }
+    recomputeProjections();
     renderGames();
     renderOddsSummary();
     updateStrip();
