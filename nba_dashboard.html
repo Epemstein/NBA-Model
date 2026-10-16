@@ -2064,42 +2064,25 @@ function renderTeamBaseline() {
   const fullName = FULL_NAMES[_selectedTeam] || _selectedTeam;
   const rgb = hexToRgb(color);
 
-  // Compute this team's rating
+  // Compute this team's rating from current rating source
   const rating = calcTeamRating(_teamPlayers);
 
-  // Load all team baselines to compute rankings
-  const allTeams = Object.keys(COLORS);
-  Promise.all(allTeams.map(t =>
-    Promise.all([
-      fbDb.collection('nba_baselines').doc(t).get(),
-      fbDb.collection('nba_rosters').doc('all').get().then(s => ({exists:s.exists,data:()=>({players:(s.data()?.teams||{})[t]||[]})})),
-    ]).then(([blSnap, roSnap]) => {
-      const bl = blSnap.exists ? blSnap.data().players || {} : {};
-      const roster = roSnap.exists ? roSnap.data().players || [] : [];
-      const players = roster.map(p => {
-        const sv = bl[p.name];
-        let pg=0,sg=0,sf=0,pf=0,c=0;
-        if (sv && typeof sv === 'object') { pg=sv.pg||0;sg=sv.sg||0;sf=sv.sf||0;pf=sv.pf||0;c=sv.c||0; }
-        return { pg,sg,sf,pf,c, o_dpm:p.o_dpm, d_dpm:p.d_dpm };
-      });
-      const r = calcTeamRating(players);
-      return { team: t, ...r };
-    })
-  )).then(rankings => {
-    rankings.sort((a,b) => b.off - a.off);
-    const offRank = rankings.findIndex(r => r.team === _selectedTeam) + 1;
-    rankings.sort((a,b) => b.def - a.def);
-    const defRank = rankings.findIndex(r => r.team === _selectedTeam) + 1;
-    rankings.sort((a,b) => b.total - a.total);
-    const totalRank = rankings.findIndex(r => r.team === _selectedTeam) + 1;
-
-    const offEl = document.getElementById('banner-off');
-    const defEl = document.getElementById('banner-def');
-    const totEl = document.getElementById('banner-total-rating');
-    if (offEl) offEl.innerHTML = `${rating.off >= 0 ? '+' : ''}${rating.off.toFixed(1)} <span style="font-size:10px;opacity:.7;">#${offRank}</span>`;
-    if (defEl) defEl.innerHTML = `${rating.def >= 0 ? '+' : ''}${rating.def.toFixed(1)} <span style="font-size:10px;opacity:.7;">#${defRank}</span>`;
-    if (totEl) totEl.innerHTML = `${rating.total >= 0 ? '+' : ''}${rating.total.toFixed(1)} <span style="font-size:10px;opacity:.7;">#${totalRank}</span>`;
+  // Rankings from all_team_ratings (already in STATE, 0 reads)
+  const atr = STATE.allTeamRatings || {};
+  // Recompute all ratings with current toggle for accurate ranking
+  const allRatings = Object.entries(atr).map(([t, r]) => {
+    // Use LEBRON values if toggled and available
+    if (_ratingSource === 'lebron' && r.lb_total != null) {
+      return { team: t, off: r.lb_off, def: r.lb_def, total: r.lb_total };
+    }
+    return { team: t, off: r.off, def: r.def, total: r.total };
   });
+  const offSorted = [...allRatings].sort((a,b) => b.off - a.off);
+  const defSorted = [...allRatings].sort((a,b) => b.def - a.def);
+  const totSorted = [...allRatings].sort((a,b) => b.total - a.total);
+  const offRank = offSorted.findIndex(r => r.team === _selectedTeam) + 1 || '?';
+  const defRank = defSorted.findIndex(r => r.team === _selectedTeam) + 1 || '?';
+  const totalRank = totSorted.findIndex(r => r.team === _selectedTeam) + 1 || '?';
 
   // Banner
   document.getElementById('team-banner-container').innerHTML = `
@@ -2110,9 +2093,9 @@ function renderTeamBaseline() {
         <div class="team-banner-sub">${fullName}</div>
       </div>
       <div class="team-banner-stats">
-        <div class="team-banner-stat"><div class="tbs-label">OFF</div><div class="tbs-val" id="banner-off">${rating.off >= 0 ? '+' : ''}${rating.off.toFixed(1)}</div></div>
-        <div class="team-banner-stat"><div class="tbs-label">DEF</div><div class="tbs-val" id="banner-def">${rating.def >= 0 ? '+' : ''}${rating.def.toFixed(1)}</div></div>
-        <div class="team-banner-stat"><div class="tbs-label">Total</div><div class="tbs-val" id="banner-total-rating">${rating.total >= 0 ? '+' : ''}${rating.total.toFixed(1)}</div></div>
+        <div class="team-banner-stat"><div class="tbs-label">OFF</div><div class="tbs-val">${rating.off >= 0 ? '+' : ''}${rating.off.toFixed(1)} <span style="font-size:10px;opacity:.7;">#${offRank}</span></div></div>
+        <div class="team-banner-stat"><div class="tbs-label">DEF</div><div class="tbs-val">${rating.def >= 0 ? '+' : ''}${rating.def.toFixed(1)} <span style="font-size:10px;opacity:.7;">#${defRank}</span></div></div>
+        <div class="team-banner-stat"><div class="tbs-label">Total</div><div class="tbs-val">${rating.total >= 0 ? '+' : ''}${rating.total.toFixed(1)} <span style="font-size:10px;opacity:.7;">#${totalRank}</span></div></div>
         <div class="team-banner-stat"><div class="tbs-label">Total Min</div><div class="tbs-val" id="banner-total">0</div></div>
       </div>
     </div>`;
