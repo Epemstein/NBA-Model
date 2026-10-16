@@ -589,54 +589,56 @@ def fetch_schedule(target_date=None):
     """
     today = target_date or today_et()
 
-    # Try scoreboardv3 first (has gameLabel for preseason filtering)
+    # Use ESPN API — doesn't block cloud IPs, reliable
+    espn_date = today.replace('-', '')
     try:
-        r = _nba_get('https://stats.nba.com/stats/scoreboardv3',
-                     params={'GameDate': today, 'LeagueID': '00'}, timeout=15)
-        data = r.json()
-        source = 'v3'
+        r = requests.get(
+            f'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates={espn_date}',
+            timeout=15)
+        r.raise_for_status()
+        espn_data = r.json()
+        espn_events = espn_data.get('events', [])
+        print(f'ESPN schedule: {len(espn_events)} games')
     except Exception as e:
-        print(f'Scoreboard v3 failed ({e}), trying CDN...')
-        try:
-            url = 'https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json'
-            r = _nba_get(url, timeout=15)
-            data = r.json()
-            source = 'cdn'
-        except Exception as e2:
-            print(f'NBA CDN also failed ({e2}), trying Firestore cache...')
-            if db:
-                snap = db.collection('nba_slate').document(today).get()
-                if snap.exists:
-                    cached = snap.to_dict()
-                    if cached.get('games'):
-                        print(f'Schedule loaded from Firestore cache ({len(cached["games"])} games)')
-                        return cached['games']
-            raise
+        print(f'ESPN failed ({e}), trying Firestore cache...')
+        if db:
+            snap = db.collection('nba_slate').document(today).get()
+            if snap.exists:
+                cached = snap.to_dict()
+                if cached.get('games'):
+                    print(f'Schedule loaded from Firestore cache ({len(cached["games"])} games)')
+                    return cached['games']
+        raise
+
+    # ESPN team abbreviation mapping
+    ESPN_ABR_MAP = {'GS': 'GSW', 'SA': 'SAS', 'NY': 'NYK', 'NO': 'NOP', 'WSH': 'WAS', 'PHX': 'PHX', 'UTAH': 'UTA'}
 
     games = []
-    for g in data.get('scoreboard', {}).get('games', []):
-        # Tag preseason games but include them
-        game_label = g.get('gameLabel', '')
-        game_id = g.get('gameId', '')
-        is_preseason = game_label.lower() == 'preseason' or game_id.startswith('001')
+    for ev in espn_events:
+        comps = ev.get('competitions', [{}])[0]
+        competitors = comps.get('competitors', [])
+        away_comp = next((c for c in competitors if c.get('homeAway') == 'away'), {})
+        home_comp = next((c for c in competitors if c.get('homeAway') == 'home'), {})
 
-        away_id = g['awayTeam']['teamId']
-        home_id = g['homeTeam']['teamId']
-        aw = NBA_ID_TO_ABR.get(away_id, g['awayTeam'].get('teamTricode', ''))
-        hw = NBA_ID_TO_ABR.get(home_id, g['homeTeam'].get('teamTricode', ''))
+        aw_raw = away_comp.get('team', {}).get('abbreviation', '')
+        hw_raw = home_comp.get('team', {}).get('abbreviation', '')
+        aw = ESPN_ABR_MAP.get(aw_raw, aw_raw)
+        hw = ESPN_ABR_MAP.get(hw_raw, hw_raw)
 
-        game_time = g.get('gameTimeUTC', '')
-        game_status = g.get('gameStatusText', '')
+        game_time = ev.get('date', '')
+        game_status = ev.get('status', {}).get('type', {}).get('shortDetail', '')
+        season_type = ev.get('season', {}).get('type', 0)  # 1=preseason, 2=regular, 3=postseason
+        is_preseason = season_type == 1
 
         games.append({
-            'id': g.get('gameId', ''),
+            'id': ev.get('id', ''),
             'away': aw,
             'home': hw,
             'away_name': ABR_TO_NAME.get(aw, aw),
             'home_name': ABR_TO_NAME.get(hw, hw),
             'game_time_utc': game_time,
             'game_time_et': fmt_time_et(game_time) if game_time else game_status,
-            'status': g.get('gameStatus', 1),  # 1=scheduled, 2=in progress, 3=final
+            'status': 1,
             'status_text': game_status,
             'is_preseason': is_preseason,
             # Model outputs (filled later)
