@@ -1449,92 +1449,95 @@ function renderOddsSummary() {
   if (!STATE.games.length) { thead.innerHTML = ''; tbody.innerHTML = ''; return; }
 
   if (_oddsTab === 'spread') {
-    thead.innerHTML = '<tr><th>Game</th><th>Team</th><th>Line</th><th>Price</th><th>MDL</th><th>Edge</th><th>Avail</th></tr>';
+    thead.innerHTML = '<tr><th>Game</th><th></th><th>Model</th><th>Line</th><th>Edge</th><th>Price</th><th>Avail</th></tr>';
     let html = '';
     for (const g of STATE.games) {
       const edge = g.spread_edge;
+      const awLogo = `<img src="${teamLogo(g.away)}" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;" onerror="this.style.display='none'" />`;
+      const hwLogo = `<img src="${teamLogo(g.home)}" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;" onerror="this.style.display='none'" />`;
       html += `<tr style="border-bottom:none;">
         <td rowspan="2" style="font-family:var(--sans);font-weight:600;font-size:10px;vertical-align:middle;border-bottom:2px solid var(--border);white-space:nowrap;">
-          ${g.away} @<br>${g.home}<br><span style="color:var(--muted);font-weight:400;font-size:9px;">${g.game_time_et || ''}</span>
+          ${awLogo} @<br>${hwLogo}<br><span style="color:var(--muted);font-weight:400;font-size:9px;">${g.game_time_et || ''}</span>
         </td>
-        <td style="font-family:var(--sans);font-size:10px;">${g.away}</td>
-        <td>${g.book_spread != null ? fmtSpread(-g.book_spread) : '—'}</td>
-        <td style="color:var(--accent);font-size:10px;">${fmtProbML(g.away_spread_price)}</td>
-        <td style="color:var(--accent)">${g.proj_spread != null ? fmtSpread(-g.proj_spread) : '—'}</td>
+        <td style="font-size:10px;">${awLogo}</td>
+        <td style="color:var(--accent);font-family:var(--mono);">${g.proj_spread != null ? fmtSpread(-g.proj_spread) : '—'}</td>
+        <td style="font-family:var(--mono);">${g.book_spread != null ? fmtSpread(-g.book_spread) : '—'}</td>
         <td>${edge != null && edge > 0 ? `<span class="edge-chip ${edgeClass(edge)}">${edge.toFixed(1)}</span>` : ''}</td>
+        <td style="color:var(--accent);font-size:10px;">${fmtProbML(g.away_spread_price)}</td>
         <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.away_spread_fill)}</td>
       </tr>`;
       html += `<tr style="border-bottom:2px solid var(--border);">
-        <td style="font-family:var(--sans);font-size:10px;font-weight:600;">${g.home}</td>
-        <td style="font-weight:600;">${g.book_spread != null ? fmtSpread(g.book_spread) : '—'}</td>
-        <td style="color:var(--accent);font-size:10px;">${fmtProbML(g.home_spread_price)}</td>
-        <td style="color:var(--accent);font-weight:600;">${g.proj_spread != null ? fmtSpread(g.proj_spread) : '—'}</td>
+        <td style="font-size:10px;">${hwLogo}</td>
+        <td style="color:var(--accent);font-family:var(--mono);font-weight:600;">${g.proj_spread != null ? fmtSpread(g.proj_spread) : '—'}</td>
+        <td style="font-family:var(--mono);font-weight:600;">${g.book_spread != null ? fmtSpread(g.book_spread) : '—'}</td>
         <td>${edge != null && edge < 0 ? `<span class="edge-chip ${edgeClass(edge)}">${Math.abs(edge).toFixed(1)}</span>` : ''}</td>
+        <td style="color:var(--accent);font-size:10px;">${fmtProbML(g.home_spread_price)}</td>
         <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.home_spread_fill)}</td>
       </tr>`;
     }
     tbody.innerHTML = html;
   } else if (_oddsTab === 'ml') {
-    thead.innerHTML = '<tr><th>Game</th><th>Team</th><th>Book</th><th>Model</th><th>Win%</th><th>Edge</th><th>Avail</th></tr>';
+    thead.innerHTML = '<tr><th>Game</th><th></th><th>Model</th><th>Book</th><th>Edge</th><th>Win%</th><th>Avail</th></tr>';
     let html = '';
     for (const g of STATE.games) {
-      // Book ML from Novig price (probability → American)
       const awBookProb = g.away_ml_price;
       const hwBookProb = g.home_ml_price;
       const awBookML = awBookProb != null ? fmtML(probToML(awBookProb)) : '—';
       const hwBookML = hwBookProb != null ? fmtML(probToML(hwBookProb)) : '—';
-      // Model ML from spread
       const awModelProb = g.proj_spread != null ? spreadToWinProb(-g.proj_spread) : null;
       const hwModelProb = g.proj_spread != null ? spreadToWinProb(g.proj_spread) : null;
       const awModelML = awModelProb != null ? fmtML(probToML(awModelProb)) : '—';
       const hwModelML = hwModelProb != null ? fmtML(probToML(hwModelProb)) : '—';
-      // Edge in probability points
       const awEdge = (awModelProb != null && awBookProb != null) ? Math.round((awModelProb - awBookProb) * 1000) / 10 : null;
       const hwEdge = (hwModelProb != null && hwBookProb != null) ? Math.round((hwModelProb - hwBookProb) * 1000) / 10 : null;
+      const awL = `<img src="${teamLogo(g.away)}" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;" onerror="this.style.display='none'" />`;
+      const hwL = `<img src="${teamLogo(g.home)}" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;" onerror="this.style.display='none'" />`;
 
       html += `<tr style="border-bottom:none;">
         <td rowspan="2" style="font-family:var(--sans);font-weight:600;font-size:10px;vertical-align:middle;border-bottom:2px solid var(--border);white-space:nowrap;">
-          ${g.away} @<br>${g.home}<br><span style="color:var(--muted);font-weight:400;font-size:9px;">${g.game_time_et || ''}</span>
+          ${awL} @<br>${hwL}<br><span style="color:var(--muted);font-weight:400;font-size:9px;">${g.game_time_et || ''}</span>
         </td>
-        <td style="font-family:var(--sans);font-size:10px;">${g.away}</td>
-        <td style="font-family:var(--mono);">${awBookML}</td>
+        <td>${awL}</td>
         <td style="font-family:var(--mono);color:var(--accent);">${awModelML}</td>
-        <td style="font-size:10px;color:var(--text2);">${awModelProb != null ? (awModelProb*100).toFixed(0)+'%' : '—'}</td>
+        <td style="font-family:var(--mono);">${awBookML}</td>
         <td>${awEdge != null && awEdge > 1 ? `<span class="edge-chip ${awEdge>=5?'hi':awEdge>=2?'mid':'lo'}">${awEdge.toFixed(1)}%</span>` : ''}</td>
+        <td style="font-size:10px;color:var(--text2);">${awModelProb != null ? (awModelProb*100).toFixed(0)+'%' : '—'}</td>
         <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.away_ml_fill)}</td>
       </tr>`;
       html += `<tr style="border-bottom:2px solid var(--border);">
-        <td style="font-family:var(--sans);font-size:10px;font-weight:600;">${g.home}</td>
-        <td style="font-family:var(--mono);font-weight:600;">${hwBookML}</td>
+        <td>${hwL}</td>
         <td style="font-family:var(--mono);color:var(--accent);font-weight:600;">${hwModelML}</td>
-        <td style="font-size:10px;color:var(--text2);font-weight:600;">${hwModelProb != null ? (hwModelProb*100).toFixed(0)+'%' : '—'}</td>
+        <td style="font-family:var(--mono);font-weight:600;">${hwBookML}</td>
         <td>${hwEdge != null && hwEdge > 1 ? `<span class="edge-chip ${hwEdge>=5?'hi':hwEdge>=2?'mid':'lo'}">${hwEdge.toFixed(1)}%</span>` : ''}</td>
+        <td style="font-size:10px;color:var(--text2);font-weight:600;">${hwModelProb != null ? (hwModelProb*100).toFixed(0)+'%' : '—'}</td>
         <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.home_ml_fill)}</td>
       </tr>`;
     }
     tbody.innerHTML = html;
   } else {
-    thead.innerHTML = '<tr><th>Game</th><th>Side</th><th>Line</th><th>Price</th><th>MDL</th><th>Edge</th><th>Avail</th></tr>';
+    thead.innerHTML = '<tr><th>Game</th><th>Side</th><th>Model</th><th>Line</th><th>Edge</th><th>Price</th><th>Avail</th></tr>';
     let html = '';
     for (const g of STATE.games) {
       const edge = g.total_edge;
+      const awL = `<img src="${teamLogo(g.away)}" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;" onerror="this.style.display='none'" />`;
+      const hwL = `<img src="${teamLogo(g.home)}" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;" onerror="this.style.display='none'" />`;
       html += `<tr style="border-bottom:none;">
         <td rowspan="2" style="font-family:var(--sans);font-weight:600;font-size:10px;vertical-align:middle;border-bottom:2px solid var(--border);white-space:nowrap;">
-          ${g.away} @<br>${g.home}<br><span style="color:var(--muted);font-weight:400;font-size:9px;">${g.game_time_et || ''}</span>
+          ${awL} @<br>${hwL}<br><span style="color:var(--muted);font-weight:400;font-size:9px;">${g.game_time_et || ''}</span>
         </td>
         <td style="font-family:var(--sans);font-size:10px;">Over</td>
-        <td>${g.book_total != null ? g.book_total : '—'}</td>
-        <td style="color:var(--accent);font-size:10px;">${fmtProbML(g.over_price)}</td>
-        <td style="color:var(--accent)">${g.proj_total != null ? g.proj_total.toFixed(1) : '—'}</td>
+        <td style="color:var(--accent);font-family:var(--mono);">${g.proj_total != null ? g.proj_total.toFixed(1) : '—'}</td>
+        <td style="font-family:var(--mono);">${g.book_total != null ? g.book_total : '—'}</td>
         <td>${edge != null && edge > 0 ? `<span class="edge-chip ${edgeClass(edge)}">${edge.toFixed(1)}</span>` : ''}</td>
+        <td style="color:var(--accent);font-size:10px;">${fmtProbML(g.over_price)}</td>
         <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.over_fill)}</td>
       </tr>`;
       html += `<tr style="border-bottom:2px solid var(--border);">
         <td style="font-family:var(--sans);font-size:10px;font-weight:600;">Under</td>
-        <td style="font-weight:600;">${g.book_total != null ? g.book_total : '—'}</td>
-        <td style="color:var(--accent);font-size:10px;">${fmtProbML(g.under_price)}</td>
-        <td style="color:var(--accent);font-weight:600;">${g.proj_total != null ? g.proj_total.toFixed(1) : '—'}</td>
+        <td style="color:var(--accent);font-family:var(--mono);font-weight:600;">${g.proj_total != null ? g.proj_total.toFixed(1) : '—'}</td>
+        <td style="font-family:var(--mono);font-weight:600;">${g.book_total != null ? g.book_total : '—'}</td>
         <td>${edge != null && edge < 0 ? `<span class="edge-chip ${edgeClass(edge)}">${Math.abs(edge).toFixed(1)}</span>` : ''}</td>
+        <td style="color:var(--accent);font-size:10px;">${fmtProbML(g.under_price)}</td>
         <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.under_fill)}</td>
       </tr>`;
     }
