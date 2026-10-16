@@ -509,6 +509,7 @@ input[type=number] { -moz-appearance: textfield; }
   <button data-tab="picks">Picks</button>
   <button data-tab="kelly">Kelly Tracker</button>
   <button data-tab="teams">Teams</button>
+  <button data-tab="players">Players</button>
   <button data-tab="standings">Standings</button>
   <button data-tab="history">History</button>
   <button data-tab="settings">Settings</button>
@@ -696,6 +697,38 @@ input[type=number] { -moz-appearance: textfield; }
 </div>
 
 <!-- ═══════════ SETTINGS PANEL ═══════════ -->
+<!-- ═══════════ PLAYERS PANEL ═══════════ -->
+<div class="panel" id="panel-players">
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <div class="ct" style="margin:0;padding:0;border:none;">All Players (DARKO)</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input id="player-search" type="text" placeholder="Search player..." style="font-size:12px;padding:5px 10px;width:180px;" oninput="filterPlayers()" />
+        <select id="player-team-filter" onchange="filterPlayers()" style="font-size:12px;padding:5px;">
+          <option value="">All Teams</option>
+        </select>
+      </div>
+    </div>
+    <div class="sw" style="max-height:700px;">
+      <table class="dt" id="players-all-table" style="font-size:12px;">
+        <thead><tr>
+          <th style="cursor:pointer;" onclick="sortPlayers('name')">Player</th>
+          <th style="width:50px;cursor:pointer;" onclick="sortPlayers('team')">Team</th>
+          <th style="width:50px;text-align:right;cursor:pointer;" onclick="sortPlayers('dpm')">DPM</th>
+          <th style="width:50px;text-align:right;cursor:pointer;" onclick="sortPlayers('o_dpm')">OFF</th>
+          <th style="width:50px;text-align:right;cursor:pointer;" onclick="sortPlayers('d_dpm')">DEF</th>
+          <th style="width:40px;text-align:right;">Pos</th>
+          <th style="width:70px;text-align:right;font-size:9px;">NBA ID</th>
+        </tr></thead>
+        <tbody id="players-all-body">
+          <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px;">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="margin-top:6px;font-size:10px;color:var(--muted);" id="players-count"></div>
+  </div>
+</div>
+
 <!-- ═══════════ STANDINGS PANEL ═══════════ -->
 <div class="panel" id="panel-standings">
   <div class="card">
@@ -914,6 +947,9 @@ document.querySelectorAll('#nav button').forEach(btn => {
     document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+    // Lazy load tabs
+    if (btn.dataset.tab === 'players' && !_allPlayers.length) loadAllPlayers();
+    if (btn.dataset.tab === 'standings' && !_standingsData.length) loadStandings();
   });
 });
 
@@ -2513,6 +2549,77 @@ function saveRoster(silent) {
   if (!silent) closeRoster();
 }
 
+// ── Players Tab ─────────────────────────────────────────────────────────
+let _allPlayers = [];
+let _playerSort = 'dpm';
+let _playerSortDir = -1;
+
+function loadAllPlayers() {
+  // Load all rosters (already in Firestore from pipeline)
+  const teams = Object.keys(COLORS);
+  Promise.all(teams.map(t =>
+    fbDb.collection('nba_rosters').doc(t).get().then(s => {
+      if (!s.exists) return [];
+      return (s.data().players || []).map(p => ({...p, team: t}));
+    })
+  )).then(results => {
+    _allPlayers = results.flat();
+    // Populate team filter
+    const sel = document.getElementById('player-team-filter');
+    const existingTeams = [...new Set(_allPlayers.map(p => p.team))].sort();
+    sel.innerHTML = '<option value="">All Teams</option>' +
+      existingTeams.map(t => `<option value="${t}">${t}</option>`).join('');
+    renderAllPlayers();
+  });
+}
+
+function sortPlayers(col) {
+  if (_playerSort === col) _playerSortDir *= -1;
+  else { _playerSort = col; _playerSortDir = col === 'name' || col === 'team' ? 1 : -1; }
+  renderAllPlayers();
+}
+
+function filterPlayers() { renderAllPlayers(); }
+
+function renderAllPlayers() {
+  const search = (document.getElementById('player-search')?.value || '').toLowerCase();
+  const teamFilter = document.getElementById('player-team-filter')?.value || '';
+
+  let data = [..._allPlayers];
+  if (search) data = data.filter(p => p.name.toLowerCase().includes(search));
+  if (teamFilter) data = data.filter(p => p.team === teamFilter);
+
+  data.sort((a, b) => {
+    let va = a[_playerSort], vb = b[_playerSort];
+    if (typeof va === 'string') return _playerSortDir * (va||'').localeCompare(vb||'');
+    return _playerSortDir * ((va||0) - (vb||0));
+  });
+
+  const tbody = document.getElementById('players-all-body');
+  const placeholder = `data:image/svg+xml,<%3Fxml version=%221.0%22%3F><svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2224%22 height=%2218%22><rect fill=%22%23ddd%22 width=%2224%22 height=%2218%22/><circle cx=%2212%22 cy=%227%22 r=%223.5%22 fill=%22%23bbb%22/><ellipse cx=%2212%22 cy=%2218%22 rx=%226%22 ry=%225%22 fill=%22%23bbb%22/></svg>`;
+
+  tbody.innerHTML = data.slice(0, 200).map(p => {
+    const hs = p.nba_id ? `<img src="${playerHeadshot(p.nba_id)}" style="width:22px;height:16px;object-fit:cover;object-position:top;border-radius:2px;background:#e0e0e0;flex-shrink:0;" onerror="this.src='${placeholder}'" />` : '';
+    const logo = `<img src="${teamLogo(p.team)}" style="width:16px;height:16px;object-fit:contain;vertical-align:middle;" onerror="this.style.display='none'" />`;
+    return `<tr style="height:30px;">
+      <td style="padding:3px 6px;">
+        <div style="display:flex;align-items:center;gap:5px;">
+          ${hs}<span style="font-weight:500;">${p.name}</span>
+        </div>
+      </td>
+      <td style="padding:3px 4px;">${logo} ${p.team}</td>
+      <td style="text-align:right;font-family:var(--mono);color:${dpmColor(p.dpm)};font-weight:600;padding:3px 6px;">${fmtDpm(p.dpm)}</td>
+      <td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--text2);padding:3px 4px;">${fmtDpm(p.o_dpm)}</td>
+      <td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--text2);padding:3px 4px;">${fmtDpm(p.d_dpm)}</td>
+      <td style="text-align:right;font-size:11px;color:var(--muted);padding:3px 4px;">${p.pos||''}</td>
+      <td style="text-align:right;font-family:var(--mono);font-size:9px;color:var(--muted);padding:3px 4px;">${p.nba_id||''}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('players-count').textContent =
+    `Showing ${Math.min(data.length, 200)} of ${data.length} players (${_allPlayers.length} total)`;
+}
+
 // ── Standings ────────────────────────────────────────────────────────────
 const EAST = new Set(['ATL','BOS','BKN','CHA','CHI','CLE','DET','IND','MIA','MIL','NYK','ORL','PHI','TOR','WAS']);
 const WEST = new Set(['DAL','DEN','GSW','HOU','LAC','LAL','MEM','MIN','NOP','OKC','PHX','POR','SAC','SAS','UTA']);
@@ -2769,7 +2876,6 @@ async function initApp() {
   renderPicks();
   initTeamSelector();
   setupHistoryListener();
-  loadStandings();
   updateKelly();
 
   // Check Firestore connection
