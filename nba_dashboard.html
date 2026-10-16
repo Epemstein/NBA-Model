@@ -2245,9 +2245,8 @@ function openTeamTab(team) {
   loadTeamBaseline();
 }
 
-// ── Client-side model recalculation ─────────────────────────────────────
-// recalcGamesWithBaselines removed — pipeline is the single source of truth
-function _removed_recalc() {
+// [DEAD CODE REMOVED — recalcGamesWithBaselines]
+function _dead() { /* placeholder to maintain brace count */
   // Load all saved baselines and apply to game player lists + recalc ratings
   const teams = new Set();
   for (const g of STATE.games) { teams.add(g.away); teams.add(g.home); }
@@ -2660,8 +2659,15 @@ function saveRoster(silent) {
       g.proj_total = Math.round((gVal(g,"away_proj") + gVal(g,"home_proj")) * 10) / 10;
       if (g.book_spread != null) g.spread_edge = Math.round((gVal(g,"proj_spread") - g.book_spread) * 10) / 10;
       if (g.book_total != null) g.total_edge = Math.round((gVal(g,"proj_total") - g.book_total) * 10) / 10;
-      // Game override saved — projections update on next pipeline run
-      // For now, update player list display
+      // Update game player minutes from modal data and recalculate
+      const side = _rosterState.side;
+      const playerList = g[`${side}_players`] || [];
+      for (const p of playerList) {
+        const edited = _rosterState.players.find(ep => ep.name === p.name);
+        if (edited) p.min = edited.pg + edited.sg + edited.sf + edited.pf + edited.c;
+      }
+      playerList.sort((a, b) => b.min - a.min);
+      buildRatingLookups(); recomputeProjections();
       renderGames();
       renderOddsSummary();
       updateStrip();

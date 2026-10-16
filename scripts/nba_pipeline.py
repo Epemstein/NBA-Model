@@ -1076,66 +1076,28 @@ def run(override_date=None):
         game_minutes.update(aw_mins)
         game_minutes.update(hw_mins)
 
-        # Compute with DARKO
+        # Build player lists with DARKO + LEBRON ratings (NO projections — dashboard does the math)
         aw_off, aw_def, aw_players = compute_team_rating(aw, darko, game_minutes)
         hw_off, hw_def, hw_players = compute_team_rating(hw, darko, game_minutes)
-        aw_r = {'off': aw_off, 'def': aw_def, 'players': aw_players}
-        hw_r = {'off': hw_off, 'def': hw_def, 'players': hw_players}
         team_ratings[aw] = {'off': aw_off, 'def': aw_def}
         team_ratings[hw] = {'off': hw_off, 'def': hw_def}
-        print(f'  {aw} (DARKO): OFF={aw_off:+.2f} DEF={aw_def:+.2f} ({len(aw_players)} players)')
-        print(f'  {hw} (DARKO): OFF={hw_off:+.2f} DEF={hw_def:+.2f} ({len(hw_players)} players)')
 
-        aw_pace = team_paces.get(aw, league_avg_pace)
-        hw_pace = team_paces.get(hw, league_avg_pace)
-
-        proj = project_game(
-            aw_r['off'], aw_r['def'],
-            hw_r['off'], hw_r['def'],
-            aw_pace, hw_pace,
-            league_avg_pace, league_avg_ortg,
-        )
-
-        # DARKO projections
-        gm['away_proj'] = proj['away_pts']
-        gm['home_proj'] = proj['home_pts']
-        gm['proj_spread'] = proj['spread']
-        gm['proj_total'] = proj['total']
-
-        # Compute with LEBRON (if available)
+        # Add LEBRON DPM to each player
         if lebron:
-            lb_aw_off, lb_aw_def, lb_aw_players = compute_team_rating(aw, lebron, game_minutes)
-            lb_hw_off, lb_hw_def, lb_hw_players = compute_team_rating(hw, lebron, game_minutes)
-            lb_proj = project_game(
-                lb_aw_off, lb_aw_def, lb_hw_off, lb_hw_def,
-                aw_pace, hw_pace, league_avg_pace, league_avg_ortg,
-            )
-            gm['lb_away_proj'] = lb_proj['away_pts']
-            gm['lb_home_proj'] = lb_proj['home_pts']
-            gm['lb_proj_spread'] = lb_proj['spread']
-            gm['lb_proj_total'] = lb_proj['total']
-            gm['lb_away_off'] = lb_aw_off
-            gm['lb_away_def'] = lb_aw_def
-            gm['lb_home_off'] = lb_hw_off
-            gm['lb_home_def'] = lb_hw_def
-            gm['lb_away_pp100'] = lb_proj['away_pp100']
-            gm['lb_home_pp100'] = lb_proj['home_pp100']
-            # LEBRON player DPM for display
             for p in aw_players:
                 lb = lebron.get(f'id:{p.get("nba_id","")}') or lebron.get(norm_name(p['name']))
                 p['lb_dpm'] = round(lb['dpm'], 1) if lb else None
             for p in hw_players:
                 lb = lebron.get(f'id:{p.get("nba_id","")}') or lebron.get(norm_name(p['name']))
                 p['lb_dpm'] = round(lb['dpm'], 1) if lb else None
-        gm['matchup_pace'] = proj['matchup_pace']
-        gm['away_off'] = aw_r['off']
-        gm['away_def'] = aw_r['def']
-        gm['home_off'] = hw_r['off']
-        gm['home_def'] = hw_r['def']
-        gm['away_pp100'] = proj['away_pp100']
-        gm['home_pp100'] = proj['home_pp100']
 
-        # Attach player rosters (top 10 by minutes)
+        # Pace for this matchup
+        aw_pace = team_paces.get(aw, league_avg_pace)
+        hw_pace = team_paces.get(hw, league_avg_pace)
+        raw_matchup_pace = aw_pace + hw_pace - league_avg_pace
+        gm['matchup_pace'] = round(raw_matchup_pace, 1)
+
+        # Attach player rosters with ratings
         gm['away_players'] = [
             {'name': p['name'], 'min': p['minutes'],
              'dpm': round(p['dpm'], 1) if p['dpm'] is not None else None,
@@ -1143,7 +1105,7 @@ def run(override_date=None):
              'd_dpm': round(p['d_dpm'], 1) if p['d_dpm'] is not None else None,
              'lb_dpm': p.get('lb_dpm'),
              'nba_id': p.get('nba_id', '')}
-            for p in aw_r.get('players', [])
+            for p in aw_players
         ]
         gm['home_players'] = [
             {'name': p['name'], 'min': p['minutes'],
@@ -1152,99 +1114,16 @@ def run(override_date=None):
              'd_dpm': round(p['d_dpm'], 1) if p['d_dpm'] is not None else None,
              'lb_dpm': p.get('lb_dpm'),
              'nba_id': p.get('nba_id', '')}
-            for p in hw_r.get('players', [])
+            for p in hw_players
         ]
 
+        aw_min = sum(p['minutes'] for p in aw_players)
+        hw_min = sum(p['minutes'] for p in hw_players)
         print(f'\n{aw} @ {hw} | {gm["game_time_et"]}')
-        print(f'  {aw}: OFF={aw_r["off"]:+.1f} DEF={aw_r["def"]:+.1f} → {proj["away_pts"]} pts')
-        print(f'  {hw}: OFF={hw_r["off"]:+.1f} DEF={hw_r["def"]:+.1f} → {proj["home_pts"]} pts')
-        print(f'  Pace: {proj["matchup_pace"]} | Spread: {fmt_spread(proj["spread"])} | Total: {proj["total"]}')
+        print(f'  {aw}: OFF={aw_off:+.2f} DEF={aw_def:+.2f} ({len(aw_players)} players, {aw_min:.0f} min)')
+        print(f'  {hw}: OFF={hw_off:+.2f} DEF={hw_def:+.2f} ({len(hw_players)} players, {hw_min:.0f} min)')
 
-        # Compare to odds
-        if gm['book_spread'] is not None:
-            # book_spread is home team spread (e.g. -5.5 means home favored by 5.5)
-            # proj_spread is away_pts - home_pts (negative = home favored)
-            # Model home spread = proj_spread (already in the right convention)
-            # Edge = how much the model disagrees
-            # If model says home -3 and book says home -7, model likes home less → away edge = 4 pts
-            model_home_spread = proj['spread']  # negative = home favored
-            book_home_spread = gm['book_spread']
-            # Spread edge: positive = model favors away more than book
-            gm['spread_edge'] = round(model_home_spread - book_home_spread, 1)
-            print(f'  Book spread: {fmt_spread(book_home_spread)} | Model: {fmt_spread(model_home_spread)} | Edge: {gm["spread_edge"]:+.1f}')
-
-        if gm['book_total'] is not None:
-            gm['total_edge'] = round(proj['total'] - gm['book_total'], 1)
-            print(f'  Book total: {gm["book_total"]} | Model: {proj["total"]} | Edge: {gm["total_edge"]:+.1f}')
-
-        # LEBRON edges
-        if lebron:
-            if gm.get('book_spread') is not None and gm.get('lb_proj_spread') is not None:
-                gm['lb_spread_edge'] = round(gm['lb_proj_spread'] - gm['book_spread'], 1)
-            if gm.get('book_total') is not None and gm.get('lb_proj_total') is not None:
-                gm['lb_total_edge'] = round(gm['lb_proj_total'] - gm['book_total'], 1)
-
-        # Check for alerts
-        date_fmt = datetime.datetime.strptime(date, '%Y-%m-%d').strftime('%m/%d')
-
-        # Spread alert
-        if gm['spread_edge'] is not None and abs(gm['spread_edge']) >= EDGE_THRESHOLD:
-            edge = gm['spread_edge']
-            if edge > 0:
-                # Model favors away more than book → bet away (take away spread)
-                pick_team = aw
-                pick_side = f'{aw} {fmt_spread(-gm["book_spread"])}'
-            else:
-                # Model favors home more than book → bet home
-                pick_team = hw
-                pick_side = f'{hw} {fmt_spread(gm["book_spread"])}'
-
-            key = f'{pick_team}_spread'
-            if not already_notified(date, key):
-                ku = calc_kelly(abs(edge))
-                hk_pct = min(ku * kelly_frac, kelly_max)
-                risk = round(hk_pct / 100 * bankroll)
-                win = round(risk * 0.909)  # -110 payout
-
-                alerts.append({
-                    'type': 'spread',
-                    'pick': pick_side,
-                    'edge': abs(edge),
-                    'hk_pct': round(hk_pct, 1),
-                    'risk': risk,
-                    'win': win,
-                    'matchup': f'{aw} @ {hw}',
-                    'game_time': gm['game_time_et'],
-                    'date_fmt': date_fmt,
-                    'date': date,
-                    'key': key,
-                })
-
-        # Total alert
-        if gm['total_edge'] is not None and abs(gm['total_edge']) >= EDGE_THRESHOLD:
-            edge = gm['total_edge']
-            pick_side = f'{"Over" if edge > 0 else "Under"} {gm["book_total"]}'
-
-            key = f'{aw}{hw}_total'
-            if not already_notified(date, key):
-                ku = calc_kelly(abs(edge))
-                hk_pct = min(ku * kelly_frac, kelly_max)
-                risk = round(hk_pct / 100 * bankroll)
-                win = round(risk * 0.909)
-
-                alerts.append({
-                    'type': 'total',
-                    'pick': pick_side,
-                    'edge': abs(edge),
-                    'hk_pct': round(hk_pct, 1),
-                    'risk': risk,
-                    'win': win,
-                    'matchup': f'{aw} @ {hw}',
-                    'game_time': gm['game_time_et'],
-                    'date_fmt': date_fmt,
-                    'date': date,
-                    'key': key,
-                })
+        # Projections and alerts computed client-side by the dashboard
 
     # 5. Write to Firestore
     if db:
