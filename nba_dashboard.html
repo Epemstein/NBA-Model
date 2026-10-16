@@ -2350,10 +2350,16 @@ function resetRoster() {
 }
 
 function saveRoster(silent) {
+  // Only save players that differ from baseline (don't save unchanged ones)
   const overrides = {};
   for (const p of _rosterState.players) {
-    overrides[p.name] = { pg: p.pg, sg: p.sg, sf: p.sf, pf: p.pf, c: p.c };
+    const baseMin = _rosterLastSnapshot[p.name] || 0;
+    const curMin = p.pg + p.sg + p.sf + p.pf + p.c;
+    if (curMin !== baseMin) {
+      overrides[p.name] = { pg: p.pg, sg: p.sg, sf: p.sf, pf: p.pf, c: p.c };
+    }
   }
+  if (!Object.keys(overrides).length && !silent) { closeRoster(); return; }
 
   const g = STATE.games[_rosterState.gameIdx];
   const key = `${selectedDate}_${g.away}_${g.home}_${_rosterState.team}`;
