@@ -249,6 +249,94 @@ def fetch_darko():
     return players
 
 
+# ── Fetch LEBRON ratings ─────────────────────────────────────────────────
+def fetch_lebron():
+    """Fetch LEBRON ratings from BBall Index via Fanspo API.
+    Returns same format as fetch_darko(): {norm_name: {name, dpm, o_dpm, d_dpm, pos, nba_id}}
+    LEBRON/O-LEBRON/D-LEBRON map to dpm/o_dpm/d_dpm for compatibility.
+    """
+    today = today_et()
+    if db:
+        try:
+            snap = db.collection('nba_lebron').document(today).get()
+            if snap.exists:
+                data = snap.to_dict()
+                if data.get('players'):
+                    print(f'LEBRON loaded from Firestore cache ({len(data["players"])} players)')
+                    result = {}
+                    for p in data['players']:
+                        result[norm_name(p['name'])] = p
+                        if p.get('nba_id'):
+                            result[f'id:{p["nba_id"]}'] = p
+                    return result
+        except Exception as e:
+            print(f'LEBRON cache miss: {e}')
+
+    print('Fetching LEBRON ratings from BBall Index...')
+    try:
+        season_year = _current_season().split('-')[0]
+        # LEBRON API uses end year (e.g. "2027" for 2026-27 season)
+        end_year = str(int(season_year) + 1)
+        # Try current season, fall back to previous
+        for yr in [end_year, season_year]:
+            r = requests.post(
+                'https://fanspo.com/bbi-role-explorer/api/lebron_dashboard_data',
+                json={'seasons': [yr], 'positions': [], 'offensiveArchetypes': [],
+                      'defensiveRoles': [], 'minMinutes': 0, 'teams': [],
+                      'playerRoles': [], 'minMpg': 0, 'seasonView': 'separate'},
+                headers={'Referer': 'https://fanspo.com/bbi-role-explorer/lebron'},
+                timeout=20
+            )
+            if r.ok:
+                api_players = r.json().get('players', [])
+                if api_players:
+                    print(f'LEBRON: using season {yr} ({len(api_players)} players)')
+                    break
+        else:
+            print('LEBRON: no data found')
+            return {}
+
+        pos_map = {'Center': 'C', 'Power Forward': 'PF', 'Small Forward': 'SF',
+                   'Shooting Guard': 'SG', 'Point Guard': 'PG'}
+
+        players = {}
+        raw_list = []
+        for p in api_players:
+            name = p.get('full_nm', '')
+            if not name:
+                continue
+            nba_id = str(int(p['nba_id'])) if p.get('nba_id') else ''
+            pos = pos_map.get(p.get('position', ''), p.get('position', ''))
+            entry = {
+                'name': name,
+                'dpm': round(p.get('LEBRON', 0), 2),
+                'o_dpm': round(p.get('O-LEBRON', 0), 2),
+                'd_dpm': round(p.get('D-LEBRON', 0), 2),
+                'pos': pos,
+                'nba_id': nba_id,
+            }
+            players[norm_name(name)] = entry
+            if nba_id:
+                players[f'id:{nba_id}'] = entry
+            raw_list.append(entry)
+
+        print(f'LEBRON: {len(raw_list)} players loaded')
+
+        if db and raw_list:
+            try:
+                db.collection('nba_lebron').document(today).set({
+                    'players': raw_list,
+                    'ts': firestore.SERVER_TIMESTAMP,
+                })
+            except Exception as e:
+                print(f'LEBRON cache write failed: {e}')
+
+        return players
+    except Exception as e:
+        print(f'LEBRON fetch failed: {e}')
+        return {}
+
+
 # ── NBA API params builder ───────────────────────────────────────────────
 def _nba_player_params(season, last_n=8):
     return {
@@ -925,6 +1013,13 @@ def run(override_date=None):
         print(f'FATAL: DARKO fetch failed: {e}')
         return
 
+    # Also fetch LEBRON for dual-rating support
+    lebron = {}
+    try:
+        lebron = fetch_lebron()
+    except Exception as e:
+        print(f'WARNING: LEBRON fetch failed ({e}), DARKO-only mode')
+
     try:
         player_minutes = fetch_player_minutes()
     except Exception as e:
@@ -1053,14 +1148,15 @@ def run(override_date=None):
         game_minutes.update(aw_mins)
         game_minutes.update(hw_mins)
 
+        # Compute with DARKO
         aw_off, aw_def, aw_players = compute_team_rating(aw, darko, game_minutes)
         hw_off, hw_def, hw_players = compute_team_rating(hw, darko, game_minutes)
         aw_r = {'off': aw_off, 'def': aw_def, 'players': aw_players}
         hw_r = {'off': hw_off, 'def': hw_def, 'players': hw_players}
         team_ratings[aw] = {'off': aw_off, 'def': aw_def}
         team_ratings[hw] = {'off': hw_off, 'def': hw_def}
-        print(f'  {aw}: OFF={aw_off:+.2f} DEF={aw_def:+.2f} ({len(aw_players)} players)')
-        print(f'  {hw}: OFF={hw_off:+.2f} DEF={hw_def:+.2f} ({len(hw_players)} players)')
+        print(f'  {aw} (DARKO): OFF={aw_off:+.2f} DEF={aw_def:+.2f} ({len(aw_players)} players)')
+        print(f'  {hw} (DARKO): OFF={hw_off:+.2f} DEF={hw_def:+.2f} ({len(hw_players)} players)')
 
         aw_pace = team_paces.get(aw, league_avg_pace)
         hw_pace = team_paces.get(hw, league_avg_pace)
@@ -1072,10 +1168,37 @@ def run(override_date=None):
             league_avg_pace, league_avg_ortg,
         )
 
+        # DARKO projections
         gm['away_proj'] = proj['away_pts']
         gm['home_proj'] = proj['home_pts']
         gm['proj_spread'] = proj['spread']
         gm['proj_total'] = proj['total']
+
+        # Compute with LEBRON (if available)
+        if lebron:
+            lb_aw_off, lb_aw_def, lb_aw_players = compute_team_rating(aw, lebron, game_minutes)
+            lb_hw_off, lb_hw_def, lb_hw_players = compute_team_rating(hw, lebron, game_minutes)
+            lb_proj = project_game(
+                lb_aw_off, lb_aw_def, lb_hw_off, lb_hw_def,
+                aw_pace, hw_pace, league_avg_pace, league_avg_ortg,
+            )
+            gm['lb_away_proj'] = lb_proj['away_pts']
+            gm['lb_home_proj'] = lb_proj['home_pts']
+            gm['lb_proj_spread'] = lb_proj['spread']
+            gm['lb_proj_total'] = lb_proj['total']
+            gm['lb_away_off'] = lb_aw_off
+            gm['lb_away_def'] = lb_aw_def
+            gm['lb_home_off'] = lb_hw_off
+            gm['lb_home_def'] = lb_hw_def
+            gm['lb_away_pp100'] = lb_proj['away_pp100']
+            gm['lb_home_pp100'] = lb_proj['home_pp100']
+            # LEBRON player DPM for display
+            for p in aw_players:
+                lb = lebron.get(f'id:{p.get("nba_id","")}') or lebron.get(norm_name(p['name']))
+                p['lb_dpm'] = round(lb['dpm'], 1) if lb else None
+            for p in hw_players:
+                lb = lebron.get(f'id:{p.get("nba_id","")}') or lebron.get(norm_name(p['name']))
+                p['lb_dpm'] = round(lb['dpm'], 1) if lb else None
         gm['matchup_pace'] = proj['matchup_pace']
         gm['away_off'] = aw_r['off']
         gm['away_def'] = aw_r['def']
@@ -1090,6 +1213,7 @@ def run(override_date=None):
              'dpm': round(p['dpm'], 1) if p['dpm'] is not None else None,
              'o_dpm': round(p['o_dpm'], 1) if p['o_dpm'] is not None else None,
              'd_dpm': round(p['d_dpm'], 1) if p['d_dpm'] is not None else None,
+             'lb_dpm': p.get('lb_dpm'),
              'nba_id': p.get('nba_id', '')}
             for p in aw_r.get('players', [])
         ]
@@ -1098,6 +1222,7 @@ def run(override_date=None):
              'dpm': round(p['dpm'], 1) if p['dpm'] is not None else None,
              'o_dpm': round(p['o_dpm'], 1) if p['o_dpm'] is not None else None,
              'd_dpm': round(p['d_dpm'], 1) if p['d_dpm'] is not None else None,
+             'lb_dpm': p.get('lb_dpm'),
              'nba_id': p.get('nba_id', '')}
             for p in hw_r.get('players', [])
         ]
@@ -1123,6 +1248,13 @@ def run(override_date=None):
         if gm['book_total'] is not None:
             gm['total_edge'] = round(proj['total'] - gm['book_total'], 1)
             print(f'  Book total: {gm["book_total"]} | Model: {proj["total"]} | Edge: {gm["total_edge"]:+.1f}')
+
+        # LEBRON edges
+        if lebron:
+            if gm.get('book_spread') is not None and gm.get('lb_proj_spread') is not None:
+                gm['lb_spread_edge'] = round(gm['lb_proj_spread'] - gm['book_spread'], 1)
+            if gm.get('book_total') is not None and gm.get('lb_proj_total') is not None:
+                gm['lb_total_edge'] = round(gm['lb_proj_total'] - gm['book_total'], 1)
 
         # Check for alerts
         date_fmt = datetime.datetime.strptime(date, '%Y-%m-%d').strftime('%m/%d')
@@ -1208,7 +1340,14 @@ def run(override_date=None):
                 temp_game_mins.update(t_mins)
                 t_off, t_def, _ = compute_team_rating(team_abr, darko, temp_game_mins)
                 total_min = sum(v['minutes'] for v in t_mins.values())
-                all_team_ratings[team_abr] = {'off': t_off, 'def': t_def, 'total': round(t_off + t_def, 2), 'min': round(total_min)}
+                entry = {'off': t_off, 'def': t_def, 'total': round(t_off + t_def, 2), 'min': round(total_min)}
+                # LEBRON team ratings
+                if lebron:
+                    lb_off, lb_def, _ = compute_team_rating(team_abr, lebron, temp_game_mins)
+                    entry['lb_off'] = lb_off
+                    entry['lb_def'] = lb_def
+                    entry['lb_total'] = round(lb_off + lb_def, 2)
+                all_team_ratings[team_abr] = entry
 
             db.collection('nba_slate').document(date).set({
                 'games': games_out,
