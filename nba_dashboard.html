@@ -2040,8 +2040,21 @@ function calcTeamRating(players) {
   let off = 0, def = 0;
   for (const p of players) {
     const w = ((p.pg+p.sg+p.sf+p.pf+p.c) / 48) * scale;
-    off += (p.o_dpm||0) * w;
-    def += (p.d_dpm||0) * w;
+    const dpm = pDpm(p);
+    if (_ratingSource === 'lebron' && dpm != null && dpm !== p.dpm) {
+      // Split LEBRON using DARKO o/d ratio
+      const dkO = p.o_dpm||0, dkD = p.d_dpm||0;
+      const dkAbs = Math.abs(dkO) + Math.abs(dkD);
+      if (dkAbs > 0) {
+        off += dpm * (Math.abs(dkO)/dkAbs) * (dkO>=0?1:-1) * w;
+        def += dpm * (Math.abs(dkD)/dkAbs) * (dkD>=0?1:-1) * w;
+      } else {
+        off += (dpm/2) * w; def += (dpm/2) * w;
+      }
+    } else {
+      off += (p.o_dpm||0) * w;
+      def += (p.d_dpm||0) * w;
+    }
   }
   return { off: Math.round(off*100)/100, def: Math.round(def*100)/100, total: Math.round((off+def)*100)/100 };
 }
