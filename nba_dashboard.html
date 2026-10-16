@@ -1802,10 +1802,59 @@ function hexToRgb(hex) {
   return `${parseInt(hex.substring(0,2),16)},${parseInt(hex.substring(2,4),16)},${parseInt(hex.substring(4,6),16)}`;
 }
 
+function calcTeamRating(players) {
+  const totalRaw = players.reduce((s, p) => s + (p.pg+p.sg+p.sf+p.pf+p.c) / 48, 0);
+  const scale = totalRaw > 0 ? 5.0 / totalRaw : 0;
+  let off = 0, def = 0;
+  for (const p of players) {
+    const w = ((p.pg+p.sg+p.sf+p.pf+p.c) / 48) * scale;
+    off += (p.o_dpm||0) * w;
+    def += (p.d_dpm||0) * w;
+  }
+  return { off: Math.round(off*100)/100, def: Math.round(def*100)/100, total: Math.round((off+def)*100)/100 };
+}
+
 function renderTeamBaseline() {
   const color = COLORS[_selectedTeam] || '#333';
   const fullName = FULL_NAMES[_selectedTeam] || _selectedTeam;
   const rgb = hexToRgb(color);
+
+  // Compute this team's rating
+  const rating = calcTeamRating(_teamPlayers);
+
+  // Load all team baselines to compute rankings
+  const allTeams = Object.keys(COLORS);
+  Promise.all(allTeams.map(t =>
+    Promise.all([
+      fbDb.collection('nba_baselines').doc(t).get(),
+      fbDb.collection('nba_rosters').doc(t).get(),
+    ]).then(([blSnap, roSnap]) => {
+      const bl = blSnap.exists ? blSnap.data().players || {} : {};
+      const roster = roSnap.exists ? roSnap.data().players || [] : [];
+      const players = roster.map(p => {
+        const sv = bl[p.name];
+        let pg=0,sg=0,sf=0,pf=0,c=0;
+        if (sv && typeof sv === 'object') { pg=sv.pg||0;sg=sv.sg||0;sf=sv.sf||0;pf=sv.pf||0;c=sv.c||0; }
+        return { pg,sg,sf,pf,c, o_dpm:p.o_dpm, d_dpm:p.d_dpm };
+      });
+      const r = calcTeamRating(players);
+      return { team: t, ...r };
+    })
+  )).then(rankings => {
+    rankings.sort((a,b) => b.off - a.off);
+    const offRank = rankings.findIndex(r => r.team === _selectedTeam) + 1;
+    rankings.sort((a,b) => b.def - a.def);
+    const defRank = rankings.findIndex(r => r.team === _selectedTeam) + 1;
+    rankings.sort((a,b) => b.total - a.total);
+    const totalRank = rankings.findIndex(r => r.team === _selectedTeam) + 1;
+
+    const offEl = document.getElementById('banner-off');
+    const defEl = document.getElementById('banner-def');
+    const totEl = document.getElementById('banner-total-rating');
+    if (offEl) offEl.innerHTML = `${rating.off >= 0 ? '+' : ''}${rating.off.toFixed(1)} <span style="font-size:10px;opacity:.7;">#${offRank}</span>`;
+    if (defEl) defEl.innerHTML = `${rating.def >= 0 ? '+' : ''}${rating.def.toFixed(1)} <span style="font-size:10px;opacity:.7;">#${defRank}</span>`;
+    if (totEl) totEl.innerHTML = `${rating.total >= 0 ? '+' : ''}${rating.total.toFixed(1)} <span style="font-size:10px;opacity:.7;">#${totalRank}</span>`;
+  });
 
   // Banner
   document.getElementById('team-banner-container').innerHTML = `
@@ -1816,9 +1865,10 @@ function renderTeamBaseline() {
         <div class="team-banner-sub">${fullName}</div>
       </div>
       <div class="team-banner-stats">
-        <div class="team-banner-stat"><div class="tbs-label">Players</div><div class="tbs-val">${_teamPlayers.length}</div></div>
+        <div class="team-banner-stat"><div class="tbs-label">OFF</div><div class="tbs-val" id="banner-off">${rating.off >= 0 ? '+' : ''}${rating.off.toFixed(1)}</div></div>
+        <div class="team-banner-stat"><div class="tbs-label">DEF</div><div class="tbs-val" id="banner-def">${rating.def >= 0 ? '+' : ''}${rating.def.toFixed(1)}</div></div>
+        <div class="team-banner-stat"><div class="tbs-label">Total</div><div class="tbs-val" id="banner-total-rating">${rating.total >= 0 ? '+' : ''}${rating.total.toFixed(1)}</div></div>
         <div class="team-banner-stat"><div class="tbs-label">Total Min</div><div class="tbs-val" id="banner-total">0</div></div>
-        <div class="team-banner-stat"><div class="tbs-label">Target</div><div class="tbs-val">240</div></div>
       </div>
     </div>`;
 
