@@ -2660,13 +2660,12 @@ function saveRoster(silent) {
       if (g.book_spread != null) g.spread_edge = Math.round((gVal(g,"proj_spread") - g.book_spread) * 10) / 10;
       if (g.book_total != null) g.total_edge = Math.round((gVal(g,"proj_total") - g.book_total) * 10) / 10;
       // Update game player minutes from modal data and recalculate
-      const side = _rosterState.side;
-      const playerList = g[`${side}_players`] || [];
-      for (const p of playerList) {
-        const edited = _rosterState.players.find(ep => ep.name === p.name);
-        if (edited) p.min = edited.pg + edited.sg + edited.sf + edited.pf + edited.c;
+      const _pl = g[`${_rosterState.side}_players`] || [];
+      for (const _p of _pl) {
+        const _ed = _rosterState.players.find(ep => ep.name === _p.name);
+        if (_ed) _p.min = _ed.pg + _ed.sg + _ed.sf + _ed.pf + _ed.c;
       }
-      playerList.sort((a, b) => b.min - a.min);
+      _pl.sort((a, b) => b.min - a.min);
       buildRatingLookups(); recomputeProjections();
       renderGames();
       renderOddsSummary();
