@@ -969,28 +969,35 @@ function switchRating(source) {
   });
   const active = document.querySelector(`.rating-toggle[data-rating="${source}"]`);
   if (active) { active.style.background = '#333'; active.style.color = '#fff'; }
-  buildLebronLookup(); recomputeProjections();
+  buildRatingLookups(); recomputeProjections();
   renderGames();
   renderOddsSummary();
   updateStrip();
 }
 
-function pDpm(p) { return _ratingSource === 'lebron' ? (getLbDpm(p) != null ? getLbDpm(p) : p.dpm) : p.dpm; }
+function pDpm(p) {
+  if (_ratingSource === 'lebron') { const lb = getLbDpm(p); return lb != null ? lb : getDarko(p).dpm; }
+  return getDarko(p).dpm;
+}
 function gVal(g, field) { return g[field]; }  // projections are recomputed in-place
 
 // ── Client-side projection engine ───────────────────────────────────────
 // Computes team ratings + score projections from player-level data
 // Uses whichever rating source is selected (DARKO or LEBRON)
 // No Firestore reads needed — works from data already in STATE.games
-// Global LEBRON lookup — built from any date that has lb_dpm data
+// Global rating lookups — built from any loaded date, persist across date switches
+let _darkoLookup = {};   // {nba_id: {dpm, o_dpm, d_dpm}}
 let _lebronLookup = {};  // {nba_id: lb_dpm}
 
-function buildLebronLookup() {
-  // Scan all loaded games for players with lb_dpm, build a global dict
+function buildRatingLookups() {
   for (const g of STATE.games) {
     for (const side of ['away', 'home']) {
       for (const p of (g[`${side}_players`] || [])) {
-        if (p.lb_dpm != null && p.nba_id) {
+        if (!p.nba_id) continue;
+        if (p.dpm != null) {
+          _darkoLookup[p.nba_id] = { dpm: p.dpm, o_dpm: p.o_dpm, d_dpm: p.d_dpm };
+        }
+        if (p.lb_dpm != null) {
           _lebronLookup[p.nba_id] = p.lb_dpm;
         }
       }
@@ -998,8 +1005,13 @@ function buildLebronLookup() {
   }
 }
 
+function getDarko(p) {
+  if (p.dpm != null) return { dpm: p.dpm, o_dpm: p.o_dpm || 0, d_dpm: p.d_dpm || 0 };
+  if (p.nba_id && _darkoLookup[p.nba_id]) return _darkoLookup[p.nba_id];
+  return { dpm: null, o_dpm: 0, d_dpm: 0 };
+}
+
 function getLbDpm(p) {
-  // Try player's own lb_dpm first, then global lookup by nba_id
   if (p.lb_dpm != null) return p.lb_dpm;
   if (p.nba_id && _lebronLookup[p.nba_id] != null) return _lebronLookup[p.nba_id];
   return null;
@@ -1018,10 +1030,11 @@ function recomputeProjections() {
       let off = 0, def = 0;
       for (const p of players) {
         const w = ((p.min || 0) / 48) * scale;
+        const dk = getDarko(p);
         const lbDpm = getLbDpm(p);
         if (_ratingSource === 'lebron' && lbDpm != null) {
           // Split LEBRON total using DARKO o/d ratio
-          const dkO = p.o_dpm || 0, dkD = p.d_dpm || 0;
+          const dkO = dk.o_dpm || 0, dkD = dk.d_dpm || 0;
           const dkAbs = Math.abs(dkO) + Math.abs(dkD);
           if (dkAbs > 0) {
             off += lbDpm * (Math.abs(dkO) / dkAbs) * (dkO >= 0 ? 1 : -1) * w;
@@ -1031,8 +1044,8 @@ function recomputeProjections() {
             def += (lbDpm / 2) * w;
           }
         } else {
-          off += (p.o_dpm || 0) * w;
-          def += (p.d_dpm || 0) * w;
+          off += (dk.o_dpm || 0) * w;
+          def += (dk.d_dpm || 0) * w;
         }
       }
       g[`${side}_off`] = Math.round(off * 100) / 100;
@@ -1131,7 +1144,7 @@ async function loadSlate() {
       STATE.lastUpdated = d;
     }
 
-    buildLebronLookup(); recomputeProjections();
+    buildRatingLookups(); recomputeProjections();
     renderGames();
     renderOddsSummary();
     updateStrip();
@@ -3020,7 +3033,7 @@ function setupRealtimeListener() {
         hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York'
       }) + ' ET';
     }
-    buildLebronLookup(); recomputeProjections();
+    buildRatingLookups(); recomputeProjections();
     renderGames();
     renderOddsSummary();
     updateStrip();
