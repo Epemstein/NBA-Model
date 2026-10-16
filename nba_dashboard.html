@@ -1784,6 +1784,7 @@ function loadTeamBaseline() {
 
       // Sort by total minutes desc
       _teamPlayers.sort((a, b) => (b.pg+b.sg+b.sf+b.pf+b.c) - (a.pg+a.sg+a.sf+a.pf+a.c));
+      captureBaselineSnapshot();
       renderTeamBaseline();
     });
   });
@@ -1889,8 +1890,17 @@ function updateTeamSums() {
 }
 
 let _autoSaveTimer = null;
+let _baselineSnapshot = {};  // {playerName: totalMin}
+let _baselineLogTimer = null;
+
+function captureBaselineSnapshot() {
+  _baselineSnapshot = {};
+  for (const p of _teamPlayers) {
+    _baselineSnapshot[p.name] = p.pg + p.sg + p.sf + p.pf + p.c;
+  }
+}
+
 function autoSaveBaseline() {
-  // Debounce: save 500ms after last edit
   clearTimeout(_autoSaveTimer);
   _autoSaveTimer = setTimeout(() => saveTeamBaseline(true), 500);
 }
@@ -1903,7 +1913,23 @@ function saveTeamBaseline(silent) {
   }
   fbDb.collection('nba_baselines').doc(_selectedTeam).set({ players })
     .then(() => {
-      logActivity(`Updated ${_selectedTeam} baseline`, _selectedTeam);
+      // Log specific changes, debounced so batch edits become one log entry
+      clearTimeout(_baselineLogTimer);
+      _baselineLogTimer = setTimeout(() => {
+        const changes = [];
+        for (const p of _teamPlayers) {
+          const newT = p.pg + p.sg + p.sf + p.pf + p.c;
+          const oldT = _baselineSnapshot[p.name];
+          if (oldT != null && oldT !== newT) {
+            const arrow = newT > oldT ? '▲' : '▼';
+            changes.push(`${arrow} ${p.name} ${oldT}→${newT}`);
+          }
+        }
+        if (changes.length) {
+          logActivity(`${_selectedTeam} baseline: ${changes.join(', ')}`, _selectedTeam);
+          captureBaselineSnapshot();
+        }
+      }, 2000);  // Wait 2s after last save to batch changes
       recalcGamesWithBaselines();
     })
     .catch(e => { if (!silent) alert('Save failed: ' + e.message); });
@@ -2351,11 +2377,17 @@ function setupHistoryListener() {
           timeZone: 'America/New_York'
         }) + ' ET' : '—';
         const firstName = (d.name || '?').split(' ')[0];
+        // Format action with colored arrows
+        let action = d.action || '';
+        action = action.replace(/▲/g, '<span style="color:var(--green)">▲</span>');
+        action = action.replace(/▼/g, '<span style="color:var(--red)">▼</span>');
+        // Team logo
+        const logo = d.team ? `<img src="${teamLogo(d.team)}" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;margin-right:4px;" onerror="this.style.display='none'" />` : '';
         return `<tr>
           <td style="font-family:var(--mono);font-size:10px;color:var(--muted);white-space:nowrap;">${time}</td>
           <td style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--accent);">${firstName}</td>
-          <td style="font-family:var(--sans);font-size:11px;">${d.action}</td>
-          <td style="font-family:var(--mono);font-size:11px;font-weight:600;">${d.team}</td>
+          <td style="font-family:var(--sans);font-size:12px;">${action}</td>
+          <td style="font-family:var(--mono);font-size:11px;font-weight:600;">${logo}${d.team}</td>
         </tr>`;
       }).join('');
     });
