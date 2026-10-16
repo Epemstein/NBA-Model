@@ -1016,6 +1016,7 @@ async function loadSlate() {
     STATE.teamRatings = data.team_ratings || {};
     STATE.leagueAvgPace = data.league_avg_pace || 100;
     STATE.leagueAvgOrtg = data.league_avg_ortg || 113.1;
+    STATE.allTeamRatings = data.all_team_ratings || {};
 
     if (data.lastUpdatedMs) {
       const d = new Date(data.lastUpdatedMs);
@@ -1270,7 +1271,7 @@ function loadEditRoster(gameIdx, side) {
 
   // Load full roster from nba_rosters + existing game overrides
   Promise.all([
-    fbDb.collection('nba_rosters').doc(team).get(),
+    fbDb.collection('nba_rosters').doc('all').get().then(s => ({exists:s.exists,data:()=>({players:(s.data()?.teams||{})[team]||[]})})),
     fbDb.collection('nba_baselines').doc(team).get(),
     fbDb.collection('nba_game_overrides').doc(`${selectedDate}_${g.away}_${g.home}_${team}`).get(),
   ]).then(([rosterSnap, baseSnap, overSnap]) => {
@@ -1871,9 +1872,9 @@ function loadTeamBaseline() {
   if (!team) return;
   _selectedTeam = team;
 
-  // Load roster from nba_rosters/{team}
-  fbDb.collection('nba_rosters').doc(team).get().then(rosterSnap => {
-    const roster = rosterSnap.exists ? (rosterSnap.data().players || []) : [];
+  // Load roster from nba_rosters/all (1 read for all teams)
+  fbDb.collection('nba_rosters').doc('all').get().then(allSnap => {
+    const roster = allSnap.exists ? (allSnap.data().teams || {})[team] || [] : [];
 
     // Load saved baseline
     return fbDb.collection('nba_baselines').doc(team).get().then(baseSnap => {
@@ -1933,7 +1934,7 @@ function renderTeamBaseline() {
   Promise.all(allTeams.map(t =>
     Promise.all([
       fbDb.collection('nba_baselines').doc(t).get(),
-      fbDb.collection('nba_rosters').doc(t).get(),
+      fbDb.collection('nba_rosters').doc('all').get().then(s => ({exists:s.exists,data:()=>({players:(s.data()?.teams||{})[t]||[]})})),
     ]).then(([blSnap, roSnap]) => {
       const bl = blSnap.exists ? blSnap.data().players || {} : {};
       const roster = roSnap.exists ? roSnap.data().players || [] : [];
@@ -2272,7 +2273,7 @@ function openRoster(gameIdx, side) {
 
   // Load full roster + baselines + existing game overrides
   Promise.all([
-    fbDb.collection('nba_rosters').doc(team).get(),
+    fbDb.collection('nba_rosters').doc('all').get().then(s => ({exists:s.exists,data:()=>({players:(s.data()?.teams||{})[team]||[]})})),
     fbDb.collection('nba_baselines').doc(team).get(),
     fbDb.collection('nba_game_overrides').doc(`${selectedDate}_${g.away}_${g.home}_${team}`).get(),
   ]).then(([rosterSnap, baseSnap, overSnap]) => {
@@ -2555,15 +2556,14 @@ let _playerSort = 'dpm';
 let _playerSortDir = -1;
 
 function loadAllPlayers() {
-  // Load all rosters (already in Firestore from pipeline)
-  const teams = Object.keys(COLORS);
-  Promise.all(teams.map(t =>
-    fbDb.collection('nba_rosters').doc(t).get().then(s => {
-      if (!s.exists) return [];
-      return (s.data().players || []).map(p => ({...p, team: t}));
-    })
-  )).then(results => {
-    _allPlayers = results.flat();
+  // Load all rosters from ONE document (1 Firestore read)
+  fbDb.collection('nba_rosters').doc('all').get().then(snap => {
+    if (!snap.exists) return;
+    const teams = snap.data().teams || {};
+    _allPlayers = [];
+    for (const [team, players] of Object.entries(teams)) {
+      for (const p of players) _allPlayers.push({...p, team});
+    }
     // Populate team filter
     const sel = document.getElementById('player-team-filter');
     const existingTeams = [...new Set(_allPlayers.map(p => p.team))].sort();
@@ -2642,34 +2642,22 @@ let _standingsSortDir = -1;
 let _standingsConf = 'all';
 
 function loadStandings() {
-  const allTeams = Object.keys(COLORS);
-  Promise.all(allTeams.map(t =>
-    Promise.all([
-      fbDb.collection('nba_baselines').doc(t).get(),
-      fbDb.collection('nba_rosters').doc(t).get(),
-    ]).then(([blSnap, roSnap]) => {
-      const bl = blSnap.exists ? blSnap.data().players || {} : {};
-      const roster = roSnap.exists ? roSnap.data().players || [] : [];
-      const players = roster.map(p => {
-        const nn = normName(p.name);
-        let pg=0,sg=0,sf=0,pf=0,c=0;
-        // Find baseline by normalized name
-        for (const [k,v] of Object.entries(bl)) {
-          if (normName(k) === nn && typeof v === 'object') {
-            pg=v.pg||0;sg=v.sg||0;sf=v.sf||0;pf=v.pf||0;c=v.c||0;
-            break;
-          }
-        }
-        return { pg,sg,sf,pf,c, o_dpm:p.o_dpm||0, d_dpm:p.d_dpm||0 };
-      });
-      const r = calcTeamRating(players);
-      const totalMin = players.reduce((s,p) => s+p.pg+p.sg+p.sf+p.pf+p.c, 0);
-      return { team: t, ...r, totalMin };
-    })
-  )).then(teams => {
-    _standingsData = teams;
-    renderStandings();
-  });
+  // Use all_team_ratings from the slate doc — 0 extra Firestore reads
+  const ratings = STATE.allTeamRatings || {};
+  if (!Object.keys(ratings).length) {
+    // Fallback: load from latest slate
+    fbDb.collection('nba_slate').doc(selectedDate).get().then(snap => {
+      if (snap.exists) {
+        STATE.allTeamRatings = snap.data().all_team_ratings || {};
+        loadStandings(); // retry
+      }
+    });
+    return;
+  }
+  _standingsData = Object.entries(ratings).map(([team, r]) => ({
+    team, off: r.off||0, def: r.def||0, total: r.total||(r.off||0)+(r.def||0), totalMin: r.min||0
+  }));
+  renderStandings();
 }
 
 function sortStandings(col) {
@@ -2917,6 +2905,7 @@ function setupRealtimeListener() {
     STATE.teamRatings = data.team_ratings || {};
     STATE.leagueAvgPace = data.league_avg_pace || 100;
     STATE.leagueAvgOrtg = data.league_avg_ortg || 113.1;
+    STATE.allTeamRatings = data.all_team_ratings || {};
     if (data.lastUpdatedMs) {
       const d = new Date(data.lastUpdatedMs);
       document.getElementById('last-update').textContent = d.toLocaleTimeString('en-US', {

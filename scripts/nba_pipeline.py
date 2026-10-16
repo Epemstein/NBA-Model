@@ -1195,10 +1195,26 @@ def run(override_date=None):
                 out = {k: v for k, v in g.items()}
                 games_out.append(out)
 
+            # Compute ratings for ALL 30 teams (for standings), not just today's games
+            all_team_ratings = {}
+            for team_abr in ALL_TEAMS:
+                t_mins = {k: dict(v) for k, v in player_minutes.items() if v.get('team_abr') == team_abr}
+                bl = get_baselines(team_abr)
+                if bl:
+                    for k in t_mins: t_mins[k]['minutes'] = 0
+                    for nl, mins in bl.items():
+                        if nl in t_mins: t_mins[nl]['minutes'] = mins
+                temp_game_mins = {**player_minutes}
+                temp_game_mins.update(t_mins)
+                t_off, t_def, _ = compute_team_rating(team_abr, darko, temp_game_mins)
+                total_min = sum(v['minutes'] for v in t_mins.values())
+                all_team_ratings[team_abr] = {'off': t_off, 'def': t_def, 'total': round(t_off + t_def, 2), 'min': round(total_min)}
+
             db.collection('nba_slate').document(date).set({
                 'games': games_out,
                 'team_ratings': {t: {'off': r['off'], 'def': r['def']}
                                  for t, r in team_ratings.items()},
+                'all_team_ratings': all_team_ratings,
                 'league_avg_pace': league_avg_pace,
                 'league_avg_ortg': league_avg_ortg,
                 'lastUpdated': firestore.SERVER_TIMESTAMP,
@@ -1291,13 +1307,16 @@ def run(override_date=None):
                             'nba_id': dk.get('nba_id', pid) if dk else pid,
                         })
 
+            # Write all rosters in ONE document (saves 29 Firestore writes/reads)
+            rosters_combined = {}
             for team, players in all_teams.items():
                 players.sort(key=lambda p: -p['min'])
-                db.collection('nba_rosters').document(team).set({
-                    'players': players,
-                    '_ts': int(time.time()),
-                })
-            print(f'Wrote rosters for {len(all_teams)} teams')
+                rosters_combined[team] = players
+            db.collection('nba_rosters').document('all').set({
+                'teams': rosters_combined,
+                '_ts': int(time.time()),
+            })
+            print(f'Wrote rosters for {len(all_teams)} teams (1 doc)')
 
         except Exception as e:
             print(f'Firestore write failed: {e}')
