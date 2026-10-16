@@ -705,7 +705,7 @@ input[type=number] { -moz-appearance: textfield; }
 <div class="panel" id="panel-players">
   <div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-      <div class="ct" style="margin:0;padding:0;border:none;">All Players (DARKO)</div>
+      <div class="ct" style="margin:0;padding:0;border:none;" id="players-tab-title">All Players (DARKO)</div>
       <div style="display:flex;gap:8px;align-items:center;">
         <input id="player-search" type="text" placeholder="Search player..." style="font-size:12px;padding:5px 10px;width:180px;" oninput="filterPlayers()" />
         <select id="player-team-filter" onchange="filterPlayers()" style="font-size:12px;padding:5px;">
@@ -973,6 +973,10 @@ function switchRating(source) {
   renderGames();
   renderOddsSummary();
   updateStrip();
+  // Re-render other tabs that show ratings
+  if (_teamPlayers.length) renderTeamBaseline();
+  if (_allPlayers.length) renderAllPlayers();
+  if (_standingsData.length) renderStandings();
 }
 
 function pDpm(p) {
@@ -2708,6 +2712,8 @@ function sortPlayers(col) {
 function filterPlayers() { renderAllPlayers(); }
 
 function renderAllPlayers() {
+  const titleEl = document.getElementById('players-tab-title');
+  if (titleEl) titleEl.textContent = `All Players (${_ratingSource.toUpperCase()})`;
   const search = (document.getElementById('player-search')?.value || '').toLowerCase();
   const teamFilter = document.getElementById('player-team-filter')?.value || '';
 
