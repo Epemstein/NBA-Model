@@ -2231,6 +2231,19 @@ function openRoster(gameIdx, side) {
       };
     }).sort((a, b) => (b.pg+b.sg+b.sf+b.pf+b.c) - (a.pg+a.sg+a.sf+a.pf+a.c));
 
+    // Store baseline per-position for diff highlighting
+    _rosterState.baseline = {};
+    for (const p of _rosterState.players) {
+      const nn = normName(p.name);
+      // Baseline = what the team baseline says (before game overrides)
+      const bv = bl[p.name] || Object.entries(bl).find(([k]) => normName(k) === nn)?.[1];
+      if (bv && typeof bv === 'object') {
+        _rosterState.baseline[nn] = { pg: bv.pg||0, sg: bv.sg||0, sf: bv.sf||0, pf: bv.pf||0, c: bv.c||0 };
+      } else {
+        _rosterState.baseline[nn] = { pg: p.pg, sg: p.sg, sf: p.sf, pf: p.pf, c: p.c };
+      }
+    }
+
     captureRosterSnapshot();
     renderRosterTable();
   });
@@ -2253,6 +2266,12 @@ function renderRosterTable() {
     const hs = p.nba_id ? `<img src="${playerHeadshot(p.nba_id)}" class="player-headshot" onerror="this.src='data:image/svg+xml,<%3Fxml version=%221.0%22%3F><svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2224%22 height=%2218%22><rect fill=%22%23ddd%22 width=%2224%22 height=%2218%22/><circle cx=%2212%22 cy=%227%22 r=%223.5%22 fill=%22%23bbb%22/><ellipse cx=%2212%22 cy=%2218%22 rx=%226%22 ry=%225%22 fill=%22%23bbb%22/></svg>'" />` : '';
 
     const zeroed = total === 0 && (p.pg===0&&p.sg===0&&p.sf===0&&p.pf===0&&p.c===0);
+    const bl = (_rosterState.baseline || {})[normName(p.name)] || {pg:0,sg:0,sf:0,pf:0,c:0};
+    function cellBg(pos) {
+      const cur = p[pos], base = bl[pos] || 0;
+      if (cur === base) return '';
+      return cur > base ? 'background:#e8f5e9;' : 'background:#ffebee;';
+    }
     return `<tr style="background:${bg};${zeroed ? 'opacity:0.3;' : ''}">
       <td style="font-family:var(--sans);font-weight:500;white-space:nowrap;">
         <div style="display:flex;align-items:center;gap:4px;">
@@ -2265,11 +2284,11 @@ function renderRosterTable() {
         </div>
       </td>
       <td style="text-align:right;font-family:var(--mono);font-weight:700;">${total > 0 ? total.toFixed(0) : '—'}</td>
-      <td style="text-align:center"><input type="number" value="${p.pg||''}" min="0" max="48" step="1" style="width:36px;text-align:center;font-size:10px;" onchange="updateRosterPos(${i},'pg',this.value)" placeholder="0"></td>
-      <td style="text-align:center"><input type="number" value="${p.sg||''}" min="0" max="48" step="1" style="width:36px;text-align:center;font-size:10px;" onchange="updateRosterPos(${i},'sg',this.value)" placeholder="0"></td>
-      <td style="text-align:center"><input type="number" value="${p.sf||''}" min="0" max="48" step="1" style="width:36px;text-align:center;font-size:10px;" onchange="updateRosterPos(${i},'sf',this.value)" placeholder="0"></td>
-      <td style="text-align:center"><input type="number" value="${p.pf||''}" min="0" max="48" step="1" style="width:36px;text-align:center;font-size:10px;" onchange="updateRosterPos(${i},'pf',this.value)" placeholder="0"></td>
-      <td style="text-align:center"><input type="number" value="${p.c||''}" min="0" max="48" step="1" style="width:36px;text-align:center;font-size:10px;" onchange="updateRosterPos(${i},'c',this.value)" placeholder="0"></td>
+      <td style="text-align:center;${cellBg('pg')}"><input type="number" value="${p.pg||''}" min="0" max="48" step="1" style="width:36px;text-align:center;font-size:10px;${cellBg('pg')}" onchange="updateRosterPos(${i},'pg',this.value)" placeholder="0"></td>
+      <td style="text-align:center;${cellBg('sg')}"><input type="number" value="${p.sg||''}" min="0" max="48" step="1" style="width:36px;text-align:center;font-size:10px;${cellBg('sg')}" onchange="updateRosterPos(${i},'sg',this.value)" placeholder="0"></td>
+      <td style="text-align:center;${cellBg('sf')}"><input type="number" value="${p.sf||''}" min="0" max="48" step="1" style="width:36px;text-align:center;font-size:10px;${cellBg('sf')}" onchange="updateRosterPos(${i},'sf',this.value)" placeholder="0"></td>
+      <td style="text-align:center;${cellBg('pf')}"><input type="number" value="${p.pf||''}" min="0" max="48" step="1" style="width:36px;text-align:center;font-size:10px;${cellBg('pf')}" onchange="updateRosterPos(${i},'pf',this.value)" placeholder="0"></td>
+      <td style="text-align:center;${cellBg('c')}"><input type="number" value="${p.c||''}" min="0" max="48" step="1" style="width:36px;text-align:center;font-size:10px;${cellBg('c')}" onchange="updateRosterPos(${i},'c',this.value)" placeholder="0"></td>
       <td style="text-align:right;font-family:var(--mono);font-size:10px;color:${dpmColor(p.dpm)}">${fmtDpm(p.dpm)}</td>
     </tr>`;
   }).join('');
