@@ -1041,12 +1041,20 @@ def run(override_date=None):
                         if v.get('team_abr') == team}
             baselines = get_baselines(team)
             game_ovs = get_game_overrides(date, aw, hw, team)
-            for name_lower, mins in baselines.items():
-                if name_lower in team_mins:
-                    team_mins[name_lower]['minutes'] = mins
-            for name_lower, mins in game_ovs.items():
-                if name_lower in team_mins:
-                    team_mins[name_lower]['minutes'] = mins
+
+            if baselines or game_ovs:
+                # If baseline exists, zero out everyone first, then apply
+                for k in team_mins:
+                    team_mins[k]['minutes'] = 0
+                # Apply baselines
+                for name_lower, mins in baselines.items():
+                    if name_lower in team_mins:
+                        team_mins[name_lower]['minutes'] = mins
+                # Game overrides win over baselines
+                for name_lower, mins in game_ovs.items():
+                    if name_lower in team_mins:
+                        team_mins[name_lower]['minutes'] = mins
+
             return team_mins
 
         aw_mins = _apply_overrides(aw)
