@@ -696,7 +696,14 @@ input[type=number] { -moz-appearance: textfield; }
 <!-- ═══════════ HISTORY PANEL ═══════════ -->
 <div class="panel" id="panel-history">
   <div class="card">
-    <div class="ct">Change Log</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <div class="ct" style="margin:0;padding:0;border:none;">Change Log</div>
+      <div style="display:flex;gap:2px;">
+        <button class="btn bg hist-filter active" data-filter="all" onclick="filterHistory('all')" style="font-size:10px;padding:4px 10px;">All</button>
+        <button class="btn bg hist-filter" data-filter="baseline" onclick="filterHistory('baseline')" style="font-size:10px;padding:4px 10px;">Baseline</button>
+        <button class="btn bg hist-filter" data-filter="game" onclick="filterHistory('game')" style="font-size:10px;padding:4px 10px;">Game Day</button>
+      </div>
+    </div>
     <div class="sw" style="max-height:700px;">
       <table class="dt" id="history-log-table" style="font-size:14px;">
         <thead><tr>
@@ -2359,18 +2366,62 @@ function saveRoster(silent) {
 // ── Activity Log ────────────────────────────────────────────────────────
 let _currentUser = null;
 
-function logActivity(action, team, playerIds) {
+function logActivity(action, team, playerIds, category) {
   if (!_currentUser) return;
+  // Auto-detect category if not provided
+  if (!category) {
+    const a = action.toLowerCase();
+    if (a.includes('baseline')) category = 'baseline';
+    else if (a.includes('ruled out') || a.includes('restored') || a.includes('@')) category = 'game';
+    else category = 'other';
+  }
   fbDb.collection('nba_activity').add({
     uid: _currentUser.uid,
     name: _currentUser.displayName || _currentUser.email,
     photo: _currentUser.photoURL || '',
     action,
     team: team || '',
-    playerIds: playerIds || [],  // NBA IDs for headshots
+    playerIds: playerIds || [],
+    category,
     ts: firebase.firestore.FieldValue.serverTimestamp(),
     tsMs: Date.now(),
   }).catch(e => console.error('Activity log error:', e));
+}
+
+let _historyDocs = [];
+let _historyFilter = 'all';
+
+function filterHistory(filter) {
+  _historyFilter = filter;
+  document.querySelectorAll('.hist-filter').forEach(b => {
+    b.style.background = '#fff';
+    b.style.color = 'var(--text2)';
+  });
+  const active = document.querySelector(`.hist-filter[data-filter="${filter}"]`);
+  if (active) { active.style.background = 'var(--accent)'; active.style.color = '#fff'; }
+  renderHistoryLog();
+}
+
+function renderHistoryLog() {
+  const tbody = document.getElementById('history-log-body');
+  let docs = _historyDocs;
+  if (_historyFilter !== 'all') {
+    docs = docs.filter(doc => {
+      const d = doc.data();
+      const cat = d.category || '';
+      if (_historyFilter === 'baseline') return cat === 'baseline';
+      if (_historyFilter === 'game') return cat === 'game';
+      return true;
+    });
+  }
+  if (!docs.length) {
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--muted);font-family:var(--sans);padding:20px;">No activity</td></tr>';
+    return;
+  }
+  tbody.innerHTML = docs.map(doc => {
+    const d = doc.data();
+    return renderHistoryRow(d);
+  }).join('');
 }
 
 function setupHistoryListener() {
@@ -2378,35 +2429,34 @@ function setupHistoryListener() {
     .orderBy('tsMs', 'desc')
     .limit(100)
     .onSnapshot(snap => {
-      const tbody = document.getElementById('history-log-body');
-      if (snap.empty) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--muted);font-family:var(--sans);padding:20px;">No activity yet</td></tr>';
-        return;
-      }
-      tbody.innerHTML = snap.docs.map(doc => {
-        const d = doc.data();
-        const time = d.tsMs ? new Date(d.tsMs).toLocaleString('en-US', {
-          month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
-          timeZone: 'America/New_York'
-        }) + ' ET' : '—';
-        const firstName = (d.name || '?').split(' ')[0];
-        // Format action with colored arrows
-        let action = d.action || '';
-        action = action.replace(/▲/g, '<span style="color:var(--green)">▲</span>');
-        action = action.replace(/▼/g, '<span style="color:var(--red)">▼</span>');
-        const logo = d.team ? `<img src="${teamLogo(d.team)}" style="width:22px;height:22px;object-fit:contain;vertical-align:middle;margin-right:4px;" onerror="this.style.display='none'" />` : '';
-        const photo = d.photo ? `<img src="${d.photo}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:4px;" onerror="this.style.display='none'" />` : '';
-        return `<tr style="height:48px;">
-          <td style="font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap;padding:8px;">${time}</td>
-          <td style="font-family:var(--sans);font-size:13px;font-weight:600;color:var(--accent);padding:8px;">${photo}${firstName}</td>
-          <td style="font-size:13px;font-weight:600;padding:8px;">${logo}${d.team}</td>
-          <td style="font-family:var(--sans);font-size:13px;padding:8px;">
-            ${(d.playerIds||[]).map(id => `<img src="https://cdn.nba.com/headshots/nba/latest/260x190/${id}.png" style="width:22px;height:16px;object-fit:cover;object-position:top;border-radius:2px;vertical-align:middle;margin-right:2px;" onerror="this.style.display='none'" />`).join('')}
-            ${action}
-          </td>
-        </tr>`;
-      }).join('');
+      _historyDocs = snap.docs;
+      renderHistoryLog();
     });
+}
+
+function renderHistoryRow(d) {
+  const time = d.tsMs ? new Date(d.tsMs).toLocaleString('en-US', {
+    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+    timeZone: 'America/New_York'
+  }) + ' ET' : '—';
+  const firstName = (d.name || '?').split(' ')[0];
+  let action = d.action || '';
+  action = action.replace(/▲/g, '<span style="color:var(--green)">▲</span>');
+  action = action.replace(/▼/g, '<span style="color:var(--red)">▼</span>');
+  const logo = d.team ? `<img src="${teamLogo(d.team)}" style="width:22px;height:22px;object-fit:contain;vertical-align:middle;margin-right:4px;" onerror="this.style.display='none'" />` : '';
+  const photo = d.photo ? `<img src="${d.photo}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:4px;" onerror="this.style.display='none'" />` : '';
+  const catBadge = d.category === 'baseline' ? '<span style="font-size:9px;background:#e3f2fd;color:#1565c0;padding:1px 5px;border-radius:3px;margin-right:4px;">BASE</span>' :
+                   d.category === 'game' ? '<span style="font-size:9px;background:#fff3e0;color:#e65100;padding:1px 5px;border-radius:3px;margin-right:4px;">GAME</span>' : '';
+  return `<tr style="height:48px;">
+    <td style="font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap;padding:8px;">${time}</td>
+    <td style="font-family:var(--sans);font-size:13px;font-weight:600;color:var(--accent);padding:8px;">${photo}${firstName}</td>
+    <td style="font-size:13px;font-weight:600;padding:8px;">${logo}${d.team}</td>
+    <td style="font-family:var(--sans);font-size:13px;padding:8px;">
+      ${catBadge}
+      ${(d.playerIds||[]).map(id => `<img src="https://cdn.nba.com/headshots/nba/latest/260x190/${id}.png" style="width:22px;height:16px;object-fit:cover;object-position:top;border-radius:2px;vertical-align:middle;margin-right:2px;" onerror="this.style.display='none'" />`).join('')}
+      ${action}
+    </td>
+  </tr>`;
 }
 
 // ── Auth ────────────────────────────────────────────────────────────────
