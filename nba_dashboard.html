@@ -2108,6 +2108,7 @@ function openRoster(gameIdx, side) {
       };
     }).sort((a, b) => (b.pg+b.sg+b.sf+b.pf+b.c) - (a.pg+a.sg+a.sf+a.pf+a.c));
 
+    captureRosterSnapshot();
     renderRosterTable();
   });
 }
@@ -2155,7 +2156,10 @@ function renderRosterTable() {
 
 function zeroRosterPlayer(idx) {
   const p = _rosterState.players[idx];
-  logActivity(`Ruled out ${p.name} (${_rosterState.team})`, _rosterState.team);
+  const _g = STATE.games[_rosterState.gameIdx];
+  const _matchup = _g ? `${_g.away}@${_g.home}` : '';
+  const _oldMin = p.pg+p.sg+p.sf+p.pf+p.c;
+  logActivity(`${_matchup} ${selectedDate}: Ruled out ${p.name} (${_oldMin}→0)`, _rosterState.team);
   p._backup = { pg: p.pg, sg: p.sg, sf: p.sf, pf: p.pf, c: p.c };
   p.pg = 0; p.sg = 0; p.sf = 0; p.pf = 0; p.c = 0;
   renderRosterTable();
@@ -2165,13 +2169,37 @@ function zeroRosterPlayer(idx) {
 function restoreRosterPlayer(idx) {
   const p = _rosterState.players[idx];
   if (p._backup) {
-    logActivity(`Restored ${p.name} (${_rosterState.team})`, _rosterState.team);
+    const _g2 = STATE.games[_rosterState.gameIdx];
+    const _m2 = _g2 ? `${_g2.away}@${_g2.home}` : '';
+    const _newMin = p._backup.pg+p._backup.sg+p._backup.sf+p._backup.pf+p._backup.c;
+    logActivity(`${_m2} ${selectedDate}: Restored ${p.name} (0→${_newMin})`, _rosterState.team);
     p.pg = p._backup.pg; p.sg = p._backup.sg; p.sf = p._backup.sf;
     p.pf = p._backup.pf; p.c = p._backup.c;
     delete p._backup;
   }
   renderRosterTable();
   autoSaveRoster();
+}
+
+let _rosterLastSnapshot = {};  // {playerName: totalMin} — for tracking what changed
+
+function captureRosterSnapshot() {
+  _rosterLastSnapshot = {};
+  for (const p of _rosterState.players) {
+    _rosterLastSnapshot[p.name] = p.pg + p.sg + p.sf + p.pf + p.c;
+  }
+}
+
+function getRosterChanges() {
+  const changes = [];
+  for (const p of _rosterState.players) {
+    const newTotal = p.pg + p.sg + p.sf + p.pf + p.c;
+    const oldTotal = _rosterLastSnapshot[p.name];
+    if (oldTotal != null && oldTotal !== newTotal) {
+      changes.push(`${p.name} ${oldTotal}→${newTotal}`);
+    }
+  }
+  return changes;
 }
 
 function updateRosterPos(idx, pos, val) {
@@ -2243,7 +2271,14 @@ function saveRoster(silent) {
 
   fbDb.collection('nba_game_overrides').doc(key).set({ players: overrides })
     .then(() => {
-      logActivity(`Game override: ${_rosterState.team} (${selectedDate})`, _rosterState.team);
+      // Log specific changes
+      const changes = getRosterChanges();
+      if (changes.length) {
+        const g = STATE.games[_rosterState.gameIdx];
+        const matchup = g ? `${g.away}@${g.home}` : '';
+        logActivity(`${matchup} ${selectedDate}: ${changes.join(', ')}`, _rosterState.team);
+        captureRosterSnapshot();  // Reset snapshot so next save only logs new changes
+      }
       // Update game player minutes and recalc
       const side = _rosterState.side;
       const playerList = g[`${side}_players`] || [];
