@@ -1081,8 +1081,8 @@ function renderGames() {
   noGames.style.display = 'none';
 
   grid.innerHTML = STATE.games.map((g, i) => {
-    const hasSpreadEdge = gVal(g,"spread_edge") != null && Math.abs(g.spread_edge) >= STATE.settings.spreadEdge;
-    const hasTotalEdge = gVal(g,"total_edge") != null && Math.abs(g.total_edge) >= STATE.settings.totalEdge;
+    const hasSpreadEdge = gVal(g,"spread_edge") != null && Math.abs(gVal(g,"spread_edge")) >= STATE.settings.spreadEdge;
+    const hasTotalEdge = gVal(g,"total_edge") != null && Math.abs(gVal(g,"total_edge")) >= STATE.settings.totalEdge;
     const hasEdge = hasSpreadEdge || hasTotalEdge;
 
     const awColor = COLORS[g.away] || '#333';
@@ -1108,14 +1108,14 @@ function renderGames() {
           <img src="${teamLogo(g.away)}" style="position:absolute;left:6px;top:50%;transform:translateY(-50%);width:62px;height:62px;object-fit:contain;opacity:.45;pointer-events:none;filter:brightness(1.05) drop-shadow(0 0 2px rgba(0,0,0,.15));" onerror="this.style.display='none'" />
           <span class="team-hdr-name" style="padding-left:52px;">${g.away}</span>
           <div style="text-align:right;position:relative;z-index:1;">
-            <div class="team-hdr-proj">${gVal(g,"away_proj") != null ? g.away_proj : '—'}</div>
-            ${gVal(g,"proj_spread") != null ? `<div style="font-size:10px;font-family:var(--mono);opacity:.8;margin-top:1px;">${(spreadToWinProb(-g.proj_spread)*100).toFixed(0)}% · ${fmtML(spreadToML(-g.proj_spread))}</div>` : ''}
+            <div class="team-hdr-proj">${gVal(g,"away_proj") != null ? gVal(g,"away_proj") : '—'}</div>
+            ${gVal(g,"proj_spread") != null ? `<div style="font-size:10px;font-family:var(--mono);opacity:.8;margin-top:1px;">${(spreadToWinProb(-gVal(g,"proj_spread"))*100).toFixed(0)}% · ${fmtML(spreadToML(-gVal(g,"proj_spread")))}</div>` : ''}
           </div>
         </div>
         <div class="gc-team-hdr home" style="background:${hwColor};cursor:pointer;" onclick="openRoster(${i},'home')">
           <div style="text-align:left;position:relative;z-index:1;">
-            <div class="team-hdr-proj">${gVal(g,"home_proj") != null ? g.home_proj : '—'}</div>
-            ${gVal(g,"proj_spread") != null ? `<div style="font-size:10px;font-family:var(--mono);opacity:.8;margin-top:1px;">${(spreadToWinProb(g.proj_spread)*100).toFixed(0)}% · ${fmtML(spreadToML(g.proj_spread))}</div>` : ''}
+            <div class="team-hdr-proj">${gVal(g,"home_proj") != null ? gVal(g,"home_proj") : '—'}</div>
+            ${gVal(g,"proj_spread") != null ? `<div style="font-size:10px;font-family:var(--mono);opacity:.8;margin-top:1px;">${(spreadToWinProb(gVal(g,"proj_spread"))*100).toFixed(0)}% · ${fmtML(spreadToML(gVal(g,"proj_spread")))}</div>` : ''}
           </div>
           <span class="team-hdr-name" style="padding-right:52px;">${g.home}</span>
           <img src="${teamLogo(g.home)}" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);width:62px;height:62px;object-fit:contain;opacity:.45;pointer-events:none;filter:brightness(1.05) drop-shadow(0 0 2px rgba(0,0,0,.15));" onerror="this.style.display='none'" />
@@ -1125,15 +1125,15 @@ function renderGames() {
       <div class="gc-ratings">
         <div class="gc-ratings-side">
           <span style="font-size:10px;color:var(--muted)">OFF</span>
-          <span class="rating-chip ${(g.away_off||0) >= 0 ? 'pos' : 'neg'}">${fmtRating(g.away_off||0)}</span>
+          <span class="rating-chip ${(gVal(g,"away_off")||0) >= 0 ? 'pos' : 'neg'}">${fmtRating(gVal(g,"away_off")||0)}</span>
           <span style="font-size:10px;color:var(--muted)">DEF</span>
-          <span class="rating-chip ${(g.away_def||0) >= 0 ? 'pos' : 'neg'}">${fmtRating(g.away_def||0)}</span>
+          <span class="rating-chip ${(gVal(g,"away_def")||0) >= 0 ? 'pos' : 'neg'}">${fmtRating(gVal(g,"away_def")||0)}</span>
         </div>
         <div class="gc-ratings-side">
           <span style="font-size:10px;color:var(--muted)">OFF</span>
-          <span class="rating-chip ${(g.home_off||0) >= 0 ? 'pos' : 'neg'}">${fmtRating(g.home_off||0)}</span>
+          <span class="rating-chip ${(gVal(g,"home_off")||0) >= 0 ? 'pos' : 'neg'}">${fmtRating(gVal(g,"home_off")||0)}</span>
           <span style="font-size:10px;color:var(--muted)">DEF</span>
-          <span class="rating-chip ${(g.home_def||0) >= 0 ? 'pos' : 'neg'}">${fmtRating(g.home_def||0)}</span>
+          <span class="rating-chip ${(gVal(g,"home_def")||0) >= 0 ? 'pos' : 'neg'}">${fmtRating(gVal(g,"home_def")||0)}</span>
         </div>
       </div>
 
@@ -1144,20 +1144,20 @@ function renderGames() {
           // spread_edge < 0 means model likes home more → show home spread
           const edgeSideAway = gVal(g,"spread_edge") != null ? gVal(g,"spread_edge") > 0 : (gVal(g,"proj_spread") != null && gVal(g,"proj_spread") > 0);
           const edgeTeam = edgeSideAway ? g.away : g.home;
-          const edgeSpread = edgeSideAway ? (gVal(g,"proj_spread") != null ? -g.proj_spread : null) : g.proj_spread;
+          const edgeSpread = edgeSideAway ? (gVal(g,"proj_spread") != null ? -gVal(g,"proj_spread") : null) : gVal(g,"proj_spread");
           const bookEdgeSpread = g.book_spread != null ? (edgeSideAway ? -g.book_spread : g.book_spread) : null;
 
           const spreadHtml = `<div class="gc-proj-item" style="flex:1;">
             <div class="proj-label">${edgeTeam} Spread</div>
             <div class="proj-val">${edgeSpread != null ? edgeTeam + ' ' + fmtSpread(edgeSpread) : '—'}</div>
             ${bookEdgeSpread != null ? `<div style="font-size:10px;color:var(--muted);margin-top:2px;">Market: ${edgeTeam} ${fmtSpread(bookEdgeSpread)}</div>` : ''}
-            ${gVal(g,"spread_edge") != null ? `<div class="edge-chip ${edgeClass(g.spread_edge)}" style="margin-top:3px;">${fmtSpread(Math.abs(g.spread_edge))} edge</div>` : ''}
+            ${gVal(g,"spread_edge") != null ? `<div class="edge-chip ${edgeClass(gVal(g,"spread_edge"))}" style="margin-top:3px;">${fmtSpread(Math.abs(gVal(g,"spread_edge")))} edge</div>` : ''}
           </div>`;
           const totalHtml = `<div class="gc-proj-item" style="flex:1;">
             <div class="proj-label">Total</div>
-            <div class="proj-val">${gVal(g,"proj_total") != null ? g.proj_total.toFixed(1) : '—'}</div>
+            <div class="proj-val">${gVal(g,"proj_total") != null ? gVal(g,"proj_total").toFixed(1) : '—'}</div>
             ${g.book_total != null ? `<div style="font-size:10px;color:var(--muted);margin-top:2px;">Market: ${g.book_total}</div>` : ''}
-            ${gVal(g,"total_edge") != null ? `<div class="edge-chip ${edgeClass(g.total_edge)}" style="margin-top:3px;">${gVal(g,"total_edge") > 0 ? 'O' : 'U'} ${Math.abs(g.total_edge).toFixed(1)} edge</div>` : ''}
+            ${gVal(g,"total_edge") != null ? `<div class="edge-chip ${edgeClass(gVal(g,"total_edge"))}" style="margin-top:3px;">${gVal(g,"total_edge") > 0 ? 'O' : 'U'} ${Math.abs(gVal(g,"total_edge")).toFixed(1)} edge</div>` : ''}
           </div>`;
           // Spread under the edge team's side, total under the other
           if (edgeSideAway) return spreadHtml + `<div style="border-left:1px solid var(--border);"></div>` + totalHtml;
@@ -1187,15 +1187,15 @@ function renderGames() {
           <div class="math-cols">
             <div>
               <div class="math-col-title">${g.away} (Away)</div>
-              <div class="math-row"><span class="mk">Offense Rating</span><span class="mv">${fmtRating(g.away_off||0)}</span></div>
-              <div class="math-row"><span class="mk">Defense Rating</span><span class="mv">${fmtRating(g.away_def||0)}</span></div>
+              <div class="math-row"><span class="mk">Offense Rating</span><span class="mv">${fmtRating(gVal(g,"away_off")||0)}</span></div>
+              <div class="math-row"><span class="mk">Defense Rating</span><span class="mv">${fmtRating(gVal(g,"away_def")||0)}</span></div>
               <div class="math-row"><span class="mk">Pts/100 Poss</span><span class="mv">${gVal(g,"away_pp100") || '—'}</span></div>
               <div class="math-row hl"><span class="mk">Projected Score</span><span class="mv">${gVal(g,"away_proj") || '—'}</span></div>
             </div>
             <div>
               <div class="math-col-title">${g.home} (Home)</div>
-              <div class="math-row"><span class="mk">Offense Rating</span><span class="mv">${fmtRating(g.home_off||0)}</span></div>
-              <div class="math-row"><span class="mk">Defense Rating</span><span class="mv">${fmtRating(g.home_def||0)}</span></div>
+              <div class="math-row"><span class="mk">Offense Rating</span><span class="mv">${fmtRating(gVal(g,"home_off")||0)}</span></div>
+              <div class="math-row"><span class="mk">Defense Rating</span><span class="mv">${fmtRating(gVal(g,"home_def")||0)}</span></div>
               <div class="math-row"><span class="mk">Pts/100 Poss</span><span class="mv">${gVal(g,"home_pp100") || '—'}</span></div>
               <div class="math-row hl"><span class="mk">Projected Score</span><span class="mv">${gVal(g,"home_proj") || '—'}</span></div>
             </div>
@@ -1431,14 +1431,14 @@ function saveGameOverride(gameIdx, side) {
     const rawPace = (g.matchup_pace || 95) / paceMult; // already adjusted
     const pace = rawPace;
     const hca = (STATE.settings.hca || 1.5) / 2;
-    const awPP100 = avgOrtg + g.away_off - g.home_def;
-    const hwPP100 = avgOrtg + g.home_off - g.away_def;
+    const awPP100 = avgOrtg + gVal(g,"away_off") - gVal(g,"home_def");
+    const hwPP100 = avgOrtg + gVal(g,"home_off") - gVal(g,"away_def");
     g.away_proj = Math.round((awPP100 / 100 * pace - hca) * 10) / 10;
     g.home_proj = Math.round((hwPP100 / 100 * pace + hca) * 10) / 10;
-    g.proj_spread = Math.round((g.away_proj - g.home_proj) * 10) / 10;
-    g.proj_total = Math.round((g.away_proj + g.home_proj) * 10) / 10;
-    if (g.book_spread != null) g.spread_edge = Math.round((g.proj_spread - g.book_spread) * 10) / 10;
-    if (g.book_total != null) g.total_edge = Math.round((g.proj_total - g.book_total) * 10) / 10;
+    g.proj_spread = Math.round((gVal(g,"away_proj") - gVal(g,"home_proj")) * 10) / 10;
+    g.proj_total = Math.round((gVal(g,"away_proj") + gVal(g,"home_proj")) * 10) / 10;
+    if (g.book_spread != null) g.spread_edge = Math.round((gVal(g,"proj_spread") - g.book_spread) * 10) / 10;
+    if (g.book_total != null) g.total_edge = Math.round((gVal(g,"proj_total") - g.book_total) * 10) / 10;
     renderGames();
     renderOddsSummary();
     updateStrip();
@@ -1552,7 +1552,7 @@ function renderOddsSummary() {
     thead.innerHTML = '<tr><th>Game</th><th></th><th>Line</th><th>Model</th><th>Edge</th><th>Price</th><th>Avail</th></tr>';
     let html = '';
     for (const g of STATE.games) {
-      const edge = g.spread_edge;
+      const edge = gVal(g,"spread_edge");
       const awLogo = `<img src="${teamLogo(g.away)}" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;" onerror="this.style.display='none'" />`;
       const hwLogo = `<img src="${teamLogo(g.home)}" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;" onerror="this.style.display='none'" />`;
       html += `<tr style="border-bottom:none;">
@@ -1561,7 +1561,7 @@ function renderOddsSummary() {
         </td>
         <td style="font-size:10px;">${awLogo}</td>
         <td style="font-family:var(--mono);">${g.book_spread != null ? fmtSpread(-g.book_spread) : '—'}</td>
-        <td style="color:var(--accent);font-family:var(--mono);">${gVal(g,"proj_spread") != null ? fmtSpread(-g.proj_spread) : '—'}</td>
+        <td style="color:var(--accent);font-family:var(--mono);">${gVal(g,"proj_spread") != null ? fmtSpread(-gVal(g,"proj_spread")) : '—'}</td>
         <td>${edge != null && edge > 0 ? `<span class="edge-chip ${edgeClass(edge)}">${edge.toFixed(1)}</span>` : ''}</td>
         <td style="color:var(--accent);font-size:10px;">${fmtProbML(g.away_spread_price)}</td>
         <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.away_spread_fill)}</td>
@@ -1569,7 +1569,7 @@ function renderOddsSummary() {
       html += `<tr style="border-bottom:2px solid var(--border);">
         <td style="font-size:10px;">${hwLogo}</td>
         <td style="font-family:var(--mono);font-weight:600;">${g.book_spread != null ? fmtSpread(g.book_spread) : '—'}</td>
-        <td style="color:var(--accent);font-family:var(--mono);font-weight:600;">${gVal(g,"proj_spread") != null ? fmtSpread(g.proj_spread) : '—'}</td>
+        <td style="color:var(--accent);font-family:var(--mono);font-weight:600;">${gVal(g,"proj_spread") != null ? fmtSpread(gVal(g,"proj_spread")) : '—'}</td>
         <td>${edge != null && edge < 0 ? `<span class="edge-chip ${edgeClass(edge)}">${Math.abs(edge).toFixed(1)}</span>` : ''}</td>
         <td style="color:var(--accent);font-size:10px;">${fmtProbML(g.home_spread_price)}</td>
         <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.home_spread_fill)}</td>
@@ -1584,8 +1584,8 @@ function renderOddsSummary() {
       const hwBookProb = g.home_ml_price;
       const awBookML = awBookProb != null ? fmtML(probToML(awBookProb)) : '—';
       const hwBookML = hwBookProb != null ? fmtML(probToML(hwBookProb)) : '—';
-      const awModelProb = gVal(g,"proj_spread") != null ? spreadToWinProb(-g.proj_spread) : null;
-      const hwModelProb = gVal(g,"proj_spread") != null ? spreadToWinProb(g.proj_spread) : null;
+      const awModelProb = gVal(g,"proj_spread") != null ? spreadToWinProb(-gVal(g,"proj_spread")) : null;
+      const hwModelProb = gVal(g,"proj_spread") != null ? spreadToWinProb(gVal(g,"proj_spread")) : null;
       const awModelML = awModelProb != null ? fmtML(probToML(awModelProb)) : '—';
       const hwModelML = hwModelProb != null ? fmtML(probToML(hwModelProb)) : '—';
       const awEdge = (awModelProb != null && awBookProb != null) ? Math.round((awModelProb - awBookProb) * 1000) / 10 : null;
@@ -1618,7 +1618,7 @@ function renderOddsSummary() {
     thead.innerHTML = '<tr><th>Game</th><th>Side</th><th>Line</th><th>Model</th><th>Edge</th><th>Price</th><th>Avail</th></tr>';
     let html = '';
     for (const g of STATE.games) {
-      const edge = g.total_edge;
+      const edge = gVal(g,"total_edge");
       const awL = `<img src="${teamLogo(g.away)}" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;" onerror="this.style.display='none'" />`;
       const hwL = `<img src="${teamLogo(g.home)}" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;" onerror="this.style.display='none'" />`;
       html += `<tr style="border-bottom:none;">
@@ -1627,7 +1627,7 @@ function renderOddsSummary() {
         </td>
         <td style="font-family:var(--sans);font-size:10px;">Over</td>
         <td style="font-family:var(--mono);">${g.book_total != null ? g.book_total : '—'}</td>
-        <td style="color:var(--accent);font-family:var(--mono);">${gVal(g,"proj_total") != null ? g.proj_total.toFixed(1) : '—'}</td>
+        <td style="color:var(--accent);font-family:var(--mono);">${gVal(g,"proj_total") != null ? gVal(g,"proj_total").toFixed(1) : '—'}</td>
         <td>${edge != null && edge > 0 ? `<span class="edge-chip ${edgeClass(edge)}">${edge.toFixed(1)}</span>` : ''}</td>
         <td style="color:var(--accent);font-size:10px;">${fmtProbML(g.over_price)}</td>
         <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.over_fill)}</td>
@@ -1635,7 +1635,7 @@ function renderOddsSummary() {
       html += `<tr style="border-bottom:2px solid var(--border);">
         <td style="font-family:var(--sans);font-size:10px;font-weight:600;">Under</td>
         <td style="font-family:var(--mono);font-weight:600;">${g.book_total != null ? g.book_total : '—'}</td>
-        <td style="color:var(--accent);font-family:var(--mono);font-weight:600;">${gVal(g,"proj_total") != null ? g.proj_total.toFixed(1) : '—'}</td>
+        <td style="color:var(--accent);font-family:var(--mono);font-weight:600;">${gVal(g,"proj_total") != null ? gVal(g,"proj_total").toFixed(1) : '—'}</td>
         <td>${edge != null && edge < 0 ? `<span class="edge-chip ${edgeClass(edge)}">${Math.abs(edge).toFixed(1)}</span>` : ''}</td>
         <td style="color:var(--accent);font-size:10px;">${fmtProbML(g.under_price)}</td>
         <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.under_fill)}</td>
@@ -1651,8 +1651,8 @@ function updateStrip() {
 
   let spreadPlays = 0, totalPlays = 0;
   for (const g of STATE.games) {
-    if (gVal(g,"spread_edge") != null && Math.abs(g.spread_edge) >= STATE.settings.spreadEdge) spreadPlays++;
-    if (gVal(g,"total_edge") != null && Math.abs(g.total_edge) >= STATE.settings.totalEdge) totalPlays++;
+    if (gVal(g,"spread_edge") != null && Math.abs(gVal(g,"spread_edge")) >= STATE.settings.spreadEdge) spreadPlays++;
+    if (gVal(g,"total_edge") != null && Math.abs(gVal(g,"total_edge")) >= STATE.settings.totalEdge) totalPlays++;
   }
   document.getElementById('ss-spreads').textContent = spreadPlays;
   document.getElementById('ss-totals').textContent = totalPlays;
@@ -2257,21 +2257,21 @@ function _removed_recalc() {
       const pace = g._rawPace * paceMult;
       g.matchup_pace = Math.round(pace * 10) / 10;
       const hca = (STATE.settings.hca || 1.5) / 2;
-      const awPP100 = avgOrtg + g.away_off - g.home_def;
-      const hwPP100 = avgOrtg + g.home_off - g.away_def;
+      const awPP100 = avgOrtg + gVal(g,"away_off") - gVal(g,"home_def");
+      const hwPP100 = avgOrtg + gVal(g,"home_off") - gVal(g,"away_def");
       g.away_proj = Math.round((awPP100 / 100 * pace - hca) * 10) / 10;
       g.home_proj = Math.round((hwPP100 / 100 * pace + hca) * 10) / 10;
-      g.proj_spread = Math.round((g.away_proj - g.home_proj) * 10) / 10;
-      g.proj_total = Math.round((g.away_proj + g.home_proj) * 10) / 10;
+      g.proj_spread = Math.round((gVal(g,"away_proj") - gVal(g,"home_proj")) * 10) / 10;
+      g.proj_total = Math.round((gVal(g,"away_proj") + gVal(g,"home_proj")) * 10) / 10;
       g.away_pp100 = Math.round(awPP100 * 10) / 10;
       g.home_pp100 = Math.round(hwPP100 * 10) / 10;
 
       // Recalc edges
       if (g.book_spread != null) {
-        g.spread_edge = Math.round((g.proj_spread - g.book_spread) * 10) / 10;
+        g.spread_edge = Math.round((gVal(g,"proj_spread") - g.book_spread) * 10) / 10;
       }
       if (g.book_total != null) {
-        g.total_edge = Math.round((g.proj_total - g.book_total) * 10) / 10;
+        g.total_edge = Math.round((gVal(g,"proj_total") - g.book_total) * 10) / 10;
       }
     }
 
@@ -2560,14 +2560,14 @@ function saveRoster(silent) {
       const avgOrtg = STATE.leagueAvgOrtg || 114.8;
       const hca = (STATE.settings.hca || 1.5) / 2;
       const pace = g.matchup_pace || 95;
-      const awPP100 = avgOrtg + g.away_off - g.home_def;
-      const hwPP100 = avgOrtg + g.home_off - g.away_def;
+      const awPP100 = avgOrtg + gVal(g,"away_off") - gVal(g,"home_def");
+      const hwPP100 = avgOrtg + gVal(g,"home_off") - gVal(g,"away_def");
       g.away_proj = Math.round((awPP100 / 100 * pace - hca) * 10) / 10;
       g.home_proj = Math.round((hwPP100 / 100 * pace + hca) * 10) / 10;
-      g.proj_spread = Math.round((g.away_proj - g.home_proj) * 10) / 10;
-      g.proj_total = Math.round((g.away_proj + g.home_proj) * 10) / 10;
-      if (g.book_spread != null) g.spread_edge = Math.round((g.proj_spread - g.book_spread) * 10) / 10;
-      if (g.book_total != null) g.total_edge = Math.round((g.proj_total - g.book_total) * 10) / 10;
+      g.proj_spread = Math.round((gVal(g,"away_proj") - gVal(g,"home_proj")) * 10) / 10;
+      g.proj_total = Math.round((gVal(g,"away_proj") + gVal(g,"home_proj")) * 10) / 10;
+      if (g.book_spread != null) g.spread_edge = Math.round((gVal(g,"proj_spread") - g.book_spread) * 10) / 10;
+      if (g.book_total != null) g.total_edge = Math.round((gVal(g,"proj_total") - g.book_total) * 10) / 10;
       // Game override saved — projections update on next pipeline run
       // For now, update player list display
       renderGames();
