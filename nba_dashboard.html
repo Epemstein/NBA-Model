@@ -2517,7 +2517,7 @@ function renderStandings() {
 
     return `<tr style="height:44px;${!minOk ? 'opacity:0.4;' : ''}">
       <td style="font-family:var(--mono);font-weight:700;font-size:16px;text-align:center;color:${rank<=3?'var(--green)':rank>=28?'var(--red)':'var(--text)'};">${rank}</td>
-      <td style="padding:8px;">
+      <td style="padding:8px;cursor:pointer;" onclick="openTeamTab('${t.team}')">
         <div style="display:flex;align-items:center;gap:8px;">
           <img src="${teamLogo(t.team)}" style="width:28px;height:28px;object-fit:contain;" onerror="this.style.display='none'" />
           <div>
