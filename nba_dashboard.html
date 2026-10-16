@@ -697,16 +697,23 @@ input[type=number] { -moz-appearance: textfield; }
 <!-- ═══════════ STANDINGS PANEL ═══════════ -->
 <div class="panel" id="panel-standings">
   <div class="card">
-    <div class="ct">Power Rankings</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <div class="ct" style="margin:0;padding:0;border:none;">Power Rankings</div>
+      <div style="display:flex;gap:2px;">
+        <button class="btn bg conf-filter active" data-conf="all" onclick="filterConf('all')" style="font-size:10px;padding:4px 10px;">All</button>
+        <button class="btn bg conf-filter" data-conf="east" onclick="filterConf('east')" style="font-size:10px;padding:4px 10px;">East</button>
+        <button class="btn bg conf-filter" data-conf="west" onclick="filterConf('west')" style="font-size:10px;padding:4px 10px;">West</button>
+      </div>
+    </div>
     <div class="sw" style="max-height:800px;">
       <table class="dt" id="standings-table" style="font-size:13px;">
         <thead><tr>
-          <th style="width:40px;cursor:pointer;" onclick="sortStandings('rank')">#</th>
-          <th style="cursor:pointer;" onclick="sortStandings('team')">Team</th>
-          <th style="text-align:right;cursor:pointer;" onclick="sortStandings('total')">Total</th>
-          <th style="text-align:right;cursor:pointer;" onclick="sortStandings('off')">OFF</th>
-          <th style="text-align:right;cursor:pointer;" onclick="sortStandings('def')">DEF</th>
-          <th style="text-align:right;width:60px;">Min</th>
+          <th style="width:30px;cursor:pointer;" onclick="sortStandings('rank')">#</th>
+          <th style="cursor:pointer;width:200px;" onclick="sortStandings('team')">Team</th>
+          <th style="text-align:right;width:70px;cursor:pointer;" onclick="sortStandings('total')">Total</th>
+          <th style="text-align:right;width:70px;cursor:pointer;" onclick="sortStandings('off')">OFF</th>
+          <th style="text-align:right;width:70px;cursor:pointer;" onclick="sortStandings('def')">DEF</th>
+          <th style="text-align:right;width:40px;">Min</th>
         </tr></thead>
         <tbody id="standings-body">
           <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;">Loading...</td></tr>
@@ -2445,9 +2452,12 @@ function saveRoster(silent) {
 }
 
 // ── Standings ────────────────────────────────────────────────────────────
+const EAST = new Set(['ATL','BOS','BKN','CHA','CHI','CLE','DET','IND','MIA','MIL','NYK','ORL','PHI','TOR','WAS']);
+const WEST = new Set(['DAL','DEN','GSW','HOU','LAC','LAL','MEM','MIN','NOP','OKC','PHX','POR','SAC','SAS','UTA']);
 let _standingsData = [];
 let _standingsSort = 'total';
-let _standingsSortDir = -1; // -1 = desc
+let _standingsSortDir = -1;
+let _standingsConf = 'all';
 
 function loadStandings() {
   const allTeams = Object.keys(COLORS);
@@ -2490,9 +2500,19 @@ function sortStandings(col) {
   renderStandings();
 }
 
+function filterConf(conf) {
+  _standingsConf = conf;
+  document.querySelectorAll('.conf-filter').forEach(b => { b.style.background='#fff'; b.style.color='var(--text2)'; });
+  const a = document.querySelector(`.conf-filter[data-conf="${conf}"]`);
+  if (a) { a.style.background='var(--accent)'; a.style.color='#fff'; }
+  renderStandings();
+}
+
 function renderStandings() {
   const tbody = document.getElementById('standings-body');
-  const data = [..._standingsData];
+  let data = [..._standingsData];
+  if (_standingsConf === 'east') data = data.filter(t => EAST.has(t.team));
+  if (_standingsConf === 'west') data = data.filter(t => WEST.has(t.team));
 
   // Sort
   data.sort((a, b) => {
@@ -2526,19 +2546,19 @@ function renderStandings() {
           </div>
         </div>
       </td>
-      <td style="text-align:right;padding:8px;">
-        <div style="font-family:var(--mono);font-weight:700;font-size:15px;color:${t.total>=0?'var(--green)':'var(--red)'};">${t.total>=0?'+':''}${t.total.toFixed(1)}</div>
-        <div style="font-size:9px;color:var(--muted);">#${rank}</div>
+      <td style="text-align:right;padding:4px 6px;">
+        <span style="font-family:var(--mono);font-weight:700;font-size:14px;color:${t.total>=0?'var(--green)':'var(--red)'};">${t.total>=0?'+':''}${t.total.toFixed(1)}</span>
+        <span style="font-size:9px;color:var(--muted);margin-left:2px;">#${rank}</span>
       </td>
-      <td style="text-align:right;padding:8px;">
-        <div style="font-family:var(--mono);font-size:13px;color:${t.off>=0?'var(--green)':'var(--red)'};">${t.off>=0?'+':''}${t.off.toFixed(1)}</div>
-        <div style="font-size:9px;color:var(--muted);">#${offRank}</div>
+      <td style="text-align:right;padding:4px 6px;">
+        <span style="font-family:var(--mono);font-size:13px;color:${t.off>=0?'var(--green)':'var(--red)'};">${t.off>=0?'+':''}${t.off.toFixed(1)}</span>
+        <span style="font-size:9px;color:var(--muted);margin-left:2px;">#${offRank}</span>
       </td>
-      <td style="text-align:right;padding:8px;">
-        <div style="font-family:var(--mono);font-size:13px;color:${t.def>=0?'var(--green)':'var(--red)'};">${t.def>=0?'+':''}${t.def.toFixed(1)}</div>
-        <div style="font-size:9px;color:var(--muted);">#${defRank}</div>
+      <td style="text-align:right;padding:4px 6px;">
+        <span style="font-family:var(--mono);font-size:13px;color:${t.def>=0?'var(--green)':'var(--red)'};">${t.def>=0?'+':''}${t.def.toFixed(1)}</span>
+        <span style="font-size:9px;color:var(--muted);margin-left:2px;">#${defRank}</span>
       </td>
-      <td style="text-align:right;font-family:var(--mono);font-size:11px;color:${minOk?'var(--green)':'var(--red)'};">${t.totalMin}</td>
+      <td style="text-align:right;padding:4px 6px;font-family:var(--mono);font-size:11px;color:${minOk?'var(--green)':'var(--red)'};">${t.totalMin}</td>
     </tr>`;
   }).join('');
 }
