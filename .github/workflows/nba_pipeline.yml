@@ -2,10 +2,10 @@ name: NBA Pipeline
 
 on:
   schedule:
-    # Every 20 minutes, 11am–midnight ET (15:00–04:00 UTC)
-    # NBA games typically 7pm-midnight ET, but early games start ~12pm
-    - cron: '0,20,40 15-23 * * *'
-    - cron: '0,20,40 0-4 * * *'
+    # 3:00 AM ET (8:00 UTC) — overnight refresh
+    # 12:00 PM ET (17:00 UTC) — midday refresh before games
+    - cron: '0 8 * * *'
+    - cron: '0 17 * * *'
   workflow_dispatch:  # allow manual trigger
 
 jobs:
