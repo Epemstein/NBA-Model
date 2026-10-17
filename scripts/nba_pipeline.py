@@ -930,13 +930,21 @@ def _write_rosters(db, darko, player_minutes, lebron=None):
     """Write all team rosters to Firestore (1 doc). Uses player_minutes for team
     assignments, DARKO for ratings, and optionally official NBA rosters for
     injured players who haven't played yet."""
-    # Try official NBA rosters (may fail from cloud IPs)
+    # Wake up Render proxy before making 30 roster calls
+    if RENDER_URL:
+        try:
+            requests.get(f'{RENDER_URL}/health', timeout=30)
+            print('Render proxy is awake')
+        except:
+            print('WARNING: Could not wake Render proxy')
+
+    # Try official NBA rosters via proxy
     official_rosters = {}
     for team_id, team_abr in NBA_ID_TO_ABR.items():
         try:
             r = _nba_get('https://stats.nba.com/stats/commonteamroster',
                         params={'TeamID': str(team_id), 'Season': _current_season(), 'LeagueID': '00'},
-                        timeout=10)
+                        timeout=30)
             rdata = r.json()
             rhdrs = rdata['resultSets'][0]['headers']
             rrows = rdata['resultSets'][0]['rowSet']
