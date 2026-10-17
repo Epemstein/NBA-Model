@@ -2264,82 +2264,82 @@ function openTeamTab(team) {
 
 // Apply baselines + game overrides to game player lists from Firestore
 async function applyBaselines() {
-  if (!STATE.games.length) return;
+  try {
+    if (!STATE.games.length) return;
 
-  const teams = new Set();
-  for (const g of STATE.games) { teams.add(g.away); teams.add(g.home); }
+    const teams = new Set();
+    for (const g of STATE.games) { teams.add(g.away); teams.add(g.home); }
 
-  // 1 read for all rosters, 1 per team baseline, 1 per team-game override
-  const rosterSnap = await fbDb.collection('nba_rosters').doc('all').get();
-  const allRosters = rosterSnap.exists ? (rosterSnap.data().teams || {}) : {};
+    // 1 read for all rosters, 1 per team baseline, 1 per team-game override
+    const rosterSnap = await fbDb.collection('nba_rosters').doc('all').get();
+    const allRosters = rosterSnap.exists ? (rosterSnap.data().teams || {}) : {};
 
-  const basePromises = [...teams].map(t =>
-    fbDb.collection('nba_baselines').doc(t).get().then(s => [t, s.exists ? s.data().players || {} : {}])
-  );
-  const gamePromises = [];
-  for (const g of STATE.games) {
-    for (const side of ['away', 'home']) {
-      const team = g[side];
-      const key = `${selectedDate}_${g.away}_${g.home}_${team}`;
-      gamePromises.push(
-        fbDb.collection('nba_game_overrides').doc(key).get().then(s => [team, g, s.exists ? s.data().players || {} : {}])
-      );
-    }
-  }
-
-  const [baseResults, goResults] = await Promise.all([
-    Promise.all(basePromises),
-    Promise.all(gamePromises),
-  ]);
-
-  const baselines = {};
-  for (const [t, bl] of baseResults) baselines[t] = bl;
-
-  const gameOverrides = {};
-  for (const [t, g, go] of goResults) gameOverrides[`${g.away}_${g.home}_${t}`] = go;
-
-  for (const g of STATE.games) {
-    for (const side of ['away', 'home']) {
-      const team = g[side];
-      const bl = baselines[team] || {};
-      const go = gameOverrides[`${g.away}_${g.home}_${team}`] || {};
-      const roster = allRosters[team] || [];
-
-      if (!Object.keys(bl).length && !Object.keys(go).length) {
-        // No baseline or game override — leave players at 0
-        continue;
+    const basePromises = [...teams].map(t =>
+      fbDb.collection('nba_baselines').doc(t).get().then(s => [t, s.exists ? s.data().players || {} : {}])
+    );
+    const gamePromises = [];
+    for (const g of STATE.games) {
+      for (const side of ['away', 'home']) {
+        const team = g[side];
+        const key = `${selectedDate}_${g.away}_${g.home}_${team}`;
+        gamePromises.push(
+          fbDb.collection('nba_game_overrides').doc(key).get().then(s => [team, g, s.exists ? s.data().players || {} : {}])
+        );
       }
-
-      const blNorm = {}; for (const [k,v] of Object.entries(bl)) blNorm[normName(k)] = v;
-      const goNorm = {}; for (const [k,v] of Object.entries(go)) goNorm[normName(k)] = v;
-
-      function resolveMin(name) {
-        const nn = normName(name);
-        const gv = goNorm[nn];
-        const sv = blNorm[nn];
-        if (gv != null) return typeof gv === 'object' ? (gv.pg||0)+(gv.sg||0)+(gv.sf||0)+(gv.pf||0)+(gv.c||0) : gv;
-        if (sv != null) return typeof sv === 'object' ? (sv.pg||0)+(sv.sg||0)+(sv.sf||0)+(sv.pf||0)+(sv.c||0) : sv;
-        return 0;
-      }
-
-      // Use roster players (they have DPM/nba_id/lb_dpm), apply baseline minutes
-      const existing = g[`${side}_players`] || [];
-      const source = roster.length ? roster : existing;
-      const newList = source.map(p => ({
-        name: p.name, dpm: p.dpm||0, o_dpm: p.o_dpm||0, d_dpm: p.d_dpm||0,
-        lb_dpm: p.lb_dpm, nba_id: p.nba_id||'', min: resolveMin(p.name),
-      })).filter(p => p.min > 0).sort((a,b) => b.min - a.min);
-
-      g[`${side}_players`] = newList;
     }
-  }
 
-  // recomputeProjections handles all the math from player lists
-  buildRatingLookups();
-  recomputeProjections();
-  renderGames();
-  renderOddsSummary();
-  updateStrip();
+    const [baseResults, goResults] = await Promise.all([
+      Promise.all(basePromises),
+      Promise.all(gamePromises),
+    ]);
+
+    const baselines = {};
+    for (const [t, bl] of baseResults) baselines[t] = bl;
+
+    const gameOverrides = {};
+    for (const [t, g, go] of goResults) gameOverrides[`${g.away}_${g.home}_${t}`] = go;
+
+    const _resolveMin = (blNorm, goNorm, name) => {
+      const nn = normName(name);
+      const gv = goNorm[nn];
+      const sv = blNorm[nn];
+      if (gv != null) return typeof gv === 'object' ? (gv.pg||0)+(gv.sg||0)+(gv.sf||0)+(gv.pf||0)+(gv.c||0) : gv;
+      if (sv != null) return typeof sv === 'object' ? (sv.pg||0)+(sv.sg||0)+(sv.sf||0)+(sv.pf||0)+(sv.c||0) : sv;
+      return 0;
+    };
+
+    for (const g of STATE.games) {
+      for (const side of ['away', 'home']) {
+        const team = g[side];
+        const bl = baselines[team] || {};
+        const go = gameOverrides[`${g.away}_${g.home}_${team}`] || {};
+        const roster = allRosters[team] || [];
+
+        if (!Object.keys(bl).length && !Object.keys(go).length) continue;
+
+        const blNorm = {}; for (const [k,v] of Object.entries(bl)) blNorm[normName(k)] = v;
+        const goNorm = {}; for (const [k,v] of Object.entries(go)) goNorm[normName(k)] = v;
+
+        // Use roster players (they have DPM/nba_id/lb_dpm), apply baseline minutes
+        const existing = g[`${side}_players`] || [];
+        const source = roster.length ? roster : existing;
+        const newList = source.map(p => ({
+          name: p.name, dpm: p.dpm||0, o_dpm: p.o_dpm||0, d_dpm: p.d_dpm||0,
+          lb_dpm: p.lb_dpm, nba_id: p.nba_id||'', min: _resolveMin(blNorm, goNorm, p.name),
+        })).filter(p => p.min > 0).sort((a,b) => b.min - a.min);
+
+        g[`${side}_players`] = newList;
+      }
+    }
+
+    buildRatingLookups();
+    recomputeProjections();
+    renderGames();
+    renderOddsSummary();
+    updateStrip();
+  } catch (e) {
+    console.error('applyBaselines error:', e);
+  }
 }
 
 // ── Roster Editor ───────────────────────────────────────────────────────
