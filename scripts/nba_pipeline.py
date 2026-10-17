@@ -159,7 +159,12 @@ def fetch_darko():
                 data = snap.to_dict()
                 if data.get('players'):
                     print(f'DARKO loaded from Firestore cache ({len(data["players"])} players)')
-                    return {p['name'].lower(): p for p in data['players']}
+                    result = {}
+                    for p in data['players']:
+                        result[norm_name(p['name'])] = p
+                        if p.get('nba_id'):
+                            result[f'id:{p["nba_id"]}'] = p
+                    return result
         except Exception as e:
             print(f'DARKO cache miss: {e}')
 
@@ -1023,6 +1028,11 @@ def _write_rosters(db, darko, player_minutes, lebron=None):
                 'nba_id': dk.get('nba_id', pid) if dk else pid,
             })
 
+    # Only write if we got official rosters — don't overwrite good data with incomplete data
+    if not official_rosters:
+        print('Skipping roster write — no official roster data (NBA API blocked)')
+        return
+
     rosters_combined = {}
     for team, players in all_teams.items():
         players.sort(key=lambda p: -(p.get('min') or 0))
@@ -1073,13 +1083,6 @@ def run(override_date=None):
     except Exception as e:
         print(f'FATAL: Schedule fetch failed: {e}')
         return
-
-    # Always write rosters (even on no-game days) so Teams page works
-    if db and player_minutes:
-        try:
-            _write_rosters(db, darko, player_minutes, lebron)
-        except Exception as e:
-            print(f'Roster write failed: {e}')
 
     if not games:
         print('No games today (regular season)')
