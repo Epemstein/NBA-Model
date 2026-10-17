@@ -743,19 +743,33 @@ input[type=number] { -moz-appearance: textfield; }
         <button class="btn bg conf-filter" data-conf="west" onclick="filterConf('west')" style="font-size:10px;padding:4px 10px;">West</button>
       </div>
     </div>
-    <div class="sw" style="max-height:800px;">
-      <table class="dt" id="standings-table" style="font-size:12px;max-width:700px;">
-        <thead><tr>
-          <th style="width:24px;cursor:pointer;" onclick="sortStandings('rank')">#</th>
-          <th style="cursor:pointer;width:100px;" onclick="sortStandings('team')">Team</th>
-          <th style="text-align:right;width:55px;cursor:pointer;" onclick="sortStandings('total')">Total</th>
-          <th style="text-align:right;width:55px;cursor:pointer;" onclick="sortStandings('off')">OFF</th>
-          <th style="text-align:right;width:55px;cursor:pointer;" onclick="sortStandings('def')">DEF</th>
-        </tr></thead>
-        <tbody id="standings-body">
-          <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;">Loading...</td></tr>
-        </tbody>
-      </table>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;">
+      <div class="sw" style="max-height:800px;flex:1;min-width:320px;">
+        <div style="font-size:11px;font-weight:700;text-align:center;padding:4px;background:#f5f5f5;border-bottom:2px solid var(--border);">DARKO</div>
+        <table class="dt" style="font-size:12px;">
+          <thead><tr>
+            <th style="width:24px;cursor:pointer;" onclick="sortStandingsTable('darko','rank')">#</th>
+            <th style="cursor:pointer;width:100px;" onclick="sortStandingsTable('darko','team')">Team</th>
+            <th style="text-align:right;width:55px;cursor:pointer;" onclick="sortStandingsTable('darko','total')">Total</th>
+            <th style="text-align:right;width:55px;cursor:pointer;" onclick="sortStandingsTable('darko','off')">OFF</th>
+            <th style="text-align:right;width:55px;cursor:pointer;" onclick="sortStandingsTable('darko','def')">DEF</th>
+          </tr></thead>
+          <tbody id="standings-body-darko"></tbody>
+        </table>
+      </div>
+      <div class="sw" style="max-height:800px;flex:1;min-width:320px;">
+        <div style="font-size:11px;font-weight:700;text-align:center;padding:4px;background:#f5f5f5;border-bottom:2px solid var(--border);">LEBRON</div>
+        <table class="dt" style="font-size:12px;">
+          <thead><tr>
+            <th style="width:24px;cursor:pointer;" onclick="sortStandingsTable('lebron','rank')">#</th>
+            <th style="cursor:pointer;width:100px;" onclick="sortStandingsTable('lebron','team')">Team</th>
+            <th style="text-align:right;width:55px;cursor:pointer;" onclick="sortStandingsTable('lebron','total')">Total</th>
+            <th style="text-align:right;width:55px;cursor:pointer;" onclick="sortStandingsTable('lebron','off')">OFF</th>
+            <th style="text-align:right;width:55px;cursor:pointer;" onclick="sortStandingsTable('lebron','def')">DEF</th>
+          </tr></thead>
+          <tbody id="standings-body-lebron"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 </div>
@@ -1153,6 +1167,9 @@ async function loadSlate() {
     renderOddsSummary();
     updateStrip();
     populatePickDropdown();
+
+    // Apply baselines + game overrides from Firestore to get correct minutes
+    applyBaselines();
 
   } catch (e) {
     console.error('loadSlate error:', e);
@@ -2245,18 +2262,19 @@ function openTeamTab(team) {
   loadTeamBaseline();
 }
 
-// [DEAD CODE REMOVED — recalcGamesWithBaselines]
-function _dead() { /* placeholder to maintain brace count */
-  // Load all saved baselines and apply to game player lists + recalc ratings
+// Apply baselines + game overrides to game player lists from Firestore
+async function applyBaselines() {
+  if (!STATE.games.length) return;
+
   const teams = new Set();
   for (const g of STATE.games) { teams.add(g.away); teams.add(g.home); }
 
-  // Load baselines, game overrides, AND rosters for all teams
+  // 1 read for all rosters, 1 per team baseline, 1 per team-game override
+  const rosterSnap = await fbDb.collection('nba_rosters').doc('all').get();
+  const allRosters = rosterSnap.exists ? (rosterSnap.data().teams || {}) : {};
+
   const basePromises = [...teams].map(t =>
-    fbDb.collection('nba_baselines').doc(t).get().then(s => ['bl', t, s.exists ? s.data().players || {} : {}])
-  );
-  const rosterPromises = [...teams].map(t =>
-    fbDb.collection('nba_rosters').doc(t).get().then(s => ['ro', t, s.exists ? s.data().players || [] : []])
+    fbDb.collection('nba_baselines').doc(t).get().then(s => [t, s.exists ? s.data().players || {} : {}])
   );
   const gamePromises = [];
   for (const g of STATE.games) {
@@ -2264,115 +2282,64 @@ function _dead() { /* placeholder to maintain brace count */
       const team = g[side];
       const key = `${selectedDate}_${g.away}_${g.home}_${team}`;
       gamePromises.push(
-        fbDb.collection('nba_game_overrides').doc(key).get().then(s => ['go', team, g, s.exists ? s.data().players || {} : {}])
+        fbDb.collection('nba_game_overrides').doc(key).get().then(s => [team, g, s.exists ? s.data().players || {} : {}])
       );
     }
   }
 
-  Promise.all([...basePromises, ...rosterPromises, ...gamePromises]).then(results => {
-    const baselines = {};
-    const rosters = {};
-    const gameOverrides = {};
-    for (const r of results) {
-      if (r[0] === 'bl') baselines[r[1]] = r[2];
-      else if (r[0] === 'ro') rosters[r[1]] = r[2];
-      else if (r[0] === 'go') {
-        const g = r[2];
-        gameOverrides[`${g.away}_${g.home}_${r[1]}`] = r[3];
+  const [baseResults, goResults] = await Promise.all([
+    Promise.all(basePromises),
+    Promise.all(gamePromises),
+  ]);
+
+  const baselines = {};
+  for (const [t, bl] of baseResults) baselines[t] = bl;
+
+  const gameOverrides = {};
+  for (const [t, g, go] of goResults) gameOverrides[`${g.away}_${g.home}_${t}`] = go;
+
+  for (const g of STATE.games) {
+    for (const side of ['away', 'home']) {
+      const team = g[side];
+      const bl = baselines[team] || {};
+      const go = gameOverrides[`${g.away}_${g.home}_${team}`] || {};
+      const roster = allRosters[team] || [];
+
+      if (!Object.keys(bl).length && !Object.keys(go).length) {
+        // No baseline or game override — leave players at 0
+        continue;
       }
+
+      const blNorm = {}; for (const [k,v] of Object.entries(bl)) blNorm[normName(k)] = v;
+      const goNorm = {}; for (const [k,v] of Object.entries(go)) goNorm[normName(k)] = v;
+
+      function resolveMin(name) {
+        const nn = normName(name);
+        const gv = goNorm[nn];
+        const sv = blNorm[nn];
+        if (gv != null) return typeof gv === 'object' ? (gv.pg||0)+(gv.sg||0)+(gv.sf||0)+(gv.pf||0)+(gv.c||0) : gv;
+        if (sv != null) return typeof sv === 'object' ? (sv.pg||0)+(sv.sg||0)+(sv.sf||0)+(sv.pf||0)+(sv.c||0) : sv;
+        return 0;
+      }
+
+      // Use roster players (they have DPM/nba_id/lb_dpm), apply baseline minutes
+      const existing = g[`${side}_players`] || [];
+      const source = roster.length ? roster : existing;
+      const newList = source.map(p => ({
+        name: p.name, dpm: p.dpm||0, o_dpm: p.o_dpm||0, d_dpm: p.d_dpm||0,
+        lb_dpm: p.lb_dpm, nba_id: p.nba_id||'', min: resolveMin(p.name),
+      })).filter(p => p.min > 0).sort((a,b) => b.min - a.min);
+
+      g[`${side}_players`] = newList;
     }
+  }
 
-    let anyChanged = false;
-    for (const g of STATE.games) {
-      for (const side of ['away', 'home']) {
-        const team = g[side];
-        const bl = baselines[team] || {};
-        const go = gameOverrides[`${g.away}_${g.home}_${team}`] || {};
-        const roster = rosters[team] || [];
-        if (!Object.keys(bl).length && !Object.keys(go).length) {
-          // No baseline or game override — zero out
-          const playerList = g[`${side}_players`] || [];
-          for (const p of playerList) p.min = 0;
-          g[`${side}_off`] = 0;
-          g[`${side}_def`] = 0;
-          continue;
-        }
-        anyChanged = true;
-
-        // Rebuild player list from roster + baselines + game overrides
-        const blNorm = {}; for (const [k,v] of Object.entries(bl)) blNorm[normName(k)] = v;
-        const goNorm = {}; for (const [k,v] of Object.entries(go)) goNorm[normName(k)] = v;
-
-        function resolveMin(name) {
-          const nn = normName(name);
-          const gv = goNorm[nn];
-          const sv = blNorm[nn];
-          if (gv != null) {
-            return typeof gv === 'object' ? (gv.pg||0)+(gv.sg||0)+(gv.sf||0)+(gv.pf||0)+(gv.c||0) : gv;
-          }
-          if (sv != null) {
-            return typeof sv === 'object' ? (sv.pg||0)+(sv.sg||0)+(sv.sf||0)+(sv.pf||0)+(sv.c||0) : sv;
-          }
-          return 0;
-        }
-
-        // Build from roster (has all players with DPM/nba_id)
-        const newList = roster.map(p => ({
-          name: p.name, dpm: p.dpm||0, o_dpm: p.o_dpm||0, d_dpm: p.d_dpm||0,
-          nba_id: p.nba_id||'', min: resolveMin(p.name),
-        })).filter(p => p.min > 0).sort((a,b) => b.min - a.min);
-
-        g[`${side}_players`] = newList;
-        const playerList = newList;
-        // Sort by minutes
-        playerList.sort((a, b) => b.min - a.min);
-
-        // Recalculate team rating (same math as pipeline)
-        const totalRaw = playerList.reduce((s, p) => s + p.min / 48, 0);
-        const scale = totalRaw > 0 ? 5.0 / totalRaw : 0;
-        let off = 0, def = 0;
-        for (const p of playerList) {
-          const w = (p.min / 48) * scale;
-          off += (p.o_dpm || 0) * w;
-          def += (p.d_dpm || 0) * w;
-        }
-        g[`${side}_off`] = Math.round(off * 100) / 100;
-        g[`${side}_def`] = Math.round(def * 100) / 100;
-      }
-
-      // Recalculate projections — apply pace multiplier from settings
-      const avgOrtg = STATE.leagueAvgOrtg || 114.8;
-      const paceMult = STATE.settings.paceMult || 1.0;
-      // Store raw pace (before any multiplier) on first run, reuse it after
-      if (!g._rawPace) g._rawPace = (g.matchup_pace || 95) / 0.95;
-      const pace = g._rawPace * paceMult;
-      g.matchup_pace = Math.round(pace * 10) / 10;
-      const hca = (STATE.settings.hca || 1.5) / 2;
-      const awPP100 = avgOrtg + gVal(g,"away_off") - gVal(g,"home_def");
-      const hwPP100 = avgOrtg + gVal(g,"home_off") - gVal(g,"away_def");
-      g.away_proj = Math.round((awPP100 / 100 * pace - hca) * 10) / 10;
-      g.home_proj = Math.round((hwPP100 / 100 * pace + hca) * 10) / 10;
-      g.proj_spread = Math.round((gVal(g,"away_proj") - gVal(g,"home_proj")) * 10) / 10;
-      g.proj_total = Math.round((gVal(g,"away_proj") + gVal(g,"home_proj")) * 10) / 10;
-      g.away_pp100 = Math.round(awPP100 * 10) / 10;
-      g.home_pp100 = Math.round(hwPP100 * 10) / 10;
-
-      // Recalc edges
-      if (g.book_spread != null) {
-        g.spread_edge = Math.round((gVal(g,"proj_spread") - g.book_spread) * 10) / 10;
-      }
-      if (g.book_total != null) {
-        g.total_edge = Math.round((gVal(g,"proj_total") - g.book_total) * 10) / 10;
-      }
-    }
-
-    if (anyChanged) {
-      console.log('Baselines applied, re-rendering...');
-    }
-    renderGames();
-    renderOddsSummary();
-    updateStrip();
-  });
+  // recomputeProjections handles all the math from player lists
+  buildRatingLookups();
+  recomputeProjections();
+  renderGames();
+  renderOddsSummary();
+  updateStrip();
 }
 
 // ── Roster Editor ───────────────────────────────────────────────────────
@@ -2765,35 +2732,37 @@ function renderAllPlayers() {
 const EAST = new Set(['ATL','BOS','BKN','CHA','CHI','CLE','DET','IND','MIA','MIL','NYK','ORL','PHI','TOR','WAS']);
 const WEST = new Set(['DAL','DEN','GSW','HOU','LAC','LAL','MEM','MIN','NOP','OKC','PHX','POR','SAC','SAS','UTA']);
 let _standingsData = [];
-let _standingsSort = 'total';
-let _standingsSortDir = -1;
+let _standingsSortDarko = 'total', _standingsDirDarko = -1;
+let _standingsSortLebron = 'total', _standingsDirLebron = -1;
 let _standingsConf = 'all';
 
 function loadStandings() {
-  // Use all_team_ratings from the slate doc — 0 extra Firestore reads
   const ratings = STATE.allTeamRatings || {};
   if (!Object.keys(ratings).length) {
-    // Fallback: load from latest slate
     fbDb.collection('nba_slate').doc(selectedDate).get().then(snap => {
       if (snap.exists) {
         STATE.allTeamRatings = snap.data().all_team_ratings || {};
-        loadStandings(); // retry
+        loadStandings();
       }
     });
     return;
   }
   _standingsData = Object.entries(ratings).map(([team, r]) => ({
-    team, off: r.off||0, def: r.def||0, total: r.total||(r.off||0)+(r.def||0), totalMin: r.min||0
+    team,
+    off: r.off||0, def: r.def||0, total: r.total||(r.off||0)+(r.def||0),
+    lb_off: r.lb_off||0, lb_def: r.lb_def||0, lb_total: r.lb_total||(r.lb_off||0)+(r.lb_def||0),
+    totalMin: r.min||0
   }));
   renderStandings();
 }
 
-function sortStandings(col) {
-  if (_standingsSort === col) {
-    _standingsSortDir *= -1;
+function sortStandingsTable(source, col) {
+  if (source === 'darko') {
+    if (_standingsSortDarko === col) _standingsDirDarko *= -1;
+    else { _standingsSortDarko = col; _standingsDirDarko = col === 'team' ? 1 : -1; }
   } else {
-    _standingsSort = col;
-    _standingsSortDir = col === 'team' ? 1 : -1;
+    if (_standingsSortLebron === col) _standingsDirLebron *= -1;
+    else { _standingsSortLebron = col; _standingsDirLebron = col === 'team' ? 1 : -1; }
   }
   renderStandings();
 }
@@ -2806,31 +2775,28 @@ function filterConf(conf) {
   renderStandings();
 }
 
-function renderStandings() {
-  const tbody = document.getElementById('standings-body');
-  let data = [..._standingsData];
-  if (_standingsConf === 'east') data = data.filter(t => EAST.has(t.team));
-  if (_standingsConf === 'west') data = data.filter(t => WEST.has(t.team));
+function _renderOneStandingsTable(tbodyId, data, sortCol, sortDir, offKey, defKey, totKey) {
+  const tbody = document.getElementById(tbodyId);
+  if (!tbody) return;
+  let rows = data.map(t => ({ team: t.team, off: t[offKey], def: t[defKey], total: t[totKey], totalMin: t.totalMin }));
+  if (_standingsConf === 'east') rows = rows.filter(t => EAST.has(t.team));
+  if (_standingsConf === 'west') rows = rows.filter(t => WEST.has(t.team));
 
-  // Sort
-  data.sort((a, b) => {
-    let va = a[_standingsSort], vb = b[_standingsSort];
-    if (_standingsSort === 'team') return _standingsSortDir * va.localeCompare(vb);
-    if (_standingsSort === 'rank') return _standingsSortDir * (a.total - b.total);
-    return _standingsSortDir * ((va||0) - (vb||0));
+  rows.sort((a, b) => {
+    if (sortCol === 'team') return sortDir * a.team.localeCompare(b.team);
+    if (sortCol === 'rank') return sortDir * (a.total - b.total);
+    return sortDir * ((a[sortCol]||0) - (b[sortCol]||0));
   });
 
-  // Compute ranks for each category
-  const offRanked = [...data].sort((a,b) => b.off - a.off);
-  const defRanked = [...data].sort((a,b) => b.def - a.def);
-  const totRanked = [...data].sort((a,b) => b.total - a.total);
+  const offRanked = [...rows].sort((a,b) => b.off - a.off);
+  const defRanked = [...rows].sort((a,b) => b.def - a.def);
+  const totRanked = [...rows].sort((a,b) => b.total - a.total);
 
-  tbody.innerHTML = data.map((t, i) => {
+  tbody.innerHTML = rows.map(t => {
     const rank = totRanked.findIndex(x => x.team === t.team) + 1;
     const offRank = offRanked.findIndex(x => x.team === t.team) + 1;
     const defRank = defRanked.findIndex(x => x.team === t.team) + 1;
     const color = COLORS[t.team] || '#333';
-    const fullName = FULL_NAMES[t.team] || t.team;
     const minOk = Math.abs(t.totalMin - 240) <= 1;
 
     return `<tr style="height:32px;${!minOk ? 'opacity:0.4;' : ''}">
@@ -2855,6 +2821,11 @@ function renderStandings() {
       </td>
     </tr>`;
   }).join('');
+}
+
+function renderStandings() {
+  _renderOneStandingsTable('standings-body-darko', _standingsData, _standingsSortDarko, _standingsDirDarko, 'off', 'def', 'total');
+  _renderOneStandingsTable('standings-body-lebron', _standingsData, _standingsSortLebron, _standingsDirLebron, 'lb_off', 'lb_def', 'lb_total');
 }
 
 // ── Activity Log ────────────────────────────────────────────────────────
