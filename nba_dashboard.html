@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v12</title>
+<title>NBA ALGO v13</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -2754,23 +2754,69 @@ let _standingsSortDarko = 'total', _standingsDirDarko = -1;
 let _standingsSortLebron = 'total', _standingsDirLebron = -1;
 let _standingsConf = 'all';
 
-function loadStandings() {
-  const ratings = STATE.allTeamRatings || {};
-  if (!Object.keys(ratings).length) {
-    fbDb.collection('nba_slate').doc(selectedDate).get().then(snap => {
-      if (snap.exists) {
-        STATE.allTeamRatings = snap.data().all_team_ratings || {};
-        loadStandings();
+async function loadStandings() {
+  const ALL_TEAMS = [...EAST, ...WEST];
+
+  // Load rosters + baselines for all 30 teams
+  const rosterSnap = await fbDb.collection('nba_rosters').doc('all').get();
+  const allRosters = rosterSnap.exists ? (rosterSnap.data().teams || {}) : {};
+
+  const baseResults = await Promise.all(
+    ALL_TEAMS.map(t => fbDb.collection('nba_baselines').doc(t).get().then(s => [t, s.exists ? s.data().players || {} : {}]))
+  );
+  const baselines = {};
+  for (const [t, bl] of baseResults) baselines[t] = bl;
+
+  _standingsData = ALL_TEAMS.map(team => {
+    const roster = allRosters[team] || [];
+    const bl = baselines[team] || {};
+
+    // Build player list with baseline minutes (same format as calcTeamRating expects)
+    const players = roster.map(p => {
+      const sv = bl[p.name];
+      let pg=0, sg=0, sf=0, pf=0, c=0;
+      if (sv && typeof sv === 'object') {
+        pg = sv.pg||0; sg = sv.sg||0; sf = sv.sf||0; pf = sv.pf||0; c = sv.c||0;
       }
+      return { name: p.name, pg, sg, sf, pf, c, dpm: p.dpm, o_dpm: p.o_dpm, d_dpm: p.d_dpm, nba_id: p.nba_id||'', lb_dpm: p.lb_dpm };
     });
-    return;
-  }
-  _standingsData = Object.entries(ratings).map(([team, r]) => ({
-    team,
-    off: r.off||0, def: r.def||0, total: r.total||(r.off||0)+(r.def||0),
-    lb_off: r.lb_off||0, lb_def: r.lb_def||0, lb_total: r.lb_total||(r.lb_off||0)+(r.lb_def||0),
-    totalMin: r.min||0
-  }));
+
+    // Compute DARKO rating
+    const totalMin = players.reduce((s, p) => s + p.pg+p.sg+p.sf+p.pf+p.c, 0);
+    const totalRaw = totalMin / 48;
+    const scale = totalRaw > 0 ? 5.0 / totalRaw : 0;
+    let dOff = 0, dDef = 0, lOff = 0, lDef = 0;
+    for (const p of players) {
+      const min = p.pg+p.sg+p.sf+p.pf+p.c;
+      if (!min) continue;
+      const w = (min / 48) * scale;
+      // DARKO
+      dOff += (p.o_dpm||0) * w;
+      dDef += (p.d_dpm||0) * w;
+      // LEBRON — split using DARKO o/d ratio
+      const lbDpm = getLbDpm(p);
+      if (lbDpm != null) {
+        const dkO = p.o_dpm||0, dkD = p.d_dpm||0;
+        const dkAbs = Math.abs(dkO) + Math.abs(dkD);
+        if (dkAbs > 0) {
+          lOff += lbDpm * (Math.abs(dkO)/dkAbs) * (dkO>=0?1:-1) * w;
+          lDef += lbDpm * (Math.abs(dkD)/dkAbs) * (dkD>=0?1:-1) * w;
+        } else {
+          lOff += (lbDpm/2) * w; lDef += (lbDpm/2) * w;
+        }
+      } else {
+        lOff += (p.o_dpm||0) * w;
+        lDef += (p.d_dpm||0) * w;
+      }
+    }
+
+    return {
+      team,
+      off: Math.round(dOff*100)/100, def: Math.round(dDef*100)/100, total: Math.round((dOff+dDef)*100)/100,
+      lb_off: Math.round(lOff*100)/100, lb_def: Math.round(lDef*100)/100, lb_total: Math.round((lOff+lDef)*100)/100,
+    };
+  });
+
   renderStandings();
 }
 
