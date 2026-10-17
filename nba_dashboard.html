@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v11</title>
+<title>NBA ALGO v12</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -2815,9 +2815,8 @@ function _renderOneStandingsTable(tbodyId, data, sortCol, sortDir, offKey, defKe
     const offRank = offRanked.findIndex(x => x.team === t.team) + 1;
     const defRank = defRanked.findIndex(x => x.team === t.team) + 1;
     const color = COLORS[t.team] || '#333';
-    const minOk = Math.abs(t.totalMin - 240) <= 1;
 
-    return `<tr style="height:32px;${!minOk ? 'opacity:0.4;' : ''}">
+    return `<tr style="height:32px;">
       <td style="font-family:var(--mono);font-weight:700;font-size:13px;text-align:center;padding:2px 4px;color:${rank<=3?'var(--green)':rank>=28?'var(--red)':'var(--text)'};">${rank}</td>
       <td style="padding:3px 6px;cursor:pointer;" onclick="openTeamTab('${t.team}')">
         <div style="display:flex;align-items:center;gap:6px;">
