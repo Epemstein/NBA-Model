@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v18</title>
+<title>NBA ALGO v19</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1186,8 +1186,15 @@ async function loadSlate() {
     // Apply baselines + game overrides from Firestore to get correct minutes
     applyBaselines();
 
-    // Auto-fetch live odds for this date
-    if (STATE.games.length) refreshOdds();
+    // Load cached odds first (instant), only fetch live if no cache
+    if (STATE.games.length) {
+      const cached = localStorage.getItem('nba_odds_' + selectedDate);
+      if (cached) {
+        _applyCachedOdds(JSON.parse(cached));
+      } else {
+        refreshOdds();
+      }
+    }
 
   } catch (e) {
     console.error('loadSlate error:', e);
@@ -1615,6 +1622,32 @@ async function loadDateGames() {
   btn.textContent = 'Load Games';
 }
 
+const _oddsFields = ['book_spread','book_total','home_spread_price','home_spread_fill',
+  'away_spread_price','away_spread_fill','over_price','over_fill','under_price','under_fill',
+  'home_ml_price','home_ml_fill','away_ml_price','away_ml_fill'];
+
+function _applyCachedOdds(cached) {
+  if (!cached || !STATE.games.length) return;
+  for (let i = 0; i < STATE.games.length; i++) {
+    const key = `${STATE.games[i].away}@${STATE.games[i].home}`;
+    const c = cached[key];
+    if (c) for (const f of _oddsFields) if (c[f] !== undefined) STATE.games[i][f] = c[f];
+  }
+  recomputeProjections();
+  renderGames(); renderOddsSummary(); updateStrip();
+}
+
+function _saveOddsCache() {
+  const cache = {};
+  for (const g of STATE.games) {
+    const key = `${g.away}@${g.home}`;
+    const entry = {};
+    for (const f of _oddsFields) if (g[f] !== undefined) entry[f] = g[f];
+    cache[key] = entry;
+  }
+  localStorage.setItem('nba_odds_' + selectedDate, JSON.stringify(cache));
+}
+
 async function refreshOdds() {
   const btn = document.getElementById('refresh-odds-btn');
   const status = document.getElementById('odds-refresh-status');
@@ -1630,7 +1663,8 @@ async function refreshOdds() {
       status.textContent = `Updated ${data.count} games`;
       status.style.color = 'var(--green)';
       logActivity(`Refreshed odds for ${selectedDate} (${data.count} games)`);
-      // Firestore snapshot listener will auto-refresh the UI
+      // Cache odds locally for instant date switching
+      setTimeout(() => _saveOddsCache(), 2000); // wait for snapshot to merge
     } else {
       status.textContent = data.error || 'Failed';
       status.style.color = 'var(--red)';
