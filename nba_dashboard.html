@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v10</title>
+<title>NBA ALGO v11</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -3018,7 +3018,24 @@ function setupRealtimeListener() {
   _snapshotUnsub = fbDb.collection('nba_slate').doc(selectedDate).onSnapshot(snap => {
     if (!snap.exists) return;
     const data = snap.data();
-    STATE.games = data.games || [];
+    const incoming = data.games || [];
+
+    if (STATE.games.length && incoming.length === STATE.games.length) {
+      // Merge odds fields only — preserve existing player lists and minutes
+      const oddsFields = ['book_spread','book_total','home_spread_price','home_spread_fill',
+        'away_spread_price','away_spread_fill','over_price','over_fill','under_price','under_fill',
+        'home_ml_price','home_ml_fill','away_ml_price','away_ml_fill',
+        'novig_spread_home_oid','novig_spread_away_oid','novig_total_over_oid','novig_total_under_oid'];
+      for (let i = 0; i < incoming.length; i++) {
+        for (const f of oddsFields) {
+          if (incoming[i][f] !== undefined) STATE.games[i][f] = incoming[i][f];
+        }
+      }
+    } else {
+      // First load or game count changed — full replace
+      STATE.games = incoming;
+    }
+
     STATE.teamRatings = data.team_ratings || {};
     STATE.leagueAvgPace = data.league_avg_pace || 100;
     STATE.leagueAvgOrtg = data.league_avg_ortg || 113.1;
@@ -3034,7 +3051,6 @@ function setupRealtimeListener() {
     renderOddsSummary();
     updateStrip();
     populatePickDropdown();
-    applyBaselines();
   });
 }
 </script>
