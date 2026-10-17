@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v19</title>
+<title>NBA ALGO v20</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -498,6 +498,7 @@ input[type=number] { -moz-appearance: textfield; }
     <div style="display:flex;gap:2px;">
       <button class="rating-toggle active" data-rating="darko" onclick="switchRating('darko')" style="font-size:10px;padding:3px 8px;border:1px solid #555;border-radius:3px;cursor:pointer;background:#333;color:#fff;font-weight:600;">DARKO</button>
       <button class="rating-toggle" data-rating="lebron" onclick="switchRating('lebron')" style="font-size:10px;padding:3px 8px;border:1px solid #555;border-radius:3px;cursor:pointer;background:transparent;color:#888;">LEBRON</button>
+      <button class="rating-toggle" data-rating="epm" onclick="switchRating('epm')" style="font-size:10px;padding:3px 8px;border:1px solid #555;border-radius:3px;cursor:pointer;background:transparent;color:#888;">EPM</button>
     </div>
     <div class="hpill">LAST UPDATE <strong id="last-update">—</strong></div>
     <div id="hdr-user" style="display:none;align-items:center;gap:6px;">
@@ -770,6 +771,19 @@ input[type=number] { -moz-appearance: textfield; }
           <tbody id="standings-body-lebron"></tbody>
         </table>
       </div>
+      <div class="sw" style="max-height:800px;flex:1;min-width:320px;">
+        <div style="font-size:11px;font-weight:700;text-align:center;padding:4px;background:#f5f5f5;border-bottom:2px solid var(--border);">EPM</div>
+        <table class="dt" style="font-size:12px;">
+          <thead><tr>
+            <th style="width:24px;cursor:pointer;" onclick="sortStandingsTable('epm','rank')">#</th>
+            <th style="cursor:pointer;width:100px;" onclick="sortStandingsTable('epm','team')">Team</th>
+            <th style="text-align:right;width:55px;cursor:pointer;" onclick="sortStandingsTable('epm','total')">Total</th>
+            <th style="text-align:right;width:55px;cursor:pointer;" onclick="sortStandingsTable('epm','off')">OFF</th>
+            <th style="text-align:right;width:55px;cursor:pointer;" onclick="sortStandingsTable('epm','def')">DEF</th>
+          </tr></thead>
+          <tbody id="standings-body-epm"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 </div>
@@ -974,7 +988,7 @@ document.querySelectorAll('#nav button').forEach(btn => {
 function normName(s) { return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\./g,'').toLowerCase().trim().replace(/ (jr|sr|iv|iii|ii)$/,''); }
 
 // ── Rating source toggle ────────────────────────────────────────────────
-let _ratingSource = 'darko';  // 'darko' or 'lebron'
+let _ratingSource = 'darko';  // 'darko', 'lebron', or 'epm'
 
 function switchRating(source) {
   _ratingSource = source;
@@ -1006,6 +1020,7 @@ function switchRating(source) {
 }
 
 function pDpm(p) {
+  if (_ratingSource === 'epm') { const ep = p.epm; return ep != null ? ep : getDarko(p).dpm; }
   if (_ratingSource === 'lebron') { const lb = getLbDpm(p); return lb != null ? lb : getDarko(p).dpm; }
   return getDarko(p).dpm;
 }
@@ -1018,6 +1033,7 @@ function gVal(g, field) { return g[field]; }  // projections are recomputed in-p
 // Global rating lookups — built from any loaded date, persist across date switches
 let _darkoLookup = {};   // {nba_id: {dpm, o_dpm, d_dpm}}
 let _lebronLookup = {};  // {nba_id: lb_dpm}
+let _epmLookup = {};     // {nba_id: {epm, epm_o, epm_d}}
 
 function buildRatingLookups() {
   for (const g of STATE.games) {
@@ -1029,6 +1045,9 @@ function buildRatingLookups() {
         }
         if (p.lb_dpm != null) {
           _lebronLookup[p.nba_id] = p.lb_dpm;
+        }
+        if (p.epm != null) {
+          _epmLookup[p.nba_id] = { epm: p.epm, epm_o: p.epm_o, epm_d: p.epm_d };
         }
       }
     }
@@ -1060,7 +1079,10 @@ function recomputeProjections() {
       let off = 0, def = 0;
       for (const p of players) {
         const w = ((p.min || 0) / 48) * scale;
-        if (_ratingSource === 'lebron' && p.lb_o_dpm != null && p.lb_d_dpm != null) {
+        if (_ratingSource === 'epm' && p.epm_o != null && p.epm_d != null) {
+          off += (p.epm_o || 0) * w;
+          def += (p.epm_d || 0) * w;
+        } else if (_ratingSource === 'lebron' && p.lb_o_dpm != null && p.lb_d_dpm != null) {
           off += (p.lb_o_dpm || 0) * w;
           def += (p.lb_d_dpm || 0) * w;
         } else if (_ratingSource === 'lebron' && getLbDpm(p) != null) {
@@ -2103,6 +2125,7 @@ function loadTeamBaseline() {
           pg, sg, sf, pf, c,
           dpm: p.dpm, o_dpm: p.o_dpm, d_dpm: p.d_dpm,
           lb_dpm: p.lb_dpm, lb_o_dpm: p.lb_o_dpm, lb_d_dpm: p.lb_d_dpm,
+          epm: p.epm, epm_o: p.epm_o, epm_d: p.epm_d,
         };
       });
 
@@ -2125,7 +2148,10 @@ function calcTeamRating(players) {
   let off = 0, def = 0;
   for (const p of players) {
     const w = ((p.pg+p.sg+p.sf+p.pf+p.c) / 48) * scale;
-    if (_ratingSource === 'lebron' && p.lb_o_dpm != null && p.lb_d_dpm != null) {
+    if (_ratingSource === 'epm' && p.epm_o != null && p.epm_d != null) {
+      off += (p.epm_o||0) * w;
+      def += (p.epm_d||0) * w;
+    } else if (_ratingSource === 'lebron' && p.lb_o_dpm != null && p.lb_d_dpm != null) {
       off += (p.lb_o_dpm||0) * w;
       def += (p.lb_d_dpm||0) * w;
     } else {
@@ -2148,6 +2174,10 @@ function renderTeamBaseline() {
   const atr = STATE.allTeamRatings || {};
   // Recompute all ratings with current toggle for accurate ranking
   const allRatings = Object.entries(atr).map(([t, r]) => {
+    // Use EPM values if toggled and available
+    if (_ratingSource === 'epm' && r.epm_total != null) {
+      return { team: t, off: r.epm_off, def: r.epm_def, total: r.epm_total };
+    }
     // Use LEBRON values if toggled and available
     if (_ratingSource === 'lebron' && r.lb_total != null) {
       return { team: t, off: r.lb_off, def: r.lb_def, total: r.lb_total };
@@ -2386,6 +2416,7 @@ async function applyBaselines() {
         const newList = source.map(p => ({
           name: p.name, dpm: p.dpm||0, o_dpm: p.o_dpm||0, d_dpm: p.d_dpm||0,
           lb_dpm: p.lb_dpm, lb_o_dpm: p.lb_o_dpm, lb_d_dpm: p.lb_d_dpm,
+          epm: p.epm, epm_o: p.epm_o, epm_d: p.epm_d,
           nba_id: p.nba_id||'', min: _resolveMin(blNorm, goNorm, p.name),
         })).filter(p => p.min > 0).sort((a,b) => b.min - a.min);
 
@@ -2782,8 +2813,8 @@ function renderAllPlayers() {
       </td>
       <td style="padding:6px 4px;text-align:center;">${logo}<div style="font-size:10px;font-weight:600;">${p.team}</div></td>
       <td style="text-align:right;font-family:var(--mono);color:${dpmColor(pDpm(p))};font-weight:700;font-size:14px;padding:6px 8px;">${fmtDpm(pDpm(p))}</td>
-      <td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--text2);padding:6px 6px;">${fmtDpm(_ratingSource==='lebron' && p.lb_o_dpm!=null ? p.lb_o_dpm : p.o_dpm)}</td>
-      <td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--text2);padding:6px 6px;">${fmtDpm(_ratingSource==='lebron' && p.lb_d_dpm!=null ? p.lb_d_dpm : p.d_dpm)}</td>
+      <td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--text2);padding:6px 6px;">${fmtDpm(_ratingSource==='epm' && p.epm_o!=null ? p.epm_o : _ratingSource==='lebron' && p.lb_o_dpm!=null ? p.lb_o_dpm : p.o_dpm)}</td>
+      <td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--text2);padding:6px 6px;">${fmtDpm(_ratingSource==='epm' && p.epm_d!=null ? p.epm_d : _ratingSource==='lebron' && p.lb_d_dpm!=null ? p.lb_d_dpm : p.d_dpm)}</td>
       <td style="text-align:right;font-family:var(--mono);font-size:10px;color:var(--muted);padding:6px 4px;">${p.nba_id||''}</td>
     </tr>`;
   }).join('');
@@ -2798,6 +2829,7 @@ const WEST = new Set(['DAL','DEN','GSW','HOU','LAC','LAL','MEM','MIN','NOP','OKC
 let _standingsData = [];
 let _standingsSortDarko = 'total', _standingsDirDarko = -1;
 let _standingsSortLebron = 'total', _standingsDirLebron = -1;
+let _standingsSortEpm = 'total', _standingsDirEpm = -1;
 let _standingsConf = 'all';
 
 async function loadStandings() {
@@ -2824,14 +2856,14 @@ async function loadStandings() {
       if (sv && typeof sv === 'object') {
         pg = sv.pg||0; sg = sv.sg||0; sf = sv.sf||0; pf = sv.pf||0; c = sv.c||0;
       }
-      return { name: p.name, pg, sg, sf, pf, c, dpm: p.dpm, o_dpm: p.o_dpm, d_dpm: p.d_dpm, nba_id: p.nba_id||'', lb_dpm: p.lb_dpm, lb_o_dpm: p.lb_o_dpm, lb_d_dpm: p.lb_d_dpm };
+      return { name: p.name, pg, sg, sf, pf, c, dpm: p.dpm, o_dpm: p.o_dpm, d_dpm: p.d_dpm, nba_id: p.nba_id||'', lb_dpm: p.lb_dpm, lb_o_dpm: p.lb_o_dpm, lb_d_dpm: p.lb_d_dpm, epm: p.epm, epm_o: p.epm_o, epm_d: p.epm_d };
     });
 
     // Compute DARKO rating
     const totalMin = players.reduce((s, p) => s + p.pg+p.sg+p.sf+p.pf+p.c, 0);
     const totalRaw = totalMin / 48;
     const scale = totalRaw > 0 ? 5.0 / totalRaw : 0;
-    let dOff = 0, dDef = 0, lOff = 0, lDef = 0;
+    let dOff = 0, dDef = 0, lOff = 0, lDef = 0, eOff = 0, eDef = 0;
     for (const p of players) {
       const min = p.pg+p.sg+p.sf+p.pf+p.c;
       if (!min) continue;
@@ -2848,12 +2880,22 @@ async function loadStandings() {
         lOff += (p.o_dpm||0) * w;
         lDef += (p.d_dpm||0) * w;
       }
+      // EPM — use actual O-EPM / D-EPM
+      if (p.epm_o != null && p.epm_d != null) {
+        eOff += (p.epm_o||0) * w;
+        eDef += (p.epm_d||0) * w;
+      } else {
+        // Fallback to DARKO if no EPM data
+        eOff += (p.o_dpm||0) * w;
+        eDef += (p.d_dpm||0) * w;
+      }
     }
 
     return {
       team,
       off: Math.round(dOff*100)/100, def: Math.round(dDef*100)/100, total: Math.round((dOff+dDef)*100)/100,
       lb_off: Math.round(lOff*100)/100, lb_def: Math.round(lDef*100)/100, lb_total: Math.round((lOff+lDef)*100)/100,
+      epm_off: Math.round(eOff*100)/100, epm_def: Math.round(eDef*100)/100, epm_total: Math.round((eOff+eDef)*100)/100,
     };
   });
 
@@ -2864,6 +2906,9 @@ function sortStandingsTable(source, col) {
   if (source === 'darko') {
     if (_standingsSortDarko === col) _standingsDirDarko *= -1;
     else { _standingsSortDarko = col; _standingsDirDarko = col === 'team' ? 1 : -1; }
+  } else if (source === 'epm') {
+    if (_standingsSortEpm === col) _standingsDirEpm *= -1;
+    else { _standingsSortEpm = col; _standingsDirEpm = col === 'team' ? 1 : -1; }
   } else {
     if (_standingsSortLebron === col) _standingsDirLebron *= -1;
     else { _standingsSortLebron = col; _standingsDirLebron = col === 'team' ? 1 : -1; }
@@ -2929,6 +2974,7 @@ function _renderOneStandingsTable(tbodyId, data, sortCol, sortDir, offKey, defKe
 function renderStandings() {
   _renderOneStandingsTable('standings-body-darko', _standingsData, _standingsSortDarko, _standingsDirDarko, 'off', 'def', 'total');
   _renderOneStandingsTable('standings-body-lebron', _standingsData, _standingsSortLebron, _standingsDirLebron, 'lb_off', 'lb_def', 'lb_total');
+  _renderOneStandingsTable('standings-body-epm', _standingsData, _standingsSortEpm, _standingsDirEpm, 'epm_off', 'epm_def', 'epm_total');
 }
 
 // ── Activity Log ────────────────────────────────────────────────────────

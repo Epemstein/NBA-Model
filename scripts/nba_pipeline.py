@@ -342,6 +342,70 @@ def fetch_lebron():
         return {}
 
 
+# ── Fetch EPM ratings ────────────────────────────────────────────────────
+def fetch_epm():
+    """Fetch EPM (Estimated Plus-Minus) ratings from dunksandthrees.com.
+    Returns same format as fetch_darko(): {norm_name: {name, dpm, o_dpm, d_dpm, pos, nba_id}}
+    EPM/O-EPM/D-EPM map to dpm/o_dpm/d_dpm for compatibility.
+    """
+    today = today_et()
+    if db:
+        try:
+            snap = db.collection('nba_epm').document(today).get()
+            if snap.exists:
+                data = snap.to_dict()
+                if data.get('players'):
+                    print(f'EPM loaded from Firestore cache ({len(data["players"])} players)')
+                    result = {}
+                    for p in data['players']:
+                        result[norm_name(p['name'])] = p
+                        if p.get('nba_id'):
+                            result[f'id:{p["nba_id"]}'] = p
+                    return result
+        except Exception as e:
+            print(f'EPM cache miss: {e}')
+
+    print('Fetching EPM ratings from dunksandthrees.com...')
+    r = requests.get('https://dunksandthrees.com/epm/__data.json',
+                     headers={'User-Agent': 'Mozilla/5.0'}, timeout=20)
+    r.raise_for_status()
+    raw = r.text
+    data = json.loads(raw.split('\n')[0])
+    d = data['nodes'][2]['data']
+    players = {}
+    raw_list = []
+    for idx in d[2]:
+        p = d[idx]
+        name = d[p['player_name']]
+        team = d[p['team_alias']]
+        nba_id = str(d[p['player_id']])
+        entry = {
+            'name': name,
+            'dpm': round(d[p['tot']], 2),
+            'o_dpm': round(d[p['off']], 2),
+            'd_dpm': round(d[p['def']], 2),
+            'pos': '',
+            'nba_id': nba_id,
+        }
+        players[norm_name(name)] = entry
+        if nba_id:
+            players[f'id:{nba_id}'] = entry
+        raw_list.append(entry)
+
+    print(f'EPM: {len(raw_list)} players loaded')
+
+    if db and raw_list:
+        try:
+            db.collection('nba_epm').document(today).set({
+                'players': raw_list,
+                'ts': firestore.SERVER_TIMESTAMP,
+            })
+        except Exception as e:
+            print(f'EPM cache write failed: {e}')
+
+    return players
+
+
 # ── NBA API params builder ───────────────────────────────────────────────
 def _nba_player_params(season, last_n=8):
     return {
@@ -931,7 +995,7 @@ def get_game_overrides(date, away, home, team):
     return {}
 
 
-def _write_rosters(db, darko, player_minutes, lebron=None):
+def _write_rosters(db, darko, player_minutes, lebron=None, epm=None):
     """Write all team rosters to Firestore (1 doc). Uses player_minutes for team
     assignments, DARKO for ratings, and optionally official NBA rosters for
     injured players who haven't played yet."""
@@ -986,6 +1050,13 @@ def _write_rosters(db, darko, player_minutes, lebron=None):
                 entry['lb_dpm'] = round(lb['dpm'], 1)
                 entry['lb_o_dpm'] = round(lb.get('o_dpm', 0), 1)
                 entry['lb_d_dpm'] = round(lb.get('d_dpm', 0), 1)
+        # Add EPM rating if available
+        if epm and dk:
+            ep = epm.get(f'id:{dk.get("nba_id", "")}') or epm.get(nk)
+            if ep:
+                entry['epm'] = round(ep['dpm'], 1)
+                entry['epm_o'] = round(ep['o_dpm'], 1)
+                entry['epm_d'] = round(ep['d_dpm'], 1)
         if team not in all_teams:
             all_teams[team] = []
         if dedup_key in seen:
@@ -1065,6 +1136,13 @@ def run(override_date=None):
         lebron = fetch_lebron()
     except Exception as e:
         print(f'WARNING: LEBRON fetch failed ({e}), DARKO-only mode')
+
+    # Also fetch EPM for triple-rating support
+    epm = {}
+    try:
+        epm = fetch_epm()
+    except Exception as e:
+        print(f'WARNING: EPM fetch failed ({e}), no EPM data')
 
     try:
         player_minutes = fetch_player_minutes()
@@ -1214,6 +1292,19 @@ def run(override_date=None):
                 p['lb_o_dpm'] = round(lb['o_dpm'], 1) if lb else None
                 p['lb_d_dpm'] = round(lb['d_dpm'], 1) if lb else None
 
+        # Add EPM to each player
+        if epm:
+            for p in aw_players:
+                ep = epm.get(f'id:{p.get("nba_id","")}') or epm.get(norm_name(p['name']))
+                p['epm'] = round(ep['dpm'], 1) if ep else None
+                p['epm_o'] = round(ep['o_dpm'], 1) if ep else None
+                p['epm_d'] = round(ep['d_dpm'], 1) if ep else None
+            for p in hw_players:
+                ep = epm.get(f'id:{p.get("nba_id","")}') or epm.get(norm_name(p['name']))
+                p['epm'] = round(ep['dpm'], 1) if ep else None
+                p['epm_o'] = round(ep['o_dpm'], 1) if ep else None
+                p['epm_d'] = round(ep['d_dpm'], 1) if ep else None
+
         # Pace for this matchup
         aw_pace = team_paces.get(aw, league_avg_pace)
         hw_pace = team_paces.get(hw, league_avg_pace)
@@ -1227,6 +1318,7 @@ def run(override_date=None):
              'o_dpm': round(p['o_dpm'], 1) if p['o_dpm'] is not None else None,
              'd_dpm': round(p['d_dpm'], 1) if p['d_dpm'] is not None else None,
              'lb_dpm': p.get('lb_dpm'), 'lb_o_dpm': p.get('lb_o_dpm'), 'lb_d_dpm': p.get('lb_d_dpm'),
+             'epm': p.get('epm'), 'epm_o': p.get('epm_o'), 'epm_d': p.get('epm_d'),
              'nba_id': p.get('nba_id', '')}
             for p in aw_players
         ]
@@ -1236,6 +1328,7 @@ def run(override_date=None):
              'o_dpm': round(p['o_dpm'], 1) if p['o_dpm'] is not None else None,
              'd_dpm': round(p['d_dpm'], 1) if p['d_dpm'] is not None else None,
              'lb_dpm': p.get('lb_dpm'), 'lb_o_dpm': p.get('lb_o_dpm'), 'lb_d_dpm': p.get('lb_d_dpm'),
+             'epm': p.get('epm'), 'epm_o': p.get('epm_o'), 'epm_d': p.get('epm_d'),
              'nba_id': p.get('nba_id', '')}
             for p in hw_players
         ]
@@ -1277,6 +1370,12 @@ def run(override_date=None):
                     entry['lb_off'] = lb_off
                     entry['lb_def'] = lb_def
                     entry['lb_total'] = round(lb_off + lb_def, 2)
+                # EPM team ratings
+                if epm:
+                    ep_off, ep_def, _ = compute_team_rating(team_abr, epm, temp_game_mins)
+                    entry['epm_off'] = ep_off
+                    entry['epm_def'] = ep_def
+                    entry['epm_total'] = round(ep_off + ep_def, 2)
                 all_team_ratings[team_abr] = entry
 
             db.collection('nba_slate').document(date).set({
@@ -1293,7 +1392,7 @@ def run(override_date=None):
             print(f'\nWrote {len(games_out)} games to Firestore')
 
             # Write rosters (also called on no-game days, but refresh here too)
-            _write_rosters(db, darko, player_minutes, lebron)
+            _write_rosters(db, darko, player_minutes, lebron, epm)
 
         except Exception as e:
             print(f'Firestore write failed: {e}')
