@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v13</title>
+<title>NBA ALGO v14</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1048,20 +1048,23 @@ function recomputeProjections() {
       let off = 0, def = 0;
       for (const p of players) {
         const w = ((p.min || 0) / 48) * scale;
-        const dk = getDarko(p);
-        const lbDpm = getLbDpm(p);
-        if (_ratingSource === 'lebron' && lbDpm != null) {
-          // Split LEBRON total using DARKO o/d ratio
+        if (_ratingSource === 'lebron' && p.lb_o_dpm != null && p.lb_d_dpm != null) {
+          off += (p.lb_o_dpm || 0) * w;
+          def += (p.lb_d_dpm || 0) * w;
+        } else if (_ratingSource === 'lebron' && getLbDpm(p) != null) {
+          // Fallback: only total LEBRON available, split using DARKO ratio
+          const dk = getDarko(p);
+          const lbDpm = getLbDpm(p);
           const dkO = dk.o_dpm || 0, dkD = dk.d_dpm || 0;
           const dkAbs = Math.abs(dkO) + Math.abs(dkD);
           if (dkAbs > 0) {
             off += lbDpm * (Math.abs(dkO) / dkAbs) * (dkO >= 0 ? 1 : -1) * w;
             def += lbDpm * (Math.abs(dkD) / dkAbs) * (dkD >= 0 ? 1 : -1) * w;
           } else {
-            off += (lbDpm / 2) * w;
-            def += (lbDpm / 2) * w;
+            off += (lbDpm / 2) * w; def += (lbDpm / 2) * w;
           }
         } else {
+          const dk = getDarko(p);
           off += (dk.o_dpm || 0) * w;
           def += (dk.d_dpm || 0) * w;
         }
@@ -2053,6 +2056,7 @@ function loadTeamBaseline() {
           name: p.name, pos: p.pos || '', nba_id: p.nba_id || '',
           pg, sg, sf, pf, c,
           dpm: p.dpm, o_dpm: p.o_dpm, d_dpm: p.d_dpm,
+          lb_dpm: p.lb_dpm, lb_o_dpm: p.lb_o_dpm, lb_d_dpm: p.lb_d_dpm,
         };
       });
 
@@ -2075,17 +2079,9 @@ function calcTeamRating(players) {
   let off = 0, def = 0;
   for (const p of players) {
     const w = ((p.pg+p.sg+p.sf+p.pf+p.c) / 48) * scale;
-    const dpm = pDpm(p);
-    if (_ratingSource === 'lebron' && dpm != null && dpm !== p.dpm) {
-      // Split LEBRON using DARKO o/d ratio
-      const dkO = p.o_dpm||0, dkD = p.d_dpm||0;
-      const dkAbs = Math.abs(dkO) + Math.abs(dkD);
-      if (dkAbs > 0) {
-        off += dpm * (Math.abs(dkO)/dkAbs) * (dkO>=0?1:-1) * w;
-        def += dpm * (Math.abs(dkD)/dkAbs) * (dkD>=0?1:-1) * w;
-      } else {
-        off += (dpm/2) * w; def += (dpm/2) * w;
-      }
+    if (_ratingSource === 'lebron' && p.lb_o_dpm != null && p.lb_d_dpm != null) {
+      off += (p.lb_o_dpm||0) * w;
+      def += (p.lb_d_dpm||0) * w;
     } else {
       off += (p.o_dpm||0) * w;
       def += (p.d_dpm||0) * w;
@@ -2343,7 +2339,8 @@ async function applyBaselines() {
         const source = roster.length ? roster : existing;
         const newList = source.map(p => ({
           name: p.name, dpm: p.dpm||0, o_dpm: p.o_dpm||0, d_dpm: p.d_dpm||0,
-          lb_dpm: p.lb_dpm, nba_id: p.nba_id||'', min: _resolveMin(blNorm, goNorm, p.name),
+          lb_dpm: p.lb_dpm, lb_o_dpm: p.lb_o_dpm, lb_d_dpm: p.lb_d_dpm,
+          nba_id: p.nba_id||'', min: _resolveMin(blNorm, goNorm, p.name),
         })).filter(p => p.min > 0).sort((a,b) => b.min - a.min);
 
         g[`${side}_players`] = newList;
@@ -2778,7 +2775,7 @@ async function loadStandings() {
       if (sv && typeof sv === 'object') {
         pg = sv.pg||0; sg = sv.sg||0; sf = sv.sf||0; pf = sv.pf||0; c = sv.c||0;
       }
-      return { name: p.name, pg, sg, sf, pf, c, dpm: p.dpm, o_dpm: p.o_dpm, d_dpm: p.d_dpm, nba_id: p.nba_id||'', lb_dpm: p.lb_dpm };
+      return { name: p.name, pg, sg, sf, pf, c, dpm: p.dpm, o_dpm: p.o_dpm, d_dpm: p.d_dpm, nba_id: p.nba_id||'', lb_dpm: p.lb_dpm, lb_o_dpm: p.lb_o_dpm, lb_d_dpm: p.lb_d_dpm };
     });
 
     // Compute DARKO rating
@@ -2793,18 +2790,12 @@ async function loadStandings() {
       // DARKO
       dOff += (p.o_dpm||0) * w;
       dDef += (p.d_dpm||0) * w;
-      // LEBRON — split using DARKO o/d ratio
-      const lbDpm = getLbDpm(p);
-      if (lbDpm != null) {
-        const dkO = p.o_dpm||0, dkD = p.d_dpm||0;
-        const dkAbs = Math.abs(dkO) + Math.abs(dkD);
-        if (dkAbs > 0) {
-          lOff += lbDpm * (Math.abs(dkO)/dkAbs) * (dkO>=0?1:-1) * w;
-          lDef += lbDpm * (Math.abs(dkD)/dkAbs) * (dkD>=0?1:-1) * w;
-        } else {
-          lOff += (lbDpm/2) * w; lDef += (lbDpm/2) * w;
-        }
+      // LEBRON — use actual O-LEBRON / D-LEBRON
+      if (p.lb_o_dpm != null && p.lb_d_dpm != null) {
+        lOff += (p.lb_o_dpm||0) * w;
+        lDef += (p.lb_d_dpm||0) * w;
       } else {
+        // Fallback to DARKO if no LEBRON data
         lOff += (p.o_dpm||0) * w;
         lDef += (p.d_dpm||0) * w;
       }

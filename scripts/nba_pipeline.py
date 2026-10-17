@@ -984,6 +984,8 @@ def _write_rosters(db, darko, player_minutes, lebron=None):
             lb = lebron.get(f'id:{dk.get("nba_id", "")}') or lebron.get(nk)
             if lb:
                 entry['lb_dpm'] = round(lb['dpm'], 1)
+                entry['lb_o_dpm'] = round(lb.get('o_dpm', 0), 1)
+                entry['lb_d_dpm'] = round(lb.get('d_dpm', 0), 1)
         if team not in all_teams:
             all_teams[team] = []
         if dedup_key in seen:
@@ -1204,9 +1206,13 @@ def run(override_date=None):
             for p in aw_players:
                 lb = lebron.get(f'id:{p.get("nba_id","")}') or lebron.get(norm_name(p['name']))
                 p['lb_dpm'] = round(lb['dpm'], 1) if lb else None
+                p['lb_o_dpm'] = round(lb['o_dpm'], 1) if lb else None
+                p['lb_d_dpm'] = round(lb['d_dpm'], 1) if lb else None
             for p in hw_players:
                 lb = lebron.get(f'id:{p.get("nba_id","")}') or lebron.get(norm_name(p['name']))
                 p['lb_dpm'] = round(lb['dpm'], 1) if lb else None
+                p['lb_o_dpm'] = round(lb['o_dpm'], 1) if lb else None
+                p['lb_d_dpm'] = round(lb['d_dpm'], 1) if lb else None
 
         # Pace for this matchup
         aw_pace = team_paces.get(aw, league_avg_pace)
@@ -1220,7 +1226,7 @@ def run(override_date=None):
              'dpm': round(p['dpm'], 1) if p['dpm'] is not None else None,
              'o_dpm': round(p['o_dpm'], 1) if p['o_dpm'] is not None else None,
              'd_dpm': round(p['d_dpm'], 1) if p['d_dpm'] is not None else None,
-             'lb_dpm': p.get('lb_dpm'),
+             'lb_dpm': p.get('lb_dpm'), 'lb_o_dpm': p.get('lb_o_dpm'), 'lb_d_dpm': p.get('lb_d_dpm'),
              'nba_id': p.get('nba_id', '')}
             for p in aw_players
         ]
@@ -1229,7 +1235,7 @@ def run(override_date=None):
              'dpm': round(p['dpm'], 1) if p['dpm'] is not None else None,
              'o_dpm': round(p['o_dpm'], 1) if p['o_dpm'] is not None else None,
              'd_dpm': round(p['d_dpm'], 1) if p['d_dpm'] is not None else None,
-             'lb_dpm': p.get('lb_dpm'),
+             'lb_dpm': p.get('lb_dpm'), 'lb_o_dpm': p.get('lb_o_dpm'), 'lb_d_dpm': p.get('lb_d_dpm'),
              'nba_id': p.get('nba_id', '')}
             for p in hw_players
         ]
