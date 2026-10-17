@@ -228,6 +228,8 @@ def get_novig_nba_lines(client, target_date=None):
     Returns dict: { 'BOS@DET': { spread: {...}, total: {...}, event_id: '...' } }
     """
     from datetime import datetime as dt
+    from zoneinfo import ZoneInfo
+    ET = ZoneInfo('America/New_York')
 
     spreads = client.get_nba_markets(market_type='SPREAD')
     totals = client.get_nba_markets(market_type='TOTAL')
@@ -244,7 +246,7 @@ def get_novig_nba_lines(client, target_date=None):
         if target_date:
             ts = m.get('startsTs', 0)
             if ts:
-                game_date = dt.fromtimestamp(ts / 1000).strftime('%Y-%m-%d')
+                game_date = dt.fromtimestamp(ts / 1000, tz=ET).strftime('%Y-%m-%d')
                 if game_date != target_date:
                     continue
         if eid not in events:
@@ -256,7 +258,7 @@ def get_novig_nba_lines(client, target_date=None):
         if target_date:
             ts = m.get('startsTs', 0)
             if ts:
-                game_date = dt.fromtimestamp(ts / 1000).strftime('%Y-%m-%d')
+                game_date = dt.fromtimestamp(ts / 1000, tz=ET).strftime('%Y-%m-%d')
                 if game_date != target_date:
                     continue
         if eid not in events:
@@ -268,7 +270,7 @@ def get_novig_nba_lines(client, target_date=None):
         if target_date:
             ts = m.get('startsTs', 0)
             if ts:
-                game_date = dt.fromtimestamp(ts / 1000).strftime('%Y-%m-%d')
+                game_date = dt.fromtimestamp(ts / 1000, tz=ET).strftime('%Y-%m-%d')
                 if game_date != target_date:
                     continue
         if eid not in events:
