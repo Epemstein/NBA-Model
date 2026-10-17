@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v16</title>
+<title>NBA ALGO v17</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -2422,7 +2422,7 @@ function openRoster(gameIdx, side) {
     for (const p of _rosterState.players) {
       const nn = normName(p.name);
       // Baseline = what the team baseline says (before game overrides)
-      const bv = bl[p.name] || Object.entries(bl).find(([k]) => normName(k) === nn)?.[1];
+      const bv = baselines[p.name] || Object.entries(baselines).find(([k]) => normName(k) === nn)?.[1];
       if (bv && typeof bv === 'object') {
         _rosterState.baseline[nn] = { pg: bv.pg||0, sg: bv.sg||0, sf: bv.sf||0, pf: bv.pf||0, c: bv.c||0 };
       } else {
@@ -2432,6 +2432,9 @@ function openRoster(gameIdx, side) {
 
     captureRosterSnapshot();
     renderRosterTable();
+  }).catch(e => {
+    console.error('openRoster failed:', e);
+    document.getElementById('roster-tbody').innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--red);padding:12px;">Error: ${e.message}</td></tr>`;
   });
 }
 
