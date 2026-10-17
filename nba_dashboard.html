@@ -2016,20 +2016,35 @@ function loadTeamBaseline() {
 
   // Load roster from nba_rosters/all (1 read for all teams)
   fbDb.collection('nba_rosters').doc('all').get().then(allSnap => {
-    const roster = allSnap.exists ? (allSnap.data().teams || {})[team] || [] : [];
+    let roster = allSnap.exists ? (allSnap.data().teams || {})[team] || [] : [];
+
+    // Fallback: build roster from game player lists in the current slate
+    if (!roster.length && STATE.games.length) {
+      const seen = new Set();
+      for (const g of STATE.games) {
+        for (const side of ['away', 'home']) {
+          if (g[side] !== team) continue;
+          for (const p of (g[`${side}_players`] || [])) {
+            const key = p.nba_id || p.name;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            roster.push(p);
+          }
+        }
+      }
+    }
 
     // Load saved baseline
     return fbDb.collection('nba_baselines').doc(team).get().then(baseSnap => {
       const saved = baseSnap.exists ? (baseSnap.data().players || {}) : {};
 
       _teamPlayers = roster.map(p => {
-        const sv = saved[p.name]; // saved = {pg:X, sg:X, sf:X, pf:X, c:X} or a number
+        const sv = saved[p.name];
         let pg=0, sg=0, sf=0, pf=0, c=0;
 
         if (sv && typeof sv === 'object') {
           pg = sv.pg || 0; sg = sv.sg || 0; sf = sv.sf || 0; pf = sv.pf || 0; c = sv.c || 0;
         }
-        // If no saved baseline, all positions start at 0 — user fills them in
 
         return {
           name: p.name, pos: p.pos || '', nba_id: p.nba_id || '',
