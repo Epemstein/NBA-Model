@@ -518,7 +518,7 @@ def get_novig_all_lines(client, target_date, game_key):
     money_market = next((m for m in moneys_raw if m['eventId'] == target_eid), None)
 
     # Pre-limit to 15 closest to median before fetching (avoid 50+ API calls on free tier)
-    MAX_PREFETCH = 15
+    MAX_PREFETCH = 25
     if len(spread_markets) > MAX_PREFETCH:
         mid_idx = len(spread_markets) // 2
         start = max(0, mid_idx - MAX_PREFETCH // 2)
