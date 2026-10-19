@@ -495,8 +495,8 @@ def get_novig_all_lines(client, target_date, game_key):
     total_markets = sorted([m for m in totals_raw if m['eventId'] == target_eid], key=lambda x: float(x['strike']))
     money_market = next((m for m in moneys_raw if m['eventId'] == target_eid), None)
 
-    # Limit to 5 closest to primary strike (reduce API calls)
-    MAX_LINES = 5
+    # Limit to 10 closest to primary strike (parallel fetches keep it fast)
+    MAX_LINES = 10
     if len(spread_markets) > MAX_LINES:
         strikes = [float(m['strike']) for m in spread_markets]
         primary = round((min(strikes) + max(strikes)) / 2 * 2) / 2
