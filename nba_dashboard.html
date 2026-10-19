@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v33</title>
+<title>NBA ALGO v34</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -974,7 +974,7 @@ let STATE = {
   history: JSON.parse(localStorage.getItem('nba_history') || '[]'),
   overrides: JSON.parse(localStorage.getItem('nba_overrides') || '{}'),
   bankroll: JSON.parse(localStorage.getItem('nba_bankroll') || '{"start":10000,"kelly":0.5,"maxPct":3}'),
-  settings: JSON.parse(localStorage.getItem('nba_settings') || '{"spreadEdge":2,"totalEdge":2,"hca":1.5,"paceMult":0.95,"blendDarko":34,"blendLebron":33,"blendEpm":33}'),
+  settings: JSON.parse(localStorage.getItem('nba_settings') || '{"spreadEdge":2,"totalEdge":2,"hca":1.5,"paceMult":0.95,"blendDarko":60,"blendLebron":25,"blendEpm":15}'),
   teamRatings: {},
   leagueAvgPace: 100,
   leagueAvgOrtg: 113.1,
@@ -1047,7 +1047,7 @@ function switchRating(source) {
 // Blend helper: returns {off, def, dpm} for MODEL mode with renormalized weights
 function blendPlayerOffDef(p) {
   const s = STATE.settings;
-  const wd = (s.blendDarko ?? 34) / 100, wl = (s.blendLebron ?? 33) / 100, we = (s.blendEpm ?? 33) / 100;
+  const wd = (s.blendDarko ?? 60) / 100, wl = (s.blendLebron ?? 25) / 100, we = (s.blendEpm ?? 15) / 100;
   const dk = getDarko(p);
   const dkO = dk.o_dpm || 0, dkD = dk.d_dpm || 0;
   const lbO = p.lb_o_dpm, lbD = p.lb_d_dpm;
@@ -1354,14 +1354,16 @@ function renderGames() {
     const hasTotalEdge = gVal(g,"total_edge") != null && Math.abs(gVal(g,"total_edge")) >= STATE.settings.totalEdge;
     const hasEdge = hasSpreadEdge || hasTotalEdge;
 
-    // Check total minutes — use OFF/DEF as proxy: if projections look real, baselines are applied
-    const awMin = (g.away_players||[]).reduce((s,p) => s+(p.min||0), 0);
-    const hwMin = (g.home_players||[]).reduce((s,p) => s+(p.min||0), 0);
-    // Don't flag if OFF/DEF are non-zero (baselines applied even if player list not updated)
-    const awHasRatings = Math.abs(g.away_off||0) > 0.01;
-    const hwHasRatings = Math.abs(g.home_off||0) > 0.01;
-    const awBad = Math.abs(awMin - 240) > 0.5 && !awHasRatings;
-    const hwBad = Math.abs(hwMin - 240) > 0.5 && !hwHasRatings;
+    // Check total minutes — use inline state if available (most accurate), else game players
+    const awSt = _inlineState[`${i}_away`];
+    const hwSt = _inlineState[`${i}_home`];
+    const awMin = awSt ? awSt.players.reduce((s,p) => s+p.pg+p.sg+p.sf+p.pf+p.c, 0)
+                       : (g.away_players||[]).reduce((s,p) => s+(p.min||0), 0);
+    const hwMin = hwSt ? hwSt.players.reduce((s,p) => s+p.pg+p.sg+p.sf+p.pf+p.c, 0)
+                       : (g.home_players||[]).reduce((s,p) => s+(p.min||0), 0);
+    // If no inline state and no player mins but has ratings, baselines are applied — don't flag
+    const awBad = Math.abs(awMin - 240) > 0.5 && (awSt || Math.abs(g.away_off||0) < 0.01);
+    const hwBad = Math.abs(hwMin - 240) > 0.5 && (hwSt || Math.abs(g.home_off||0) < 0.01);
     const anyBad = awBad || hwBad;
 
     const awColor = anyBad ? (awBad ? '#999' : COLORS[g.away] || '#333') : COLORS[g.away] || '#333';
@@ -1579,6 +1581,7 @@ function _buildInlineSide(gameIdx, side, roster, baselines, overrides) {
       dpm: p.dpm||0, o_dpm: p.o_dpm||0, d_dpm: p.d_dpm||0,
       epm: p.epm, epm_o: p.epm_o, epm_d: p.epm_d,
       lb_dpm: p.lb_dpm, lb_o_dpm: p.lb_o_dpm, lb_d_dpm: p.lb_d_dpm,
+      injury: p.injury||'',
     };
   });
   // Sort: players with minutes first (desc by total), then 0-min alphabetically
@@ -1628,31 +1631,40 @@ function _renderInlinePlayersPanel(gameIdx) {
 
     const hs = (id) => id ? `https://cdn.nba.com/headshots/nba/latest/260x190/${id}.png` : '';
 
+    // Check if any player differs from baseline
+    const hasOverrides = players.some(p => {
+      const pBl = bl[normName(p.name)] || {pg:0,sg:0,sf:0,pf:0,c:0};
+      return p.pg !== (pBl.pg||0) || p.sg !== (pBl.sg||0) || p.sf !== (pBl.sf||0) || p.pf !== (pBl.pf||0) || p.c !== (pBl.c||0);
+    });
+
     return `<div>
       <div class="math-col-title" style="display:flex;align-items:center;justify-content:space-between;">
-        ${team} Rotation
-        <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:${totalClr};">${totalMin.toFixed(0)} min</span>
+        <span>${team} Rotation</span>
+        <span style="display:flex;align-items:center;gap:6px;">
+          <button onclick="inlineRevert(${gameIdx},'${side}')" style="font-size:9px;padding:2px 8px;border:1px solid ${hasOverrides ? 'var(--accent)' : '#ccc'};border-radius:3px;cursor:${hasOverrides ? 'pointer' : 'default'};background:${hasOverrides ? 'var(--accent)' : '#f0f0f0'};color:${hasOverrides ? '#fff' : '#bbb'};font-weight:600;${hasOverrides ? '' : 'pointer-events:none;'}" ${hasOverrides ? '' : 'disabled'}>Revert</button>
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:${totalClr};">${totalMin.toFixed(0)} min</span>
+        </span>
       </div>
       <div style="overflow-x:auto;max-height:500px;overflow-y:auto;">
       <table style="width:100%;border-collapse:collapse;font-size:10px;">
         <thead>
           <tr style="border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface);z-index:2;">
-            <th style="text-align:left;font-size:9px;color:var(--muted);padding:4px 0;min-width:90px;">PLAYER</th>
+            <th style="text-align:left;font-size:9px;color:var(--muted);padding:4px 0;min-width:110px;">PLAYER</th>
+            <th style="text-align:center;font-size:9px;color:var(--muted);padding:4px 1px;width:36px;">TOT</th>
             <th style="text-align:center;font-size:9px;color:var(--accent);padding:4px 1px;width:40px;">PG</th>
             <th style="text-align:center;font-size:9px;color:var(--accent);padding:4px 1px;width:40px;">SG</th>
             <th style="text-align:center;font-size:9px;color:var(--accent);padding:4px 1px;width:40px;">SF</th>
             <th style="text-align:center;font-size:9px;color:var(--accent);padding:4px 1px;width:40px;">PF</th>
             <th style="text-align:center;font-size:9px;color:var(--accent);padding:4px 1px;width:40px;">C</th>
-            <th style="text-align:right;font-size:9px;color:var(--muted);padding:4px 2px;width:36px;">DPM</th>
           </tr>
           <tr style="background:#f0f7ff;font-weight:700;font-family:var(--mono);font-size:10px;position:sticky;top:24px;z-index:2;">
             <td style="font-family:var(--sans);font-size:9px;color:var(--muted);padding:4px 0;">SUM</td>
+            <td style="text-align:center;font-weight:700;color:${totalClr};" id="isum-tot-${gameIdx}-${side}">${totalMin.toFixed(0)}</td>
             <td style="text-align:center;color:${posClr(sumPg)};" id="isum-pg-${gameIdx}-${side}">${sumPg.toFixed(0)}</td>
             <td style="text-align:center;color:${posClr(sumSg)};" id="isum-sg-${gameIdx}-${side}">${sumSg.toFixed(0)}</td>
             <td style="text-align:center;color:${posClr(sumSf)};" id="isum-sf-${gameIdx}-${side}">${sumSf.toFixed(0)}</td>
             <td style="text-align:center;color:${posClr(sumPf)};" id="isum-pf-${gameIdx}-${side}">${sumPf.toFixed(0)}</td>
             <td style="text-align:center;color:${posClr(sumC)};" id="isum-c-${gameIdx}-${side}">${sumC.toFixed(0)}</td>
-            <td></td>
           </tr>
         </thead>
         <tbody>
@@ -1669,19 +1681,22 @@ function _renderInlinePlayersPanel(gameIdx) {
             const starters = g[startersKey] || [];
             const isStarter = p.nba_id && starters.includes(String(p.nba_id));
             const starterBg = isStarter ? (g.lineup_status === 'verified' ? 'background:#c8e6c9;' : 'background:#fff9c4;') : '';
-            return `<tr style="border-bottom:1px solid #f0f0f0;height:30px;${dimmed}${starterBg}">
+            return `<tr style="border-bottom:1px solid #f0f0f0;height:40px;${dimmed}${starterBg}">
             <td style="padding:4px 0;font-family:var(--sans);white-space:nowrap;">
-              <div style="display:flex;align-items:center;gap:3px;">
-                <img src="${hs(p.nba_id)}" style="width:22px;height:17px;object-fit:cover;object-position:top;border-radius:2px;background:#e0e0e0;flex-shrink:0;" onerror="this.src='${placeholder}'" />
-                <span style="overflow:hidden;text-overflow:ellipsis;max-width:80px;font-size:11px;">${p.name}</span>
+              <div style="display:flex;align-items:center;gap:5px;">
+                <img src="${hs(p.nba_id)}" style="width:32px;height:24px;object-fit:cover;object-position:top;border-radius:3px;background:#e0e0e0;flex-shrink:0;" onerror="this.src='${placeholder}'" />
+                <div>
+                  <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;max-width:100px;">${p.name}${p.injury ? `<span style="background:#c62828;color:#fff;font-size:8px;font-weight:700;padding:1px 3px;border-radius:2px;margin-left:3px;">${p.injury}</span>` : ''}</div>
+                  <div style="font-size:10px;"><span style="color:var(--muted);">${p.pos||''}</span> <span style="font-family:var(--mono);color:${dpmColor(pDpm(p))};font-weight:600;">${fmtDpm(pDpm(p))}</span></div>
+                </div>
               </div>
             </td>
-            <td style="text-align:center;padding:1px;${cellBg('pg')}"><input type="number" value="${p.pg||''}" min="0" max="48" step="1" style="width:40px;text-align:center;font-size:10px;padding:1px 2px;font-family:var(--mono);${cellBg('pg')}" onchange="inlineUpdatePos(${gameIdx},'${side}',${j},'pg',this.value)" placeholder="0"></td>
-            <td style="text-align:center;padding:1px;${cellBg('sg')}"><input type="number" value="${p.sg||''}" min="0" max="48" step="1" style="width:40px;text-align:center;font-size:10px;padding:1px 2px;font-family:var(--mono);${cellBg('sg')}" onchange="inlineUpdatePos(${gameIdx},'${side}',${j},'sg',this.value)" placeholder="0"></td>
-            <td style="text-align:center;padding:1px;${cellBg('sf')}"><input type="number" value="${p.sf||''}" min="0" max="48" step="1" style="width:40px;text-align:center;font-size:10px;padding:1px 2px;font-family:var(--mono);${cellBg('sf')}" onchange="inlineUpdatePos(${gameIdx},'${side}',${j},'sf',this.value)" placeholder="0"></td>
-            <td style="text-align:center;padding:1px;${cellBg('pf')}"><input type="number" value="${p.pf||''}" min="0" max="48" step="1" style="width:40px;text-align:center;font-size:10px;padding:1px 2px;font-family:var(--mono);${cellBg('pf')}" onchange="inlineUpdatePos(${gameIdx},'${side}',${j},'pf',this.value)" placeholder="0"></td>
-            <td style="text-align:center;padding:1px;${cellBg('c')}"><input type="number" value="${p.c||''}" min="0" max="48" step="1" style="width:40px;text-align:center;font-size:10px;padding:1px 2px;font-family:var(--mono);${cellBg('c')}" onchange="inlineUpdatePos(${gameIdx},'${side}',${j},'c',this.value)" placeholder="0"></td>
-            <td style="text-align:right;padding:2px 2px;font-family:var(--mono);font-size:9px;color:${dpmColor(pDpm(p))}">${fmtDpm(pDpm(p))}</td>
+            <td style="text-align:center;font-family:var(--mono);font-weight:700;font-size:11px;padding:2px 2px;">${total > 0 ? total : ''}</td>
+            <td style="text-align:center;padding:1px;${cellBg('pg')}"><input type="number" value="${p.pg||''}" min="0" max="48" step="1" style="width:40px;text-align:center;font-size:10px;padding:2px;font-family:var(--mono);${cellBg('pg')}" onchange="inlineUpdatePos(${gameIdx},'${side}',${j},'pg',this.value)" placeholder="0"></td>
+            <td style="text-align:center;padding:1px;${cellBg('sg')}"><input type="number" value="${p.sg||''}" min="0" max="48" step="1" style="width:40px;text-align:center;font-size:10px;padding:2px;font-family:var(--mono);${cellBg('sg')}" onchange="inlineUpdatePos(${gameIdx},'${side}',${j},'sg',this.value)" placeholder="0"></td>
+            <td style="text-align:center;padding:1px;${cellBg('sf')}"><input type="number" value="${p.sf||''}" min="0" max="48" step="1" style="width:40px;text-align:center;font-size:10px;padding:2px;font-family:var(--mono);${cellBg('sf')}" onchange="inlineUpdatePos(${gameIdx},'${side}',${j},'sf',this.value)" placeholder="0"></td>
+            <td style="text-align:center;padding:1px;${cellBg('pf')}"><input type="number" value="${p.pf||''}" min="0" max="48" step="1" style="width:40px;text-align:center;font-size:10px;padding:2px;font-family:var(--mono);${cellBg('pf')}" onchange="inlineUpdatePos(${gameIdx},'${side}',${j},'pf',this.value)" placeholder="0"></td>
+            <td style="text-align:center;padding:1px;${cellBg('c')}"><input type="number" value="${p.c||''}" min="0" max="48" step="1" style="width:40px;text-align:center;font-size:10px;padding:2px;font-family:var(--mono);${cellBg('c')}" onchange="inlineUpdatePos(${gameIdx},'${side}',${j},'c',this.value)" placeholder="0"></td>
           </tr>`;
           }).join('')}
         </tbody>
@@ -1709,15 +1724,94 @@ function inlineUpdatePos(gameIdx, side, playerIdx, pos, val) {
     const el = document.getElementById(`isum-${p}-${gameIdx}-${side}`);
     if (el) { el.textContent = v.toFixed(0); el.style.color = posClr(v); }
   }
-  // Update total min display in the header
+  // Update total in SUM row
+  const totEl = document.getElementById(`isum-tot-${gameIdx}-${side}`);
   const totalClr = Math.abs(totalMin - 240) < 0.5 ? 'var(--green)' : 'var(--red)';
+  if (totEl) { totEl.textContent = totalMin.toFixed(0); totEl.style.color = totalClr; }
+  // Update header
   const hdrSpans = document.querySelectorAll(`#players-inner-${gameIdx} .math-col-title span`);
-  // Find the correct header for this side (0=away, 1=home)
   const idx = side === 'away' ? 0 : 1;
   if (hdrSpans[idx]) { hdrSpans[idx].textContent = totalMin.toFixed(0) + ' min'; hdrSpans[idx].style.color = totalClr; }
 
+  // Instantly recalc projections and update game card header (no full re-render)
+  _inlineRecalcGame(gameIdx);
+
   // Auto-save to Firestore (debounced)
   _inlineSaveDebounced(gameIdx, side);
+}
+
+function inlineRevert(gameIdx, side) {
+  if (!confirm(`Revert ${STATE.games[gameIdx][side]} to baseline minutes for this game?`)) return;
+  const stKey = `${gameIdx}_${side}`;
+  const st = _inlineState[stKey];
+  if (!st) return;
+  const bl = st.baseline || {};
+  // Reset all players to baseline values
+  for (const p of st.players) {
+    const pBl = bl[normName(p.name)] || {pg:0,sg:0,sf:0,pf:0,c:0};
+    p.pg = pBl.pg||0; p.sg = pBl.sg||0; p.sf = pBl.sf||0; p.pf = pBl.pf||0; p.c = pBl.c||0;
+  }
+  // Re-sort: players with minutes first (desc), then 0-min alphabetically
+  st.players.sort((a, b) => {
+    const aT = a.pg+a.sg+a.sf+a.pf+a.c, bT = b.pg+b.sg+b.sf+b.pf+b.c;
+    if (aT > 0 && bT > 0) return bT - aT;
+    if (aT > 0) return -1;
+    if (bT > 0) return 1;
+    return a.name.localeCompare(b.name);
+  });
+  // Delete the game override doc
+  const g = STATE.games[gameIdx];
+  const key = `${selectedDate}_${g.away}_${g.home}_${g[side]}`;
+  fbDb.collection('nba_game_overrides').doc(key).delete()
+    .then(() => console.log(`Override reverted: ${key}`));
+  logActivity(`Reverted ${g[side]} to baseline for ${g.away}@${g.home} ${selectedDate}`, g[side]);
+  _inlineRecalcGame(gameIdx);
+}
+
+function _inlineRecalcGame(gameIdx) {
+  const g = STATE.games[gameIdx];
+  // Recalc both sides from inline state
+  for (const s of ['away', 'home']) {
+    const st = _inlineState[`${gameIdx}_${s}`];
+    if (!st) continue;
+    const playerList = st.players.filter(p => (p.pg+p.sg+p.sf+p.pf+p.c) > 0);
+    const totalRaw = playerList.reduce((acc, p) => acc + (p.pg+p.sg+p.sf+p.pf+p.c) / 48, 0);
+    const scale = totalRaw > 0 ? 5.0 / totalRaw : 0;
+    let off = 0, def = 0;
+    for (const p of playerList) {
+      const min = p.pg+p.sg+p.sf+p.pf+p.c;
+      const w = (min / 48) * scale;
+      const pod = getPlayerOffDef(p);
+      off += pod.off * w;
+      def += pod.def * w;
+    }
+    g[`${s}_off`] = Math.round(off * 100) / 100;
+    g[`${s}_def`] = Math.round(def * 100) / 100;
+    // Update g player list minutes for grey-out checks
+    for (const gp of (g[`${s}_players`] || [])) {
+      const ep = st.players.find(p => p.name === gp.name);
+      if (ep) gp.min = ep.pg+ep.sg+ep.sf+ep.pf+ep.c;
+    }
+  }
+  // Recalc projections
+  const avgOrtg = STATE.leagueAvgOrtg || 114.8;
+  const hca = (STATE.settings?.hca || 1.5) / 2;
+  const pace = g.matchup_pace || 95;
+  const awPP100 = avgOrtg + g.away_off - g.home_def;
+  const hwPP100 = avgOrtg + g.home_off - g.away_def;
+  g.away_proj = Math.round((awPP100 / 100 * pace - hca) * 10) / 10;
+  g.home_proj = Math.round((hwPP100 / 100 * pace + hca) * 10) / 10;
+  g.proj_spread = Math.round((g.away_proj - g.home_proj) * 10) / 10;
+  g.proj_total = Math.round((g.away_proj + g.home_proj) * 10) / 10;
+  if (g.book_spread != null) g.spread_edge = Math.round((g.proj_spread - g.book_spread) * 10) / 10;
+  if (g.book_total != null) g.total_edge = Math.round((g.proj_total - g.book_total) * 10) / 10;
+  // Update game card header + odds without full re-render
+  renderGames();
+  renderOddsSummary();
+  updateStrip();
+  // Re-open the inline panel (renderGames wipes DOM)
+  const d = document.getElementById('players-' + gameIdx);
+  if (d) { d.classList.add('open'); _renderInlinePlayersPanel(gameIdx); }
 }
 
 let _inlineSaveTimers = {};
@@ -1772,48 +1866,7 @@ function _inlineSave(gameIdx, side) {
     logActivity(`${matchup} ${selectedDate}: ${changes.join(', ')}`, team, pids);
   }
 
-  // Update game player list and recalc projections
-  const playerList = g[`${side}_players`] || [];
-  for (const p of playerList) {
-    const edited = players.find(ep => ep.name === p.name);
-    if (edited) p.min = edited.pg + edited.sg + edited.sf + edited.pf + edited.c;
-  }
-  playerList.sort((a, b) => b.min - a.min);
-  const totalRaw = playerList.reduce((s, p) => s + p.min / 48, 0);
-  const scale = totalRaw > 0 ? 5.0 / totalRaw : 0;
-  let off = 0, def = 0;
-  for (const p of playerList) {
-    const w = (p.min / 48) * scale;
-    off += (p.o_dpm || 0) * w;
-    def += (p.d_dpm || 0) * w;
-  }
-  g[`${side}_off`] = Math.round(off * 100) / 100;
-  g[`${side}_def`] = Math.round(def * 100) / 100;
-  // Recalc projections
-  const avgOrtg = STATE.leagueAvgOrtg || 114.8;
-  const hca = (STATE.settings.hca || 1.5) / 2;
-  const pace = g.matchup_pace || 95;
-  const awPP100 = avgOrtg + gVal(g,"away_off") - gVal(g,"home_def");
-  const hwPP100 = avgOrtg + gVal(g,"home_off") - gVal(g,"away_def");
-  g.away_proj = Math.round((awPP100 / 100 * pace - hca) * 10) / 10;
-  g.home_proj = Math.round((hwPP100 / 100 * pace + hca) * 10) / 10;
-  g.proj_spread = Math.round((gVal(g,"away_proj") - gVal(g,"home_proj")) * 10) / 10;
-  g.proj_total = Math.round((gVal(g,"away_proj") + gVal(g,"home_proj")) * 10) / 10;
-  if (g.book_spread != null) g.spread_edge = Math.round((gVal(g,"proj_spread") - g.book_spread) * 10) / 10;
-  if (g.book_total != null) g.total_edge = Math.round((gVal(g,"proj_total") - g.book_total) * 10) / 10;
-  buildRatingLookups();
-  renderGames();
-  renderOddsSummary();
-  updateStrip();
-  // Re-render the inline panel since renderGames wipes the DOM
-  // Use a microtask so the new DOM is ready
-  setTimeout(() => {
-    const d = document.getElementById('players-' + gameIdx);
-    if (d) {
-      d.classList.add('open');
-      _renderInlinePlayersPanel(gameIdx);
-    }
-  }, 0);
+  // Projections already recalculated instantly in inlineUpdatePos → _inlineRecalcGame
 }
 
 // ── Odds Summary Sidebar ────────────────────────────────────────────────
@@ -1941,6 +1994,16 @@ function fmtFill(f) {
   return '$' + f.toLocaleString();
 }
 
+function _isGameIncomplete(g, gi) {
+  const awSt = _inlineState[`${gi}_away`];
+  const hwSt = _inlineState[`${gi}_home`];
+  const awMin = awSt ? awSt.players.reduce((s,p) => s+p.pg+p.sg+p.sf+p.pf+p.c, 0) : (g.away_players||[]).reduce((s,p) => s+(p.min||0), 0);
+  const hwMin = hwSt ? hwSt.players.reduce((s,p) => s+p.pg+p.sg+p.sf+p.pf+p.c, 0) : (g.home_players||[]).reduce((s,p) => s+(p.min||0), 0);
+  const awBad = Math.abs(awMin-240) > 0.5 && (awSt || Math.abs(g.away_off||0) < 0.01);
+  const hwBad = Math.abs(hwMin-240) > 0.5 && (hwSt || Math.abs(g.home_off||0) < 0.01);
+  return awBad || hwBad;
+}
+
 function renderOddsSummary() {
   const thead = document.getElementById('odds-summary-head');
   const tbody = document.getElementById('odds-summary-body');
@@ -1959,9 +2022,7 @@ function renderOddsSummary() {
       const lEdge = bk != null ? Math.round((lSprd - bk) * 10) / 10 : null;
       const eEdge = bk != null ? Math.round((eSprd - bk) * 10) / 10 : null;
       function srcEdge(e, isAway) { const v = isAway ? e : -e; return (e != null && v > 0) ? `<span class="edge-chip lo">${v.toFixed(1)}</span>` : ''; }
-      const awMin = (g.away_players||[]).reduce((s,p) => s+(p.min||0), 0);
-      const hwMin = (g.home_players||[]).reduce((s,p) => s+(p.min||0), 0);
-      const incomplete = (Math.abs(awMin-240) > 1 && Math.abs(g.away_off||0) < 0.01) || (Math.abs(hwMin-240) > 1 && Math.abs(g.home_off||0) < 0.01);
+      const incomplete = _isGameIncomplete(g, STATE.games.indexOf(g));
       const awLogo = `<img src="${teamLogo(g.away)}" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;" onerror="this.style.display='none'" />`;
       const hwLogo = `<img src="${teamLogo(g.home)}" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;" onerror="this.style.display='none'" />`;
       html += `<tr style="border-bottom:none;${incomplete ? 'opacity:0.35;' : ''}">
@@ -2013,9 +2074,7 @@ function renderOddsSummary() {
         return e > 0 ? `<span class="edge-chip lo">${e.toFixed(1)}%</span>` : '';
       }
 
-      const _awMin = (g.away_players||[]).reduce((s,p) => s+(p.min||0), 0);
-      const _hwMin = (g.home_players||[]).reduce((s,p) => s+(p.min||0), 0);
-      const _inc = (Math.abs(_awMin-240) > 1 && Math.abs(g.away_off||0) < 0.01) || (Math.abs(_hwMin-240) > 1 && Math.abs(g.home_off||0) < 0.01);
+      const _inc = _isGameIncomplete(g, STATE.games.indexOf(g));
       html += `<tr style="border-bottom:none;${_inc ? 'opacity:0.35;' : ''}">
         <td rowspan="2" style="font-family:var(--sans);font-weight:600;font-size:10px;vertical-align:middle;border-bottom:2px solid var(--border);white-space:nowrap;">
           ${g.away} @<br>${g.home}<br><span style="color:var(--muted);font-weight:400;font-size:9px;">${g.game_time_et || ''}</span>
@@ -2055,9 +2114,7 @@ function renderOddsSummary() {
       const eTotEdge = bkTot != null && eTot != null ? Math.round((eTot - bkTot) * 10) / 10 : null;
       function totSrcOver(e) { return e != null && e > 0 ? `<span class="edge-chip lo">${e.toFixed(1)}</span>` : ''; }
       function totSrcUnder(e) { return e != null && e < 0 ? `<span class="edge-chip lo">${Math.abs(e).toFixed(1)}</span>` : ''; }
-      const __awMin = (g.away_players||[]).reduce((s,p) => s+(p.min||0), 0);
-      const __hwMin = (g.home_players||[]).reduce((s,p) => s+(p.min||0), 0);
-      const __inc = (Math.abs(__awMin-240) > 1 && Math.abs(g.away_off||0) < 0.01) || (Math.abs(__hwMin-240) > 1 && Math.abs(g.home_off||0) < 0.01);
+      const __inc = _isGameIncomplete(g, STATE.games.indexOf(g));
       html += `<tr style="border-bottom:none;${__inc ? 'opacity:0.35;' : ''}">
         <td rowspan="2" style="font-family:var(--sans);font-weight:600;font-size:10px;vertical-align:middle;border-bottom:2px solid var(--border);white-space:nowrap;">
           ${g.away} @<br>${g.home}<br><span style="color:var(--muted);font-weight:400;font-size:9px;">${g.game_time_et || ''}</span>
@@ -2286,9 +2343,9 @@ function saveSettings() {
     totalEdge: parseFloat(document.getElementById('set-total-edge').value) || 2,
     hca: parseFloat(document.getElementById('set-hca').value) || 1.5,
     paceMult: parseFloat(document.getElementById('set-pace-mult').value) || 0.95,
-    blendDarko: parseInt(document.getElementById('set-blend-darko').value) || 34,
-    blendLebron: parseInt(document.getElementById('set-blend-lebron').value) || 33,
-    blendEpm: parseInt(document.getElementById('set-blend-epm').value) || 33,
+    blendDarko: parseInt(document.getElementById('set-blend-darko').value) || 60,
+    blendLebron: parseInt(document.getElementById('set-blend-lebron').value) || 25,
+    blendEpm: parseInt(document.getElementById('set-blend-epm').value) || 15,
   };
   localStorage.setItem('nba_settings', JSON.stringify(STATE.settings));
   logActivity(`Settings: pace=${STATE.settings.paceMult}, HCA=${STATE.settings.hca}, edge=${STATE.settings.spreadEdge}`);
@@ -2306,10 +2363,10 @@ function loadSettingsUI() {
   document.getElementById('set-total-edge').value = STATE.settings.totalEdge;
   document.getElementById('set-hca').value = STATE.settings.hca;
   document.getElementById('set-pace-mult').value = STATE.settings.paceMult;
-  document.getElementById('set-blend-darko').value = STATE.settings.blendDarko ?? 34;
-  document.getElementById('set-blend-lebron').value = STATE.settings.blendLebron ?? 33;
-  document.getElementById('set-blend-epm').value = STATE.settings.blendEpm ?? 33;
-  const blendSum = (STATE.settings.blendDarko ?? 34) + (STATE.settings.blendLebron ?? 33) + (STATE.settings.blendEpm ?? 33);
+  document.getElementById('set-blend-darko').value = STATE.settings.blendDarko ?? 60;
+  document.getElementById('set-blend-lebron').value = STATE.settings.blendLebron ?? 25;
+  document.getElementById('set-blend-epm').value = STATE.settings.blendEpm ?? 15;
+  const blendSum = (STATE.settings.blendDarko ?? 60) + (STATE.settings.blendLebron ?? 25) + (STATE.settings.blendEpm ?? 15);
   const sumLabel = document.getElementById('blend-sum-label');
   if (sumLabel) sumLabel.textContent = `Sum: ${blendSum}`;
 }
@@ -2391,6 +2448,7 @@ function loadTeamBaseline() {
           dpm: p.dpm, o_dpm: p.o_dpm, d_dpm: p.d_dpm,
           lb_dpm: p.lb_dpm, lb_o_dpm: p.lb_o_dpm, lb_d_dpm: p.lb_d_dpm,
           epm: p.epm, epm_o: p.epm_o, epm_d: p.epm_d,
+          injury: p.injury||'',
         };
       });
 
@@ -2446,7 +2504,7 @@ function renderTeamBaseline() {
     if (_ratingSource === 'model') {
       // Blend the three sources using configured weights
       const s = STATE.settings;
-      const wd = (s.blendDarko ?? 34) / 100, wl = (s.blendLebron ?? 33) / 100, we = (s.blendEpm ?? 33) / 100;
+      const wd = (s.blendDarko ?? 60) / 100, wl = (s.blendLebron ?? 25) / 100, we = (s.blendEpm ?? 15) / 100;
       let oSum = (r.off||0)*wd, oW = wd, dSum = (r.def||0)*wd, dW = wd;
       if (r.lb_off != null) { oSum += r.lb_off*wl; oW += wl; }
       if (r.lb_def != null) { dSum += r.lb_def*wl; dW += wl; }
@@ -2501,7 +2559,7 @@ function renderTeamBaseline() {
         <div style="display:flex;align-items:center;gap:8px;">
           <img src="${hsUrl || placeholder}" style="width:36px;height:28px;object-fit:cover;object-position:top;border-radius:3px;background:#e0e0e0;flex-shrink:0;" onerror="this.src='${placeholder}'" />
           <div>
-            <div style="font-size:14px;font-weight:600;">${p.name}</div>
+            <div style="font-size:14px;font-weight:600;">${p.name}${p.injury ? `<span style="background:#c62828;color:#fff;font-size:8px;font-weight:700;padding:1px 3px;border-radius:2px;margin-left:3px;">${p.injury}</span>` : ''}</div>
             <div style="font-size:11px;"><span style="color:var(--muted);">${p.pos||''}</span> <span style="font-family:var(--mono);color:${dpmColor(pDpm(p))};font-weight:600;">${fmtDpm(pDpm(p))}</span></div>
           </div>
         </div>
@@ -2699,6 +2757,7 @@ async function applyBaselines() {
           name: p.name, dpm: p.dpm||0, o_dpm: p.o_dpm||0, d_dpm: p.d_dpm||0,
           lb_dpm: p.lb_dpm, lb_o_dpm: p.lb_o_dpm, lb_d_dpm: p.lb_d_dpm,
           epm: p.epm, epm_o: p.epm_o, epm_d: p.epm_d,
+          injury: p.injury||'',
           nba_id: p.nba_id||'', min: _resolveMin(blNorm, goNorm, p.name),
         })).filter(p => p.min > 0).sort((a,b) => b.min - a.min);
 
@@ -3088,7 +3147,7 @@ function renderAllPlayers() {
         <div style="display:flex;align-items:center;gap:8px;">
           ${hs}
           <div>
-            <div style="font-size:14px;font-weight:600;">${p.name}</div>
+            <div style="font-size:14px;font-weight:600;">${p.name}${p.injury ? `<span style="background:#c62828;color:#fff;font-size:8px;font-weight:700;padding:1px 3px;border-radius:2px;margin-left:3px;">${p.injury}</span>` : ''}</div>
             <div style="font-size:10px;color:var(--muted);">${p.pos||''}</div>
           </div>
         </div>
@@ -3176,7 +3235,7 @@ async function loadStandings() {
 
     // MODEL blend — blend the three team-level totals (each already has per-player fallback)
     const sett = STATE.settings;
-    const mwd = (sett.blendDarko ?? 34) / 100, mwl = (sett.blendLebron ?? 33) / 100, mwe = (sett.blendEpm ?? 33) / 100;
+    const mwd = (sett.blendDarko ?? 60) / 100, mwl = (sett.blendLebron ?? 25) / 100, mwe = (sett.blendEpm ?? 15) / 100;
     const mwTotal = mwd + mwl + mwe;
     const mOffFinal = mwTotal > 0 ? (dOff * mwd + lOff * mwl + eOff * mwe) / mwTotal : dOff;
     const mDefFinal = mwTotal > 0 ? (dDef * mwd + lDef * mwl + eDef * mwe) / mwTotal : dDef;

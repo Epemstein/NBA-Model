@@ -7,7 +7,7 @@ Port of the NBA Algo spreadsheet model:
   compare to sportsbook spreads & totals → Telegram alerts on edges.
 """
 
-import os, json, math, time, requests, datetime, re, io, csv, unicodedata
+import os, json, math, time, requests, datetime, re, io, csv, unicodedata, urllib.request
 from zoneinfo import ZoneInfo
 
 import firebase_admin
@@ -1121,7 +1121,88 @@ def get_game_overrides(date, away, home, team):
     return {}
 
 
-def _write_rosters(db, darko, player_minutes, lebron=None, epm=None):
+def fetch_injuries(darko):
+    """Fetch NBA injury data from ESPN injuries page.
+    Matches ESPN players to NBA IDs via norm_name() against the darko dict.
+    Returns dict: {nba_id: {'status': 'O'|'DTD'|'Q'|'D'|'P', 'name': ..., 'detail': ...}}
+    """
+    today = today_et()
+
+    # Try Firestore cache first
+    if db:
+        try:
+            snap = db.collection('nba_injuries').document(today).get()
+            if snap.exists:
+                data = snap.to_dict()
+                if data.get('injuries'):
+                    print(f'Injuries loaded from Firestore cache ({len(data["injuries"])} players)')
+                    return data['injuries']
+        except Exception as e:
+            print(f'Injuries cache miss: {e}')
+
+    print('Fetching injuries from ESPN...')
+    try:
+        req = urllib.request.Request(
+            'https://www.espn.com/nba/injuries',
+            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        )
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            html = resp.read().decode('utf-8', errors='replace')
+    except Exception as e:
+        print(f'ESPN injuries fetch failed: {e}')
+        return {}
+
+    STATUS_MAP = {
+        'Out': 'O',
+        'Day-To-Day': 'DTD',
+        'Questionable': 'Q',
+        'Doubtful': 'D',
+        'Probable': 'P',
+    }
+
+    pattern = re.compile(
+        r'nba/player/_/id/(\d+)/[^\"]*\">([^<]+)</a></td>'
+        r'<td[^>]*>([^<]*)</td>'
+        r'<td[^>]*>([^<]*)</td>'
+        r'<td[^>]*><span[^>]*>([^<]+)</span></td>',
+        re.DOTALL
+    )
+
+    injuries = {}
+    matched = 0
+    for m in pattern.finditer(html):
+        espn_id, name, position, return_date, status_raw = m.groups()
+        status_abbr = STATUS_MAP.get(status_raw.strip(), status_raw.strip())
+        detail = return_date.strip()
+
+        # Match to NBA ID via norm_name against darko dict
+        nn = norm_name(name.strip())
+        dk = darko.get(nn)
+        if dk and dk.get('nba_id'):
+            nba_id = dk['nba_id']
+            injuries[nba_id] = {
+                'status': status_abbr,
+                'name': dk['name'],
+                'detail': detail,
+            }
+            matched += 1
+
+    print(f'Injuries: {matched} matched out of {len(pattern.findall(html))} ESPN entries')
+
+    # Cache to Firestore
+    if db and injuries:
+        try:
+            db.collection('nba_injuries').document(today).set({
+                'injuries': injuries,
+                'ts': firestore.SERVER_TIMESTAMP,
+            })
+        except Exception as e:
+            print(f'Injuries cache write failed: {e}')
+
+    return injuries
+
+
+def _write_rosters(db, darko, player_minutes, lebron=None, epm=None, injuries=None):
     """Write all team rosters to Firestore (1 doc). Uses player_minutes for team
     assignments, DARKO for ratings, and optionally official NBA rosters for
     injured players who haven't played yet."""
@@ -1183,6 +1264,11 @@ def _write_rosters(db, darko, player_minutes, lebron=None, epm=None):
                 entry['epm'] = round(ep['dpm'], 1)
                 entry['epm_o'] = round(ep['o_dpm'], 1)
                 entry['epm_d'] = round(ep['d_dpm'], 1)
+        # Add injury status if available
+        if injuries:
+            inj = injuries.get(entry.get('nba_id', ''))
+            if inj:
+                entry['injury'] = inj['status']
         if team not in all_teams:
             all_teams[team] = []
         if dedup_key in seen:
@@ -1217,7 +1303,7 @@ def _write_rosters(db, darko, player_minutes, lebron=None, epm=None):
                         break
                 continue
             dk = darko.get(f'id:{pid}') or darko.get(norm_name(pname))
-            all_teams[team_abr].append({
+            new_entry = {
                 'name': dk['name'] if dk else pname,
                 'min': 0,
                 'dpm': round(dk['dpm'], 1) if dk else None,
@@ -1225,7 +1311,12 @@ def _write_rosters(db, darko, player_minutes, lebron=None, epm=None):
                 'd_dpm': round(dk['d_dpm'], 1) if dk else None,
                 'pos': dk.get('pos', '') if dk else '',
                 'nba_id': dk.get('nba_id', pid) if dk else pid,
-            })
+            }
+            if injuries:
+                inj = injuries.get(new_entry.get('nba_id', ''))
+                if inj:
+                    new_entry['injury'] = inj['status']
+            all_teams[team_abr].append(new_entry)
 
     # Only write if we got official rosters — don't overwrite good data with incomplete data
     if not official_rosters:
@@ -1269,6 +1360,13 @@ def run(override_date=None):
         epm = fetch_epm()
     except Exception as e:
         print(f'WARNING: EPM fetch failed ({e}), no EPM data')
+
+    # Fetch injury data from ESPN
+    injuries = {}
+    try:
+        injuries = fetch_injuries(darko)
+    except Exception as e:
+        print(f'WARNING: Injuries fetch failed ({e}), no injury data')
 
     try:
         player_minutes = fetch_player_minutes()
@@ -1454,26 +1552,21 @@ def run(override_date=None):
         gm['matchup_pace'] = round(raw_matchup_pace, 1)
 
         # Attach player rosters with ratings
-        gm['away_players'] = [
-            {'name': p['name'], 'min': p['minutes'],
-             'dpm': round(p['dpm'], 1) if p['dpm'] is not None else None,
-             'o_dpm': round(p['o_dpm'], 1) if p['o_dpm'] is not None else None,
-             'd_dpm': round(p['d_dpm'], 1) if p['d_dpm'] is not None else None,
-             'lb_dpm': p.get('lb_dpm'), 'lb_o_dpm': p.get('lb_o_dpm'), 'lb_d_dpm': p.get('lb_d_dpm'),
-             'epm': p.get('epm'), 'epm_o': p.get('epm_o'), 'epm_d': p.get('epm_d'),
-             'nba_id': p.get('nba_id', '')}
-            for p in aw_players
-        ]
-        gm['home_players'] = [
-            {'name': p['name'], 'min': p['minutes'],
-             'dpm': round(p['dpm'], 1) if p['dpm'] is not None else None,
-             'o_dpm': round(p['o_dpm'], 1) if p['o_dpm'] is not None else None,
-             'd_dpm': round(p['d_dpm'], 1) if p['d_dpm'] is not None else None,
-             'lb_dpm': p.get('lb_dpm'), 'lb_o_dpm': p.get('lb_o_dpm'), 'lb_d_dpm': p.get('lb_d_dpm'),
-             'epm': p.get('epm'), 'epm_o': p.get('epm_o'), 'epm_d': p.get('epm_d'),
-             'nba_id': p.get('nba_id', '')}
-            for p in hw_players
-        ]
+        def _player_entry(p):
+            entry = {'name': p['name'], 'min': p['minutes'],
+                'dpm': round(p['dpm'], 1) if p['dpm'] is not None else None,
+                'o_dpm': round(p['o_dpm'], 1) if p['o_dpm'] is not None else None,
+                'd_dpm': round(p['d_dpm'], 1) if p['d_dpm'] is not None else None,
+                'lb_dpm': p.get('lb_dpm'), 'lb_o_dpm': p.get('lb_o_dpm'), 'lb_d_dpm': p.get('lb_d_dpm'),
+                'epm': p.get('epm'), 'epm_o': p.get('epm_o'), 'epm_d': p.get('epm_d'),
+                'nba_id': p.get('nba_id', '')}
+            if injuries:
+                inj = injuries.get(entry.get('nba_id', ''))
+                if inj:
+                    entry['injury'] = inj['status']
+            return entry
+        gm['away_players'] = [_player_entry(p) for p in aw_players]
+        gm['home_players'] = [_player_entry(p) for p in hw_players]
 
         aw_min = sum(p['minutes'] for p in aw_players)
         hw_min = sum(p['minutes'] for p in hw_players)
@@ -1534,7 +1627,7 @@ def run(override_date=None):
             print(f'\nWrote {len(games_out)} games to Firestore')
 
             # Write rosters (also called on no-game days, but refresh here too)
-            _write_rosters(db, darko, player_minutes, lebron, epm)
+            _write_rosters(db, darko, player_minutes, lebron, epm, injuries)
 
         except Exception as e:
             print(f'Firestore write failed: {e}')
