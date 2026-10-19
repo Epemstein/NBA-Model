@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v76</title>
+<title>NBA ALGO v77</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -2395,19 +2395,26 @@ function _priceHoverIn(el) {
   const color = el.dataset.color;
   const tip = el.dataset.tip;
   if (logo) el.style.backgroundImage = `url(${logo})`;
-  if (color) el.style.backgroundColor = color + '08';
-  el.style.backgroundSize = '32px 32px';
+  if (color) el.style.backgroundColor = color + '15';
+  el.style.backgroundSize = '28px 28px';
   el.style.backgroundRepeat = 'no-repeat';
   el.style.backgroundPosition = 'center';
-  el.style.backgroundBlendMode = 'luminosity';
+  el.style.opacity = '1';
+  // Fade the logo by putting it behind a semi-transparent overlay
+  if (logo) el.style.backgroundImage = `linear-gradient(rgba(255,255,255,0.75),rgba(255,255,255,0.75)),url(${logo})`;
   if (!el.dataset.orig) el.dataset.orig = el.innerHTML;
-  if (tip) { el.textContent = tip; el.style.fontWeight = '800'; el.style.color = '#111'; }
+  // Show just the numbers, no team name
+  if (tip) {
+    const shortTip = tip.replace(/^[A-Z]{2,3}\s+/, '');
+    el.textContent = shortTip;
+    el.style.fontWeight = '800';
+    el.style.color = '#111';
+  }
 }
 function _priceHoverOut(el) {
   el.style.backgroundImage = '';
   el.style.backgroundColor = el.dataset.origBg || '';
   el.style.backgroundSize = '';
-  el.style.backgroundBlendMode = '';
   if (el.dataset.orig) { el.innerHTML = el.dataset.orig; el.dataset.orig = ''; }
   el.style.fontWeight = '';
   el.style.color = '';
