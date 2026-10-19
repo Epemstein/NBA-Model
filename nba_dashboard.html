@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v37</title>
+<title>NBA ALGO v38</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -579,9 +579,14 @@ input[type=number] { -moz-appearance: textfield; }
       </div>
     </div>
 
-    <!-- Twitter Feed Sidebar -->
+    <!-- @UnderdogNBA Feed -->
     <div class="card" style="width:380px;flex-shrink:0;position:sticky;top:56px;max-height:calc(100vh - 180px);overflow:hidden;padding:0;">
-      <iframe src="https://syndication.twitter.com/srv/timeline-profile/screen-name/UnderdogNBA?dnt=true&embedId=twitter-widget-0&frame=false&hideBorder=true&hideFooter=true&hideHeader=true&hideScrollBar=false&lang=en&transparent=true&theme=light" style="width:100%;height:calc(100vh - 190px);border:none;" allowfullscreen></iframe>
+      <div style="padding:8px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+        <span style="font-weight:700;font-size:12px;">@UnderdogNBA</span>
+        <a href="https://x.com/UnderdogNBA" target="_blank" style="font-size:10px;color:var(--accent);">Open in X &rarr;</a>
+      </div>
+      <a class="twitter-timeline" data-height="800" data-theme="light" data-chrome="noheader nofooter noborders transparent" href="https://twitter.com/UnderdogNBA">Loading tweets...</a>
+      <script async src="https://platform.twitter.com/widgets.js"></script>
     </div>
 
   </div>
@@ -1406,53 +1411,46 @@ function renderGames() {
         </div>
       </div>
 
-      <div class="gc-ratings">
-        <div class="gc-ratings-side">
-          <span style="font-size:10px;color:var(--muted)">OFF</span>
-          <span class="rating-chip ${(gVal(g,"away_off")||0) >= 0 ? 'pos' : 'neg'}">${fmtRating(gVal(g,"away_off")||0)}</span>
-          <span style="font-size:10px;color:var(--muted)">DEF</span>
-          <span class="rating-chip ${(gVal(g,"away_def")||0) >= 0 ? 'pos' : 'neg'}">${fmtRating(gVal(g,"away_def")||0)}</span>
+      ${(() => {
+        const edgeSideAway = gVal(g,"spread_edge") != null ? gVal(g,"spread_edge") > 0 : (gVal(g,"proj_spread") != null && gVal(g,"proj_spread") > 0);
+        const edgeTeam = edgeSideAway ? g.away : g.home;
+        const edgeSpread = edgeSideAway ? (gVal(g,"proj_spread") != null ? -gVal(g,"proj_spread") : null) : gVal(g,"proj_spread");
+        const bookEdgeSpread = g.book_spread != null ? (edgeSideAway ? -g.book_spread : g.book_spread) : null;
+        return `
+      <div style="display:flex;border-top:1px solid var(--border);">
+        <div style="flex:1;padding:6px 10px;text-align:center;border-right:1px solid var(--border);font-size:10px;">
+          <div style="font-weight:700;font-family:var(--mono);font-size:13px;">${gVal(g,"proj_total") != null ? gVal(g,"proj_total").toFixed(1) : '—'}</div>
+          ${g.book_total != null ? `<div style="color:var(--muted);">Mkt ${g.book_total}</div>` : ''}
+          ${gVal(g,"total_edge") != null ? `<span class="edge-chip ${edgeClass(gVal(g,"total_edge"))}" style="font-size:9px;">${gVal(g,"total_edge") > 0 ? 'O' : 'U'} ${Math.abs(gVal(g,"total_edge")).toFixed(1)}</span>` : ''}
         </div>
-        <div class="gc-ratings-side">
-          <span style="font-size:10px;color:var(--muted)">OFF</span>
-          <span class="rating-chip ${(gVal(g,"home_off")||0) >= 0 ? 'pos' : 'neg'}">${fmtRating(gVal(g,"home_off")||0)}</span>
-          <span style="font-size:10px;color:var(--muted)">DEF</span>
-          <span class="rating-chip ${(gVal(g,"home_def")||0) >= 0 ? 'pos' : 'neg'}">${fmtRating(gVal(g,"home_def")||0)}</span>
+        <div style="flex:2;">
+          <div class="gc-ratings">
+            <div class="gc-ratings-side">
+              <span style="font-size:10px;color:var(--muted)">OFF</span>
+              <span class="rating-chip ${(gVal(g,"away_off")||0) >= 0 ? 'pos' : 'neg'}">${fmtRating(gVal(g,"away_off")||0)}</span>
+              <span style="font-size:10px;color:var(--muted)">DEF</span>
+              <span class="rating-chip ${(gVal(g,"away_def")||0) >= 0 ? 'pos' : 'neg'}">${fmtRating(gVal(g,"away_def")||0)}</span>
+            </div>
+            <div class="gc-ratings-side">
+              <span style="font-size:10px;color:var(--muted)">OFF</span>
+              <span class="rating-chip ${(gVal(g,"home_off")||0) >= 0 ? 'pos' : 'neg'}">${fmtRating(gVal(g,"home_off")||0)}</span>
+              <span style="font-size:10px;color:var(--muted)">DEF</span>
+              <span class="rating-chip ${(gVal(g,"home_def")||0) >= 0 ? 'pos' : 'neg'}">${fmtRating(gVal(g,"home_def")||0)}</span>
+            </div>
+          </div>
         </div>
-      </div>
-
-      <div class="gc-proj" style="display:flex;">
-        ${(() => {
-          // Show spread under the team with the edge (the side the model likes)
-          // spread_edge > 0 means model likes away more than book → show away spread
-          // spread_edge < 0 means model likes home more → show home spread
-          const edgeSideAway = gVal(g,"spread_edge") != null ? gVal(g,"spread_edge") > 0 : (gVal(g,"proj_spread") != null && gVal(g,"proj_spread") > 0);
-          const edgeTeam = edgeSideAway ? g.away : g.home;
-          const edgeSpread = edgeSideAway ? (gVal(g,"proj_spread") != null ? -gVal(g,"proj_spread") : null) : gVal(g,"proj_spread");
-          const bookEdgeSpread = g.book_spread != null ? (edgeSideAway ? -g.book_spread : g.book_spread) : null;
-
-          const spreadHtml = `<div class="gc-proj-item" style="flex:1;">
-            <div class="proj-label">${edgeTeam} Spread</div>
-            <div class="proj-val">${edgeSpread != null ? edgeTeam + ' ' + fmtSpread(edgeSpread) : '—'}</div>
-            ${bookEdgeSpread != null ? `<div style="font-size:10px;color:var(--muted);margin-top:2px;">Market: ${edgeTeam} ${fmtSpread(bookEdgeSpread)}</div>` : ''}
-            ${gVal(g,"spread_edge") != null ? `<div class="edge-chip ${edgeClass(gVal(g,"spread_edge"))}" style="margin-top:3px;">${fmtSpread(Math.abs(gVal(g,"spread_edge")))} edge</div>` : ''}
-          </div>`;
-          const totalHtml = `<div class="gc-proj-item" style="flex:1;">
-            <div class="proj-label">Total</div>
-            <div class="proj-val">${gVal(g,"proj_total") != null ? gVal(g,"proj_total").toFixed(1) : '—'}</div>
-            ${g.book_total != null ? `<div style="font-size:10px;color:var(--muted);margin-top:2px;">Market: ${g.book_total}</div>` : ''}
-            ${gVal(g,"total_edge") != null ? `<div class="edge-chip ${edgeClass(gVal(g,"total_edge"))}" style="margin-top:3px;">${gVal(g,"total_edge") > 0 ? 'O' : 'U'} ${Math.abs(gVal(g,"total_edge")).toFixed(1)} edge</div>` : ''}
-          </div>`;
-          // Spread under the edge team's side, total under the other
-          if (edgeSideAway) return spreadHtml + `<div style="border-left:1px solid var(--border);"></div>` + totalHtml;
-          return totalHtml + `<div style="border-left:1px solid var(--border);"></div>` + spreadHtml;
-        })()}
-      </div>
+        <div style="flex:1;padding:6px 10px;text-align:center;border-left:1px solid var(--border);font-size:10px;">
+          <div style="font-weight:700;font-family:var(--mono);font-size:13px;">${edgeSpread != null ? edgeTeam + ' ' + fmtSpread(edgeSpread) : '—'}</div>
+          ${bookEdgeSpread != null ? `<div style="color:var(--muted);">Mkt ${edgeTeam} ${fmtSpread(bookEdgeSpread)}</div>` : ''}
+          ${gVal(g,"spread_edge") != null ? `<span class="edge-chip ${edgeClass(gVal(g,"spread_edge"))}" style="font-size:9px;">${fmtSpread(Math.abs(gVal(g,"spread_edge")))} edge</span>` : ''}
+        </div>
+      </div>`;
+      })()}
 
       ${hasEdge ? `
-      <div style="padding:6px 12px;background:#f0fff0;border-top:1px solid #c8e6c9;font-size:11px;color:var(--green);font-weight:600;">
+      <div style="padding:4px 12px;background:#f0fff0;border-top:1px solid #c8e6c9;font-size:10px;color:var(--green);font-weight:600;">
         ${hasSpreadEdge ? `SPREAD: ${gVal(g,"spread_edge") > 0 ? g.away : g.home} ${gVal(g,"spread_edge") > 0 ? fmtSpread(-g.book_spread) : fmtSpread(g.book_spread)}` : ''}
-        ${hasSpreadEdge && hasTotalEdge ? ' &nbsp;|&nbsp; ' : ''}
+        ${hasSpreadEdge && hasTotalEdge ? ' | ' : ''}
         ${hasTotalEdge ? `TOTAL: ${gVal(g,"total_edge") > 0 ? 'Over' : 'Under'} ${g.book_total}` : ''}
       </div>` : ''}
 
