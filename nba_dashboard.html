@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v24</title>
+<title>NBA ALGO v25</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -496,10 +496,10 @@ input[type=number] { -moz-appearance: textfield; }
   <div class="logo">NBA <em>ALGO</em></div>
   <div style="display:flex;align-items:center;gap:12px;">
     <div style="display:flex;gap:2px;">
-      <button class="rating-toggle active" data-rating="darko" onclick="switchRating('darko')" style="font-size:10px;padding:3px 8px;border:1px solid #555;border-radius:3px;cursor:pointer;background:#333;color:#fff;font-weight:600;">DARKO</button>
+      <button class="rating-toggle" data-rating="darko" onclick="switchRating('darko')" style="font-size:10px;padding:3px 8px;border:1px solid #555;border-radius:3px;cursor:pointer;background:transparent;color:#888;">DARKO</button>
       <button class="rating-toggle" data-rating="lebron" onclick="switchRating('lebron')" style="font-size:10px;padding:3px 8px;border:1px solid #555;border-radius:3px;cursor:pointer;background:transparent;color:#888;">LEBRON</button>
       <button class="rating-toggle" data-rating="epm" onclick="switchRating('epm')" style="font-size:10px;padding:3px 8px;border:1px solid #555;border-radius:3px;cursor:pointer;background:transparent;color:#888;">EPM</button>
-      <button class="rating-toggle" data-rating="model" onclick="switchRating('model')" style="font-size:10px;padding:3px 8px;border:1px solid #555;border-radius:3px;cursor:pointer;background:transparent;color:#c090ff;">MODEL</button>
+      <button class="rating-toggle active" data-rating="model" onclick="switchRating('model')" style="font-size:10px;padding:3px 8px;border:1px solid #555;border-radius:3px;cursor:pointer;background:#6b3fa0;color:#fff;font-weight:600;">MODEL</button>
     </div>
     <div class="hpill">LAST UPDATE <strong id="last-update">—</strong></div>
     <div id="hdr-user" style="display:none;align-items:center;gap:6px;">
@@ -1010,7 +1010,7 @@ document.querySelectorAll('#nav button').forEach(btn => {
 function normName(s) { return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\./g,'').toLowerCase().trim().replace(/ (jr|sr|iv|iii|ii)$/,''); }
 
 // ── Rating source toggle ────────────────────────────────────────────────
-let _ratingSource = 'darko';  // 'darko', 'lebron', or 'epm'
+let _ratingSource = 'model';  // 'darko', 'lebron', 'epm', or 'model'
 
 function switchRating(source) {
   _ratingSource = source;
