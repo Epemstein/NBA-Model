@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v77</title>
+<title>NBA ALGO v78</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -2401,7 +2401,11 @@ function _priceHoverIn(el) {
   el.style.backgroundPosition = 'center';
   el.style.opacity = '1';
   // Fade the logo by putting it behind a semi-transparent overlay
-  if (logo) el.style.backgroundImage = `linear-gradient(rgba(255,255,255,0.75),rgba(255,255,255,0.75)),url(${logo})`;
+  if (logo) {
+    el.style.backgroundImage = `url(${logo})`;
+    el.style.backgroundBlendMode = 'multiply';
+    el.style.opacity = '1';
+  }
   if (!el.dataset.orig) el.dataset.orig = el.innerHTML;
   // Show just the numbers, no team name
   if (tip) {
@@ -2415,6 +2419,7 @@ function _priceHoverOut(el) {
   el.style.backgroundImage = '';
   el.style.backgroundColor = el.dataset.origBg || '';
   el.style.backgroundSize = '';
+  el.style.backgroundBlendMode = '';
   if (el.dataset.orig) { el.innerHTML = el.dataset.orig; el.dataset.orig = ''; }
   el.style.fontWeight = '';
   el.style.color = '';
