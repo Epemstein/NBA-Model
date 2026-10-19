@@ -297,17 +297,46 @@ def get_novig_nba_lines(client, target_date=None):
         else:
             home_team, away_team = teams[1], teams[0]
 
-        # Pick primary spread by median strike — simplest and most reliable
+        # Pick primary spread: most balanced prices within ±10 of median
         ev['spreads'].sort(key=lambda m: float(m['strike']))
-        sp = ev['spreads'][len(ev['spreads']) // 2]
+        median_strike = float(ev['spreads'][len(ev['spreads']) // 2]['strike'])
+        # Filter to reasonable range around median (exclude extreme alts)
+        reasonable = [m for m in ev['spreads'] if abs(float(m['strike']) - median_strike) <= 10]
+        if not reasonable:
+            reasonable = ev['spreads']
+        sp = reasonable[len(reasonable) // 2]  # fallback
+        best_balance = 999
+        for m in reasonable:
+            outs = m.get('outcomes', [])
+            if len(outs) == 2:
+                p1 = float(outs[0].get('price', 0.5))
+                p2 = float(outs[1].get('price', 0.5))
+                balance = abs(p1 - p2)
+                if balance < best_balance:
+                    best_balance = balance
+                    sp = m
         outcomes = sp['outcomes']
         strike = float(sp['strike'])
 
-        # Pick primary total by median strike
+        # Pick primary total: most balanced prices within ±15 of median
         total_data = None
         if ev['totals']:
             ev['totals'].sort(key=lambda m: float(m['strike']))
-            total_data = ev['totals'][len(ev['totals']) // 2]
+            med_tot = float(ev['totals'][len(ev['totals']) // 2]['strike'])
+            reas_tot = [m for m in ev['totals'] if abs(float(m['strike']) - med_tot) <= 15]
+            if not reas_tot:
+                reas_tot = ev['totals']
+            total_data = reas_tot[len(reas_tot) // 2]
+            best_tb = 999
+            for m in reas_tot:
+                outs = m.get('outcomes', [])
+                if len(outs) == 2:
+                    p1 = float(outs[0].get('price', 0.5))
+                    p2 = float(outs[1].get('price', 0.5))
+                    bal = abs(p1 - p2)
+                    if bal < best_tb:
+                        best_tb = bal
+                        total_data = m
 
         # Get best bid + fillable qty for each spread outcome
         sp_book = None
