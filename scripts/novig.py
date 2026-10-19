@@ -490,19 +490,42 @@ def get_novig_all_lines(client, target_date, game_key):
     if not target_eid:
         return {'spreads': [], 'totals': [], 'money': None}
 
-    # Collect all spread markets for this event
-    spread_markets = [m for m in spreads_raw if m['eventId'] == target_eid]
-    total_markets = [m for m in totals_raw if m['eventId'] == target_eid]
+    # Collect all markets for this event
+    spread_markets = sorted([m for m in spreads_raw if m['eventId'] == target_eid], key=lambda x: float(x['strike']))
+    total_markets = sorted([m for m in totals_raw if m['eventId'] == target_eid], key=lambda x: float(x['strike']))
     money_market = next((m for m in moneys_raw if m['eventId'] == target_eid), None)
+
+    # Limit to 5 closest to primary strike (reduce API calls)
+    MAX_LINES = 5
+    if len(spread_markets) > MAX_LINES:
+        strikes = [float(m['strike']) for m in spread_markets]
+        primary = round((min(strikes) + max(strikes)) / 2 * 2) / 2
+        spread_markets.sort(key=lambda m: abs(float(m['strike']) - primary))
+        spread_markets = sorted(spread_markets[:MAX_LINES], key=lambda m: float(m['strike']))
+    if len(total_markets) > MAX_LINES:
+        strikes = [float(m['strike']) for m in total_markets]
+        primary = round((min(strikes) + max(strikes)) / 2 * 2) / 2
+        total_markets.sort(key=lambda m: abs(float(m['strike']) - primary))
+        total_markets = sorted(total_markets[:MAX_LINES], key=lambda m: float(m['strike']))
+
+    # Fetch all order books in parallel
+    from concurrent.futures import ThreadPoolExecutor
+    all_markets = spread_markets + total_markets + ([money_market] if money_market else [])
+    market_ids = [m['marketId'] for m in all_markets]
+    books = {}
+    def _fetch_book(mid):
+        try:
+            return mid, client.get_book(mid)
+        except:
+            return mid, None
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        for mid, book in ex.map(lambda mid: _fetch_book(mid), market_ids):
+            books[mid] = book
 
     # Process spreads
     spreads_out = []
-    for m in sorted(spread_markets, key=lambda x: float(x['strike'])):
-        book = None
-        try:
-            book = client.get_book(m['marketId'])
-        except:
-            pass
+    for m in spread_markets:
+        book = books.get(m['marketId'])
         strike = float(m['strike'])
         outcomes = m.get('outcomes', [])
         home_oid = away_oid = None
@@ -512,32 +535,24 @@ def get_novig_all_lines(client, target_date, game_key):
             else:
                 away_oid = o['outcomeId']
 
-        # To buy HOME: cross with AWAY bids
         away_bid, away_bid_qty = _best_bid(book, away_oid)
         home_price = round(1 - away_bid, 4) if away_bid else None
         home_fill = round(home_price * away_bid_qty / 100) if home_price and away_bid_qty else 0
 
-        # To buy AWAY: cross with HOME bids
         home_bid, home_bid_qty = _best_bid(book, home_oid)
         away_price = round(1 - home_bid, 4) if home_bid else None
         away_fill = round(away_price * home_bid_qty / 100) if away_price and home_bid_qty else 0
 
         spreads_out.append({
             'strike': strike,
-            'home_price': home_price,
-            'home_fill': home_fill,
-            'away_price': away_price,
-            'away_fill': away_fill,
+            'home_price': home_price, 'home_fill': home_fill,
+            'away_price': away_price, 'away_fill': away_fill,
         })
 
     # Process totals
     totals_out = []
-    for m in sorted(total_markets, key=lambda x: float(x['strike'])):
-        book = None
-        try:
-            book = client.get_book(m['marketId'])
-        except:
-            pass
+    for m in total_markets:
+        book = books.get(m['marketId'])
         strike = float(m['strike'])
         outcomes = m.get('outcomes', [])
         over_oid = under_oid = None
@@ -547,22 +562,18 @@ def get_novig_all_lines(client, target_date, game_key):
             elif 'Under' in o['name']:
                 under_oid = o['outcomeId']
 
-        # To buy Over: cross with Under bids
         under_bid, under_bid_qty = _best_bid(book, under_oid)
         over_price = round(1 - under_bid, 4) if under_bid else None
         over_fill = round(over_price * under_bid_qty / 100) if over_price and under_bid_qty else 0
 
-        # To buy Under: cross with Over bids
         over_bid, over_bid_qty = _best_bid(book, over_oid)
         under_price = round(1 - over_bid, 4) if over_bid else None
         under_fill = round(under_price * over_bid_qty / 100) if under_price and over_bid_qty else 0
 
         totals_out.append({
             'strike': strike,
-            'over_price': over_price,
-            'over_fill': over_fill,
-            'under_price': under_price,
-            'under_fill': under_fill,
+            'over_price': over_price, 'over_fill': over_fill,
+            'under_price': under_price, 'under_fill': under_fill,
         })
 
     # Process moneyline
