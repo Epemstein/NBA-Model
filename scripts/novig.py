@@ -301,10 +301,14 @@ def get_novig_nba_lines(client, target_date=None):
         # Fetch 5 books around median, pick the one where implied probs are most equal
         from concurrent.futures import ThreadPoolExecutor
         ev['spreads'].sort(key=lambda m: float(m['strike']))
+        all_strikes = [float(m['strike']) for m in ev['spreads']]
+        print(f'  {away_team}@{home_team} spreads: {len(ev["spreads"])} lines, strikes: {all_strikes}')
         candidates = ev['spreads']
-        if len(candidates) > 5:
+        if len(candidates) > 7:
             mid = len(candidates) // 2
-            candidates = candidates[max(0, mid - 2):mid + 3]
+            candidates = candidates[max(0, mid - 3):mid + 4]
+        cand_strikes = [float(m['strike']) for m in candidates]
+        print(f'  Candidates (7 around median): {cand_strikes}')
         spread_books = {}
         def _fetch_sp_book(m):
             try:
@@ -336,9 +340,11 @@ def get_novig_nba_lines(client, target_date=None):
             ask_a = 1 - best_b
             ask_b = 1 - best_a
             balance = abs(ask_a - ask_b)
+            print(f'    Strike {float(m["strike"]):+.1f}: ask_a={ask_a:.3f} ask_b={ask_b:.3f} balance={balance:.3f}')
             if balance < best_balance:
                 best_balance = balance
                 sp = m
+        print(f'  Selected: {float(sp["strike"]):+.1f} (balance={best_balance:.3f})')
         outcomes = sp['outcomes']
         strike = float(sp['strike'])
 
