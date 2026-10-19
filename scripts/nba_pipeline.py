@@ -1179,6 +1179,14 @@ def fetch_injuries(darko):
         # Match to NBA ID via norm_name against darko dict
         nn = norm_name(name.strip())
         dk = darko.get(nn)
+        # Fallback: match by last name + first letter (handles Nic/Nicolas, Mike/Michael, etc.)
+        if not dk and nn.split():
+            first_letter = nn[0]
+            last = nn.split()[-1]
+            for k, v in darko.items():
+                if not k.startswith('id:') and k.split()[-1] == last and k[0] == first_letter and k != nn:
+                    dk = v
+                    break
         if dk and dk.get('nba_id'):
             nba_id = dk['nba_id']
             injuries[nba_id] = {
