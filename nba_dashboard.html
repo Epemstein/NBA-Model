@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v71</title>
+<title>NBA ALGO v72</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -2557,14 +2557,14 @@ function renderNovigBook(data, g) {
       html += `<td>${_spreadEdgeTeam === g.away ? g.away + ' ' + fmtSpread(-s.strike) : g.home + ' ' + fmtSpread(s.strike)}</td>`;
       if (s.away_price != null) {
         const awCellStyle = isBestAw ? bestStyle + 'cursor:pointer;' : 'cursor:pointer;';
-        html += `<td style="${awCellStyle}" onmouseenter="this.dataset.orig=this.innerHTML;this.textContent='${awTip.replace(/'/g,'\\&#39;')}';this.style.filter='brightness(0.92)'" onmouseleave="this.innerHTML=this.dataset.orig;this.style.filter=''" onclick='openBetModal(${awBetData})'>${awContent}</td>`;
+        html += `<td style="${awCellStyle}" data-logo="${teamLogo(g.away)}" data-color="${COLORS[g.away]||'#333'}" onmouseenter="_priceHoverIn(this)" onmouseleave="_priceHoverOut(this)" onclick='openBetModal(${awBetData})'>${awContent}</td>`;
       } else {
         html += `<td>${awContent}</td>`;
       }
       html += `<td style="color:var(--green);">${fmtFill(s.away_fill)}</td>`;
       if (s.home_price != null) {
         const hwCellStyle = isBestHw ? bestStyle + 'cursor:pointer;' : 'cursor:pointer;';
-        html += `<td style="${hwCellStyle}" onmouseenter="this.dataset.orig=this.innerHTML;this.textContent='${hwTip.replace(/'/g,'\\&#39;')}';this.style.filter='brightness(0.92)'" onmouseleave="this.innerHTML=this.dataset.orig;this.style.filter=''" onclick='openBetModal(${hwBetData})'>${hwContent}</td>`;
+        html += `<td style="${hwCellStyle}" data-logo="${teamLogo(g.home)}" data-color="${COLORS[g.home]||'#333'}" onmouseenter="_priceHoverIn(this)" onmouseleave="_priceHoverOut(this)" onclick='openBetModal(${hwBetData})'>${hwContent}</td>`;
       } else {
         html += `<td>${hwContent}</td>`;
       }
@@ -2632,14 +2632,14 @@ function renderNovigBook(data, g) {
       html += `<td>${t.strike.toFixed(1)}</td>`;
       if (t.over_price != null) {
         const ovCellStyle = isBestOv ? bestStyle + 'cursor:pointer;' : 'cursor:pointer;';
-        html += `<td style="${ovCellStyle}" onmouseenter="this.dataset.orig=this.innerHTML;this.textContent='${ovTip.replace(/'/g,'\\&#39;')}';this.style.filter='brightness(0.92)'" onmouseleave="this.innerHTML=this.dataset.orig;this.style.filter=''" onclick='openBetModal(${ovBetData})'>${ovContent}</td>`;
+        html += `<td style="${ovCellStyle}" data-logo="" data-color="#2e7d32" onmouseenter="_priceHoverIn(this)" onmouseleave="_priceHoverOut(this)" onclick='openBetModal(${ovBetData})'>${ovContent}</td>`;
       } else {
         html += `<td>${ovContent}</td>`;
       }
       html += `<td style="color:var(--green);">${fmtFill(t.over_fill)}</td>`;
       if (t.under_price != null) {
         const unCellStyle = isBestUn ? bestStyle + 'cursor:pointer;' : 'cursor:pointer;';
-        html += `<td style="${unCellStyle}" onmouseenter="this.dataset.orig=this.innerHTML;this.textContent='${unTip.replace(/'/g,'\\&#39;')}';this.style.filter='brightness(0.92)'" onmouseleave="this.innerHTML=this.dataset.orig;this.style.filter=''" onclick='openBetModal(${unBetData})'>${unContent}</td>`;
+        html += `<td style="${unCellStyle}" data-logo="" data-color="#c62828" onmouseenter="_priceHoverIn(this)" onmouseleave="_priceHoverOut(this)" onclick='openBetModal(${unBetData})'>${unContent}</td>`;
       } else {
         html += `<td>${unContent}</td>`;
       }
@@ -2677,7 +2677,7 @@ function renderNovigBook(data, g) {
     const awMLBetData = ml.away_price != null ? JSON.stringify({away:g.away,home:g.home,type:'ml',description:awMLDesc,price:ml.away_price,priceML:awMLStr,fill:ml.away_fill||0,ev:awMLEV||0,strike:0,side:'away',teamColor:awMLColor,teamLogo:teamLogo(g.away)}).replace(/'/g,'&#39;') : '';
     html += `<tr><td>${g.away}</td>`;
     if (ml.away_price != null) {
-      html += `<td style="cursor:pointer;" onmouseenter="this.dataset.orig=this.innerHTML;this.textContent='${awMLTip.replace(/'/g,'\\&#39;')}';this.style.filter='brightness(0.92)'" onmouseleave="this.innerHTML=this.dataset.orig;this.style.filter=''" onclick='openBetModal(${awMLBetData})'>${fmtProbML(ml.away_price)}</td>`;
+      html += `<td style="cursor:pointer;" data-logo="${teamLogo(g.away)}" data-color="${COLORS[g.away]||'#333'}" onmouseenter="_priceHoverIn(this)" onmouseleave="_priceHoverOut(this)" onclick='openBetModal(${awMLBetData})'>${fmtProbML(ml.away_price)}</td>`;
     } else {
       html += `<td>—</td>`;
     }
@@ -2696,7 +2696,7 @@ function renderNovigBook(data, g) {
     const hwMLBetData = ml.home_price != null ? JSON.stringify({away:g.away,home:g.home,type:'ml',description:hwMLDesc,price:ml.home_price,priceML:hwMLStr,fill:ml.home_fill||0,ev:hwMLEV||0,strike:0,side:'home',teamColor:hwMLColor,teamLogo:teamLogo(g.home)}).replace(/'/g,'&#39;') : '';
     html += `<tr><td>${g.home}</td>`;
     if (ml.home_price != null) {
-      html += `<td style="cursor:pointer;" onmouseenter="this.dataset.orig=this.innerHTML;this.textContent='${hwMLTip.replace(/'/g,'\\&#39;')}';this.style.filter='brightness(0.92)'" onmouseleave="this.innerHTML=this.dataset.orig;this.style.filter=''" onclick='openBetModal(${hwMLBetData})'>${fmtProbML(ml.home_price)}</td>`;
+      html += `<td style="cursor:pointer;" data-logo="${teamLogo(g.home)}" data-color="${COLORS[g.home]||'#333'}" onmouseenter="_priceHoverIn(this)" onmouseleave="_priceHoverOut(this)" onclick='openBetModal(${hwMLBetData})'>${fmtProbML(ml.home_price)}</td>`;
     } else {
       html += `<td>—</td>`;
     }
