@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v57</title>
+<title>NBA ALGO v58</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -2488,7 +2488,7 @@ function renderNovigBook(data, g) {
       const evLabel = r.evSide === 'under' ? 'U' : 'O';
       const isPrimary = g.book_total != null && Math.abs(t.strike - g.book_total) < 0.01;
       const isBest = idx === bestTotalIdx;
-      const edgeColor = COLORS[evSideTeam] || '#2e7d32'; const rowStyle = isBest ? 'background:' + edgeColor + '15;' : (isPrimary ? 'background:#f0f0f0;' : '');
+      const rowStyle = isBest ? 'background:#e8f5e915;' : (isPrimary ? 'background:#f0f0f0;' : '');
       const bestStyle = 'background:#2e7d32;color:#fff;font-weight:700;cursor:pointer;padding:4px 6px;';
       const isBestOv = isBest && r.evSide === 'over';
       const isBestUn = isBest && r.evSide === 'under';
