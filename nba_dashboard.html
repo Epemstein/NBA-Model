@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v58</title>
+<title>NBA ALGO v59</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -334,8 +334,8 @@ main { padding: 16px 20px; max-width: 1800px; margin: 0 auto; }
   background: var(--surface);
   border-radius: 6px;
   box-shadow: 0 8px 32px rgba(0,0,0,.2);
-  width: 960px;
-  max-width: 95vw;
+  width: 1400px;
+  max-width: 96vw;
   max-height: 88vh;
   display: flex;
   flex-direction: column;
@@ -362,7 +362,7 @@ main { padding: 16px 20px; max-width: 1800px; margin: 0 auto; }
   background: var(--surface); z-index: 1;
 }
 .novig-tables th:first-child { text-align: left; }
-.novig-tables td { padding: 4px 6px; border-bottom: 1px solid #f0f0f0; font-family: var(--mono); font-size: 11px; text-align: right; min-width: 110px; max-width: 110px; overflow: hidden; white-space: nowrap; }
+.novig-tables td { padding: 4px 8px; border-bottom: 1px solid #f0f0f0; font-family: var(--mono); font-size: 11px; text-align: right; white-space: nowrap; }
 .novig-tables td:first-child { text-align: left; font-weight: 600; }
 .novig-tables tr:hover td { background: #f8fafc; }
 .novig-ml { margin-top: 12px; padding: 10px; background: #f8fafc; border-radius: 4px; font-size: 12px; }
@@ -2495,7 +2495,7 @@ function renderNovigBook(data, g) {
       const ovContent = t.over_price != null ? fmtProbML(t.over_price) : '—';
       const unContent = t.under_price != null ? fmtProbML(t.under_price) : '—';
       const wagerPrice = r.evSide === 'over' ? (t.over_price != null ? fmtML(probToML(t.over_price)) : '') : (t.under_price != null ? fmtML(probToML(t.under_price)) : '');
-      const wagerTip = `${r.evSide === 'over' ? 'Over' : 'Under'} ${t.strike.toFixed(1)} (${wagerPrice})`;
+      const wagerTip = `${r.evSide === 'over' ? 'O' : 'U'} ${t.strike.toFixed(1)} (${wagerPrice})`;
 
       html += `<tr style="${rowStyle}">`;
       html += `<td>${t.strike.toFixed(1)}</td>`;
