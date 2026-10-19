@@ -297,35 +297,17 @@ def get_novig_nba_lines(client, target_date=None):
         else:
             home_team, away_team = teams[1], teams[0]
 
-        # Pick primary spread by most balanced prices (closest to 50/50)
-        sp = ev['spreads'][len(ev['spreads']) // 2]  # fallback to median
-        best_balance = 999
-        for m in ev['spreads']:
-            outs = m.get('outcomes', [])
-            if len(outs) == 2:
-                p1 = float(outs[0].get('price', 0.5))
-                p2 = float(outs[1].get('price', 0.5))
-                balance = abs(p1 - p2)  # 0 = perfect pick'em
-                if balance < best_balance:
-                    best_balance = balance
-                    sp = m
+        # Pick primary spread by median strike — simplest and most reliable
+        ev['spreads'].sort(key=lambda m: float(m['strike']))
+        sp = ev['spreads'][len(ev['spreads']) // 2]
         outcomes = sp['outcomes']
         strike = float(sp['strike'])
 
-        # Pick primary total by most balanced prices (closest to 50/50)
+        # Pick primary total by median strike
         total_data = None
         if ev['totals']:
-            best_tot_balance = 999
-            total_data = ev['totals'][len(ev['totals']) // 2]  # fallback
-            for m in ev['totals']:
-                outs = m.get('outcomes', [])
-                if len(outs) == 2:
-                    p1 = float(outs[0].get('price', 0.5))
-                    p2 = float(outs[1].get('price', 0.5))
-                    balance = abs(p1 - p2)
-                    if balance < best_tot_balance:
-                        best_tot_balance = balance
-                        total_data = m
+            ev['totals'].sort(key=lambda m: float(m['strike']))
+            total_data = ev['totals'][len(ev['totals']) // 2]
 
         # Get best bid + fillable qty for each spread outcome
         sp_book = None
