@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v51</title>
+<title>NBA ALGO v52</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -2369,17 +2369,26 @@ function renderNovigBook(data, g) {
       const wagerSpread = r.evSide === 'away' ? fmtSpread(-s.strike) : fmtSpread(s.strike);
       const wagerPrice = r.evSide === 'away' ? (s.away_price != null ? fmtML(probToML(s.away_price)) : '') : (s.home_price != null ? fmtML(probToML(s.home_price)) : '');
       const wagerTip = `${wagerSide} ${wagerSpread} (${wagerPrice})`;
-      // Highlight the edge side's price cell
-      const awCellBg = isBest && r.evSide === 'away' ? 'background:#c8e6c9;cursor:help;' : '';
-      const hwCellBg = isBest && r.evSide === 'home' ? 'background:#c8e6c9;cursor:help;' : '';
-      const awTip = isBest && r.evSide === 'away' ? ` title="${wagerTip}"` : '';
-      const hwTip = isBest && r.evSide === 'home' ? ` title="${wagerTip}"` : '';
+      // Best EV cell: dark green bg, show wager text on hover
+      const isBestAw = isBest && r.evSide === 'away';
+      const isBestHw = isBest && r.evSide === 'home';
+      const bestStyle = 'background:#2e7d32;color:#fff;font-weight:700;cursor:pointer;padding:4px 6px;';
+      const awContent = s.away_price != null ? fmtProbML(s.away_price) : '—';
+      const hwContent = s.home_price != null ? fmtProbML(s.home_price) : '—';
 
       html += `<tr style="${rowStyle}">`;
       html += `<td>${evSideTeam ? evSideTeam + ' ' + (r.evSide === 'away' ? fmtSpread(-s.strike) : fmtSpread(s.strike)) : g.home + ' ' + fmtSpread(s.strike)}</td>`;
-      html += `<td style="${awCellBg}"${awTip}>${s.away_price != null ? fmtProbML(s.away_price) : '—'}</td>`;
+      if (isBestAw) {
+        html += `<td style="${bestStyle}" onmouseenter="this.dataset.orig=this.textContent;this.textContent='${wagerTip}'" onmouseleave="this.textContent=this.dataset.orig">${awContent}</td>`;
+      } else {
+        html += `<td>${awContent}</td>`;
+      }
       html += `<td style="color:var(--green);">${fmtFill(s.away_fill)}</td>`;
-      html += `<td style="${hwCellBg}"${hwTip}>${s.home_price != null ? fmtProbML(s.home_price) : '—'}</td>`;
+      if (isBestHw) {
+        html += `<td style="${bestStyle}" onmouseenter="this.dataset.orig=this.textContent;this.textContent='${wagerTip}'" onmouseleave="this.textContent=this.dataset.orig">${hwContent}</td>`;
+      } else {
+        html += `<td>${hwContent}</td>`;
+      }
       html += `<td style="color:var(--green);">${fmtFill(s.home_fill)}</td>`;
       if (r.evDisplay != null && r.evDisplay > 0) {
         const cls = r.evDisplay >= 8 ? 'hi' : r.evDisplay >= 4 ? 'mid' : 'lo';
@@ -2398,29 +2407,57 @@ function renderNovigBook(data, g) {
   // Totals table
   html += '<div><div style="font-size:11px;font-weight:700;margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);">Totals</div>';
   if (data.totals && data.totals.length) {
-    html += '<table><thead><tr><th>Strike</th><th>Over Price</th><th>Over Fill</th><th>Under Price</th><th>Under Fill</th><th>EV%</th></tr></thead><tbody>';
-    for (const t of data.totals) {
+    // First pass: find best EV total with min liquidity
+    const minLiqT = STATE.settings?.minLiquidity || 500;
+    let bestTotalEV = -999, bestTotalIdx = -1, bestTotalSide = '';
+    const totalRows = data.totals.map((t, idx) => {
       const ovEV = _calcAltTotalEV(g, t.strike, t.over_price, 'over');
       const unEV = _calcAltTotalEV(g, t.strike, t.under_price, 'under');
-      const bestEV = [ovEV, unEV].filter(v => v != null && v > 0);
-      const evDisplay = bestEV.length ? Math.max(...bestEV) : (ovEV != null || unEV != null ? Math.max(ovEV || -999, unEV || -999) : null);
-      const evSide = unEV != null && unEV === evDisplay ? 'U' : 'O';
+      const posEVs = [ovEV, unEV].filter(v => v != null && v > 0);
+      const evDisplay = posEVs.length ? Math.max(...posEVs) : null;
+      const evSide = (unEV != null && unEV === evDisplay) ? 'under' : 'over';
+      const edgeFill = evSide === 'over' ? (t.over_fill||0) : (t.under_fill||0);
+      if (evDisplay != null && evDisplay > bestTotalEV && edgeFill >= minLiqT) { bestTotalEV = evDisplay; bestTotalIdx = idx; bestTotalSide = evSide; }
+      return { t, ovEV, unEV, evDisplay, evSide: evDisplay > 0 ? evSide : null };
+    });
+
+    html += '<table><thead><tr><th>Strike</th><th>Over Price</th><th>Over Fill</th><th>Under Price</th><th>Under Fill</th><th>EV%</th></tr></thead><tbody>';
+    totalRows.forEach((r, idx) => {
+      const t = r.t;
+      const evLabel = r.evSide === 'under' ? 'U' : 'O';
       const isPrimary = g.book_total != null && Math.abs(t.strike - g.book_total) < 0.01;
-      const rowStyle = isPrimary ? 'background:#f0f7ff;font-weight:600;' : '';
+      const isBest = idx === bestTotalIdx;
+      const rowStyle = isBest ? 'background:#e8f5e9;' : (isPrimary ? 'background:#f0f7ff;' : '');
+      const bestStyle = 'background:#2e7d32;color:#fff;font-weight:700;cursor:pointer;padding:4px 6px;';
+      const isBestOv = isBest && r.evSide === 'over';
+      const isBestUn = isBest && r.evSide === 'under';
+      const ovContent = t.over_price != null ? fmtProbML(t.over_price) : '—';
+      const unContent = t.under_price != null ? fmtProbML(t.under_price) : '—';
+      const wagerPrice = r.evSide === 'over' ? (t.over_price != null ? fmtML(probToML(t.over_price)) : '') : (t.under_price != null ? fmtML(probToML(t.under_price)) : '');
+      const wagerTip = `${r.evSide === 'over' ? 'Over' : 'Under'} ${t.strike.toFixed(1)} (${wagerPrice})`;
+
       html += `<tr style="${rowStyle}">`;
       html += `<td>${t.strike.toFixed(1)}</td>`;
-      html += `<td>${t.over_price != null ? fmtProbML(t.over_price) : '—'}</td>`;
+      if (isBestOv) {
+        html += `<td style="${bestStyle}" onmouseenter="this.dataset.orig=this.textContent;this.textContent='${wagerTip}'" onmouseleave="this.textContent=this.dataset.orig">${ovContent}</td>`;
+      } else {
+        html += `<td>${ovContent}</td>`;
+      }
       html += `<td style="color:var(--green);">${fmtFill(t.over_fill)}</td>`;
-      html += `<td>${t.under_price != null ? fmtProbML(t.under_price) : '—'}</td>`;
+      if (isBestUn) {
+        html += `<td style="${bestStyle}" onmouseenter="this.dataset.orig=this.textContent;this.textContent='${wagerTip}'" onmouseleave="this.textContent=this.dataset.orig">${unContent}</td>`;
+      } else {
+        html += `<td>${unContent}</td>`;
+      }
       html += `<td style="color:var(--green);">${fmtFill(t.under_fill)}</td>`;
-      if (evDisplay != null && evDisplay > 0) {
-        const cls = evDisplay >= 8 ? 'hi' : evDisplay >= 4 ? 'mid' : 'lo';
-        html += `<td style="color:var(--green);font-weight:600;"><span class="edge-chip ${cls}" style="font-size:9px;padding:1px 4px;">${evDisplay.toFixed(1)}%</span> ${evSide}</td>`;
+      if (r.evDisplay != null && r.evDisplay > 0) {
+        const cls = r.evDisplay >= 8 ? 'hi' : r.evDisplay >= 4 ? 'mid' : 'lo';
+        html += `<td style="color:var(--green);font-weight:600;"><span class="edge-chip ${cls}" style="font-size:9px;padding:1px 4px;">${r.evDisplay.toFixed(1)}%</span> ${evLabel}</td>`;
       } else {
         html += '<td style="color:var(--muted);">—</td>';
       }
       html += '</tr>';
-    }
+    });
     html += '</tbody></table>';
   } else {
     html += '<div style="color:var(--muted);font-size:11px;">No total markets</div>';
