@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v81</title>
+<title>NBA ALGO v82</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -2395,6 +2395,7 @@ function _priceHoverIn(el) {
   const color = el.dataset.color;
   const tip = el.dataset.tip;
   if (color) el.style.backgroundColor = color + '12';
+  if (!el.dataset.orig) el.dataset.orig = el.innerHTML;
   // Add faded logo overlay
   if (logo && !el.querySelector('.hover-logo')) {
     const img = document.createElement('img');
@@ -2404,7 +2405,6 @@ function _priceHoverIn(el) {
     el.style.position = 'relative';
     el.appendChild(img);
   }
-  if (!el.dataset.orig) el.dataset.orig = el.innerHTML;
   // Show just the numbers, no team name
   if (tip) {
     const shortTip = tip.replace(/^[A-Z]{2,3}\s+/, '');
