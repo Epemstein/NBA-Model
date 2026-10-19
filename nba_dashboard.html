@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v25</title>
+<title>NBA ALGO v26</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1857,7 +1857,7 @@ function renderOddsSummary() {
       const lEdge = bk != null ? Math.round((lSprd - bk) * 10) / 10 : null;
       const eEdge = bk != null ? Math.round((eSprd - bk) * 10) / 10 : null;
       // Positive edge = away side, negative = home side. Show only positive per row.
-      function srcEdge(e, isAway) { const v = isAway ? -e : e; return (e != null && v > 0) ? `<span class="edge-chip lo">${v.toFixed(1)}</span>` : ''; }
+      function srcEdge(e, isAway) { const v = isAway ? e : -e; return (e != null && v > 0) ? `<span class="edge-chip lo">${v.toFixed(1)}</span>` : ''; }
       const awLogo = `<img src="${teamLogo(g.away)}" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;" onerror="this.style.display='none'" />`;
       const hwLogo = `<img src="${teamLogo(g.home)}" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;" onerror="this.style.display='none'" />`;
       html += `<tr style="border-bottom:none;">
