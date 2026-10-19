@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v34</title>
+<title>NBA ALGO v35</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1581,7 +1581,7 @@ function _buildInlineSide(gameIdx, side, roster, baselines, overrides) {
       dpm: p.dpm||0, o_dpm: p.o_dpm||0, d_dpm: p.d_dpm||0,
       epm: p.epm, epm_o: p.epm_o, epm_d: p.epm_d,
       lb_dpm: p.lb_dpm, lb_o_dpm: p.lb_o_dpm, lb_d_dpm: p.lb_d_dpm,
-      injury: p.injury||'',
+      injury: p.injury||"", injury_detail: p.injury_detail||"",
     };
   });
   // Sort: players with minutes first (desc by total), then 0-min alphabetically
@@ -1686,7 +1686,7 @@ function _renderInlinePlayersPanel(gameIdx) {
               <div style="display:flex;align-items:center;gap:5px;">
                 <img src="${hs(p.nba_id)}" style="width:32px;height:24px;object-fit:cover;object-position:top;border-radius:3px;background:#e0e0e0;flex-shrink:0;" onerror="this.src='${placeholder}'" />
                 <div>
-                  <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;max-width:100px;">${p.name}${p.injury ? `<span style="background:#c62828;color:#fff;font-size:8px;font-weight:700;padding:1px 3px;border-radius:2px;margin-left:3px;">${p.injury}</span>` : ''}</div>
+                  <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;max-width:100px;">${p.name}${p.injury ? `<span title="${(p.injury_detail||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;')}" style="background:#c62828;color:#fff;font-size:8px;font-weight:700;padding:1px 3px;border-radius:2px;margin-left:3px;cursor:help;">${p.injury}</span>` : ''}</div>
                   <div style="font-size:10px;"><span style="color:var(--muted);">${p.pos||''}</span> <span style="font-family:var(--mono);color:${dpmColor(pDpm(p))};font-weight:600;">${fmtDpm(pDpm(p))}</span></div>
                 </div>
               </div>
@@ -2448,7 +2448,7 @@ function loadTeamBaseline() {
           dpm: p.dpm, o_dpm: p.o_dpm, d_dpm: p.d_dpm,
           lb_dpm: p.lb_dpm, lb_o_dpm: p.lb_o_dpm, lb_d_dpm: p.lb_d_dpm,
           epm: p.epm, epm_o: p.epm_o, epm_d: p.epm_d,
-          injury: p.injury||'',
+          injury: p.injury||"", injury_detail: p.injury_detail||"",
         };
       });
 
@@ -2559,7 +2559,7 @@ function renderTeamBaseline() {
         <div style="display:flex;align-items:center;gap:8px;">
           <img src="${hsUrl || placeholder}" style="width:36px;height:28px;object-fit:cover;object-position:top;border-radius:3px;background:#e0e0e0;flex-shrink:0;" onerror="this.src='${placeholder}'" />
           <div>
-            <div style="font-size:14px;font-weight:600;">${p.name}${p.injury ? `<span style="background:#c62828;color:#fff;font-size:8px;font-weight:700;padding:1px 3px;border-radius:2px;margin-left:3px;">${p.injury}</span>` : ''}</div>
+            <div style="font-size:14px;font-weight:600;">${p.name}${p.injury ? `<span title="${(p.injury_detail||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;')}" style="background:#c62828;color:#fff;font-size:8px;font-weight:700;padding:1px 3px;border-radius:2px;margin-left:3px;cursor:help;">${p.injury}</span>` : ''}</div>
             <div style="font-size:11px;"><span style="color:var(--muted);">${p.pos||''}</span> <span style="font-family:var(--mono);color:${dpmColor(pDpm(p))};font-weight:600;">${fmtDpm(pDpm(p))}</span></div>
           </div>
         </div>
@@ -2757,7 +2757,7 @@ async function applyBaselines() {
           name: p.name, dpm: p.dpm||0, o_dpm: p.o_dpm||0, d_dpm: p.d_dpm||0,
           lb_dpm: p.lb_dpm, lb_o_dpm: p.lb_o_dpm, lb_d_dpm: p.lb_d_dpm,
           epm: p.epm, epm_o: p.epm_o, epm_d: p.epm_d,
-          injury: p.injury||'',
+          injury: p.injury||"", injury_detail: p.injury_detail||"",
           nba_id: p.nba_id||'', min: _resolveMin(blNorm, goNorm, p.name),
         })).filter(p => p.min > 0).sort((a,b) => b.min - a.min);
 
@@ -3147,7 +3147,7 @@ function renderAllPlayers() {
         <div style="display:flex;align-items:center;gap:8px;">
           ${hs}
           <div>
-            <div style="font-size:14px;font-weight:600;">${p.name}${p.injury ? `<span style="background:#c62828;color:#fff;font-size:8px;font-weight:700;padding:1px 3px;border-radius:2px;margin-left:3px;">${p.injury}</span>` : ''}</div>
+            <div style="font-size:14px;font-weight:600;">${p.name}${p.injury ? `<span title="${(p.injury_detail||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;')}" style="background:#c62828;color:#fff;font-size:8px;font-weight:700;padding:1px 3px;border-radius:2px;margin-left:3px;cursor:help;">${p.injury}</span>` : ''}</div>
             <div style="font-size:10px;color:var(--muted);">${p.pos||''}</div>
           </div>
         </div>

@@ -1164,16 +1164,17 @@ def fetch_injuries(darko):
         r'nba/player/_/id/(\d+)/[^\"]*\">([^<]+)</a></td>'
         r'<td[^>]*>([^<]*)</td>'
         r'<td[^>]*>([^<]*)</td>'
-        r'<td[^>]*><span[^>]*>([^<]+)</span></td>',
+        r'<td[^>]*><span[^>]*>([^<]+)</span></td>'
+        r'<td[^>]*>([^<]*)</td>',
         re.DOTALL
     )
 
     injuries = {}
     matched = 0
     for m in pattern.finditer(html):
-        espn_id, name, position, return_date, status_raw = m.groups()
+        espn_id, name, position, return_date, status_raw, comment = m.groups()
         status_abbr = STATUS_MAP.get(status_raw.strip(), status_raw.strip())
-        detail = return_date.strip()
+        detail = comment.strip() if comment.strip() else return_date.strip()
 
         # Match to NBA ID via norm_name against darko dict
         nn = norm_name(name.strip())
@@ -1268,7 +1269,7 @@ def _write_rosters(db, darko, player_minutes, lebron=None, epm=None, injuries=No
         if injuries:
             inj = injuries.get(entry.get('nba_id', ''))
             if inj:
-                entry['injury'] = inj['status']
+                entry['injury'] = inj['status']; entry['injury_detail'] = inj.get('detail', '')
         if team not in all_teams:
             all_teams[team] = []
         if dedup_key in seen:
@@ -1315,7 +1316,7 @@ def _write_rosters(db, darko, player_minutes, lebron=None, epm=None, injuries=No
             if injuries:
                 inj = injuries.get(new_entry.get('nba_id', ''))
                 if inj:
-                    new_entry['injury'] = inj['status']
+                    new_entry['injury'] = inj['status']; entry['injury_detail'] = inj.get('detail', '')
             all_teams[team_abr].append(new_entry)
 
     # Only write if we got official rosters — don't overwrite good data with incomplete data
@@ -1563,7 +1564,7 @@ def run(override_date=None):
             if injuries:
                 inj = injuries.get(entry.get('nba_id', ''))
                 if inj:
-                    entry['injury'] = inj['status']
+                    entry['injury'] = inj['status']; entry['injury_detail'] = inj.get('detail', '')
             return entry
         gm['away_players'] = [_player_entry(p) for p in aw_players]
         gm['home_players'] = [_player_entry(p) for p in hw_players]
