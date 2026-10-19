@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v22</title>
+<title>NBA ALGO v23</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -104,7 +104,7 @@ main { padding: 16px 20px; max-width: 1400px; margin: 0 auto; }
 .ss { font-size: 10px; color: var(--muted); margin-top: 2px; }
 
 /* ── GAME CARDS ── */
-.gg { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 10px; }
+.gg { display: grid; grid-template-columns: 1fr; gap: 10px; max-width: 900px; }
 .gc {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1078,6 +1078,34 @@ function pDpm(p) {
 }
 function gVal(g, field) { return g[field]; }  // projections are recomputed in-place
 
+// Compute projected spread for a game using a specific rating source
+function _gameSpreadForSource(g, source) {
+  const avgOrtg = STATE.leagueAvgOrtg || 114.8;
+  const paceMult = STATE.settings?.paceMult || 1.0;
+  const hca = (STATE.settings?.hca || 1.5) / 2;
+  const pace = (g._rawPace || g.matchup_pace || 95) * paceMult;
+
+  function teamRating(players, src) {
+    const totalRaw = players.reduce((s, p) => s + (p.min || 0) / 48, 0);
+    const scale = totalRaw > 0 ? 5.0 / totalRaw : 0;
+    let off = 0, def = 0;
+    for (const p of players) {
+      const w = ((p.min || 0) / 48) * scale;
+      if (src === 'epm' && p.epm_o != null) { off += p.epm_o * w; def += (p.epm_d||0) * w; }
+      else if (src === 'lebron' && p.lb_o_dpm != null) { off += p.lb_o_dpm * w; def += (p.lb_d_dpm||0) * w; }
+      else { const dk = getDarko(p); off += (dk.o_dpm||0) * w; def += (dk.d_dpm||0) * w; }
+    }
+    return { off, def };
+  }
+  const aw = teamRating(g.away_players || [], source);
+  const hw = teamRating(g.home_players || [], source);
+  const awPP100 = avgOrtg + aw.off - hw.def;
+  const hwPP100 = avgOrtg + hw.off - aw.def;
+  const awProj = (awPP100 / 100 * pace - hca);
+  const hwProj = (hwPP100 / 100 * pace + hca);
+  return Math.round((awProj - hwProj) * 10) / 10;
+}
+
 // ── Client-side projection engine ───────────────────────────────────────
 // Computes team ratings + score projections from player-level data
 // Uses whichever rating source is selected (DARKO or LEBRON)
@@ -1792,10 +1820,19 @@ function renderOddsSummary() {
   if (!STATE.games.length) { thead.innerHTML = ''; tbody.innerHTML = ''; return; }
 
   if (_oddsTab === 'spread') {
-    thead.innerHTML = '<tr><th>Game</th><th></th><th>Line</th><th>Model</th><th>Edge</th><th>Price</th><th>Avail</th></tr>';
+    thead.innerHTML = '<tr><th>Game</th><th></th><th>Line</th><th>Model</th><th>Edge</th><th style="font-size:9px;color:var(--muted);">D</th><th style="font-size:9px;color:var(--muted);">L</th><th style="font-size:9px;color:var(--muted);">E</th><th>Price</th><th>Avail</th></tr>';
     let html = '';
     for (const g of STATE.games) {
       const edge = gVal(g,"spread_edge");
+      const bk = g.book_spread;
+      // Per-source edges
+      const dSprd = _gameSpreadForSource(g, 'darko');
+      const lSprd = _gameSpreadForSource(g, 'lebron');
+      const eSprd = _gameSpreadForSource(g, 'epm');
+      const dEdge = bk != null ? Math.round((dSprd - bk) * 10) / 10 : null;
+      const lEdge = bk != null ? Math.round((lSprd - bk) * 10) / 10 : null;
+      const eEdge = bk != null ? Math.round((eSprd - bk) * 10) / 10 : null;
+      function miniEdge(e, flip) { if (e == null) return '—'; const v = flip ? -e : e; return `<span style="font-family:var(--mono);font-size:9px;color:${v>0?'var(--green)':'var(--red)'}">${v>0?'+':''}${v.toFixed(1)}</span>`; }
       const awLogo = `<img src="${teamLogo(g.away)}" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;" onerror="this.style.display='none'" />`;
       const hwLogo = `<img src="${teamLogo(g.home)}" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;" onerror="this.style.display='none'" />`;
       html += `<tr style="border-bottom:none;">
@@ -1803,17 +1840,19 @@ function renderOddsSummary() {
           ${g.away} @<br>${g.home}<br><span style="color:var(--muted);font-weight:400;font-size:9px;">${g.game_time_et || ''}</span>
         </td>
         <td style="font-size:10px;">${awLogo}</td>
-        <td style="font-family:var(--mono);">${g.book_spread != null ? fmtSpread(-g.book_spread) : '—'}</td>
+        <td style="font-family:var(--mono);">${bk != null ? fmtSpread(-bk) : '—'}</td>
         <td style="color:var(--accent);font-family:var(--mono);">${gVal(g,"proj_spread") != null ? fmtSpread(-gVal(g,"proj_spread")) : '—'}</td>
         <td>${edge != null && edge > 0 ? `<span class="edge-chip ${edgeClass(edge)}">${edge.toFixed(1)}</span>` : ''}</td>
+        <td>${miniEdge(dEdge, true)}</td><td>${miniEdge(lEdge, true)}</td><td>${miniEdge(eEdge, true)}</td>
         <td style="color:var(--accent);font-size:10px;">${fmtProbML(g.away_spread_price)}</td>
         <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.away_spread_fill)}</td>
       </tr>`;
       html += `<tr style="border-bottom:2px solid var(--border);">
         <td style="font-size:10px;">${hwLogo}</td>
-        <td style="font-family:var(--mono);font-weight:600;">${g.book_spread != null ? fmtSpread(g.book_spread) : '—'}</td>
+        <td style="font-family:var(--mono);font-weight:600;">${bk != null ? fmtSpread(bk) : '—'}</td>
         <td style="color:var(--accent);font-family:var(--mono);font-weight:600;">${gVal(g,"proj_spread") != null ? fmtSpread(gVal(g,"proj_spread")) : '—'}</td>
         <td>${edge != null && edge < 0 ? `<span class="edge-chip ${edgeClass(edge)}">${Math.abs(edge).toFixed(1)}</span>` : ''}</td>
+        <td>${miniEdge(dEdge, false)}</td><td>${miniEdge(lEdge, false)}</td><td>${miniEdge(eEdge, false)}</td>
         <td style="color:var(--accent);font-size:10px;">${fmtProbML(g.home_spread_price)}</td>
         <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.home_spread_fill)}</td>
       </tr>`;
