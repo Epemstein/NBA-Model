@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v28</title>
+<title>NBA ALGO v29</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1633,16 +1633,16 @@ function _renderInlinePlayersPanel(gameIdx) {
       <table style="width:100%;border-collapse:collapse;font-size:10px;">
         <thead>
           <tr style="border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface);z-index:2;">
-            <th style="text-align:left;font-size:8px;color:var(--muted);padding:2px 0;min-width:90px;">PLAYER</th>
-            <th style="text-align:center;font-size:8px;color:var(--accent);padding:2px 1px;width:40px;">PG</th>
-            <th style="text-align:center;font-size:8px;color:var(--accent);padding:2px 1px;width:40px;">SG</th>
-            <th style="text-align:center;font-size:8px;color:var(--accent);padding:2px 1px;width:40px;">SF</th>
-            <th style="text-align:center;font-size:8px;color:var(--accent);padding:2px 1px;width:40px;">PF</th>
-            <th style="text-align:center;font-size:8px;color:var(--accent);padding:2px 1px;width:40px;">C</th>
-            <th style="text-align:right;font-size:8px;color:var(--muted);padding:2px 2px;width:36px;">DPM</th>
+            <th style="text-align:left;font-size:9px;color:var(--muted);padding:4px 0;min-width:90px;">PLAYER</th>
+            <th style="text-align:center;font-size:9px;color:var(--accent);padding:4px 1px;width:40px;">PG</th>
+            <th style="text-align:center;font-size:9px;color:var(--accent);padding:4px 1px;width:40px;">SG</th>
+            <th style="text-align:center;font-size:9px;color:var(--accent);padding:4px 1px;width:40px;">SF</th>
+            <th style="text-align:center;font-size:9px;color:var(--accent);padding:4px 1px;width:40px;">PF</th>
+            <th style="text-align:center;font-size:9px;color:var(--accent);padding:4px 1px;width:40px;">C</th>
+            <th style="text-align:right;font-size:9px;color:var(--muted);padding:4px 2px;width:36px;">DPM</th>
           </tr>
-          <tr style="background:#f0f7ff;font-weight:700;font-family:var(--mono);font-size:10px;position:sticky;top:18px;z-index:2;">
-            <td style="font-family:var(--sans);font-size:9px;color:var(--muted);">SUM</td>
+          <tr style="background:#f0f7ff;font-weight:700;font-family:var(--mono);font-size:10px;position:sticky;top:24px;z-index:2;">
+            <td style="font-family:var(--sans);font-size:9px;color:var(--muted);padding:4px 0;">SUM</td>
             <td style="text-align:center;color:${posClr(sumPg)};" id="isum-pg-${gameIdx}-${side}">${sumPg.toFixed(0)}</td>
             <td style="text-align:center;color:${posClr(sumSg)};" id="isum-sg-${gameIdx}-${side}">${sumSg.toFixed(0)}</td>
             <td style="text-align:center;color:${posClr(sumSf)};" id="isum-sf-${gameIdx}-${side}">${sumSf.toFixed(0)}</td>
@@ -1661,11 +1661,11 @@ function _renderInlinePlayersPanel(gameIdx) {
               if (cur === base) return '';
               return cur > base ? 'background:#e8f5e9;' : 'background:#ffebee;';
             }
-            return `<tr style="border-bottom:1px solid #f0f0f0;${dimmed}">
-            <td style="padding:2px 0;font-family:var(--sans);white-space:nowrap;">
+            return `<tr style="border-bottom:1px solid #f0f0f0;height:30px;${dimmed}">
+            <td style="padding:4px 0;font-family:var(--sans);white-space:nowrap;">
               <div style="display:flex;align-items:center;gap:3px;">
-                <img src="${hs(p.nba_id)}" style="width:20px;height:15px;object-fit:cover;object-position:top;border-radius:2px;background:#e0e0e0;flex-shrink:0;" onerror="this.src='${placeholder}'" />
-                <span style="overflow:hidden;text-overflow:ellipsis;max-width:80px;font-size:10px;">${p.name}</span>
+                <img src="${hs(p.nba_id)}" style="width:22px;height:17px;object-fit:cover;object-position:top;border-radius:2px;background:#e0e0e0;flex-shrink:0;" onerror="this.src='${placeholder}'" />
+                <span style="overflow:hidden;text-overflow:ellipsis;max-width:80px;font-size:11px;">${p.name}</span>
               </div>
             </td>
             <td style="text-align:center;padding:1px;${cellBg('pg')}"><input type="number" value="${p.pg||''}" min="0" max="48" step="1" style="width:40px;text-align:center;font-size:10px;padding:1px 2px;font-family:var(--mono);${cellBg('pg')}" onchange="inlineUpdatePos(${gameIdx},'${side}',${j},'pg',this.value)" placeholder="0"></td>
