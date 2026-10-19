@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v35</title>
+<title>NBA ALGO v36</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -73,7 +73,7 @@ nav button:hover { color: var(--text); background: rgba(0,0,0,.04); border-radiu
 nav button.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; background: rgba(0,150,240,.06); border-radius: 4px 4px 0 0; }
 
 /* ── MAIN ── */
-main { padding: 16px 20px; max-width: 1400px; margin: 0 auto; }
+main { padding: 16px 20px; max-width: 1800px; margin: 0 auto; }
 .panel { display: none; animation: fi .15s ease; }
 .panel.active { display: block; }
 @keyframes fi { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; } }
@@ -212,6 +212,7 @@ main { padding: 16px 20px; max-width: 1400px; margin: 0 auto; }
 .gc-odds-cell + .gc-odds-cell { border-left: 1px solid var(--border); }
 .odds-label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
 .odds-val { font-family: var(--mono); font-size: 12px; font-weight: 500; margin-top: 2px; }
+#inj-tooltip { display:none;position:fixed;background:#333;color:#fff;font-size:11px;font-weight:400;padding:8px 10px;border-radius:4px;max-width:320px;z-index:9999;line-height:1.4;box-shadow:0 2px 8px rgba(0,0,0,.3);pointer-events:none; }
 .edge-chip {
   display: inline-block;
   font-family: var(--mono);
@@ -476,6 +477,7 @@ input[type=number] { -moz-appearance: textfield; }
 </style>
 </head>
 <body>
+<div id="inj-tooltip"></div>
 
 <!-- ═══════════ LOGIN SCREEN ═══════════ -->
 <div id="login-screen" style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#111;">
@@ -575,6 +577,12 @@ input[type=number] { -moz-appearance: textfield; }
         <button class="btn bp" onclick="loadDateGames()" id="load-games-btn">Load Games</button>
         <span id="load-games-status" style="font-size:11px;color:var(--muted);margin-left:8px;"></span>
       </div>
+    </div>
+
+    <!-- Twitter Feed Sidebar -->
+    <div class="card" style="width:350px;flex-shrink:0;position:sticky;top:56px;max-height:calc(100vh - 180px);overflow-y:auto;padding:0;">
+      <a class="twitter-timeline" data-height="900" data-theme="light" data-chrome="noheader nofooter noborders transparent" href="https://twitter.com/UnderdogNBA">@UnderdogNBA</a>
+      <script async src="https://platform.twitter.com/widgets.js"></script>
     </div>
 
   </div>
@@ -1686,8 +1694,8 @@ function _renderInlinePlayersPanel(gameIdx) {
               <div style="display:flex;align-items:center;gap:5px;">
                 <img src="${hs(p.nba_id)}" style="width:32px;height:24px;object-fit:cover;object-position:top;border-radius:3px;background:#e0e0e0;flex-shrink:0;" onerror="this.src='${placeholder}'" />
                 <div>
-                  <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;max-width:100px;">${p.name}${p.injury ? `<span title="${(p.injury_detail||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;')}" style="background:#c62828;color:#fff;font-size:8px;font-weight:700;padding:1px 3px;border-radius:2px;margin-left:3px;cursor:help;">${p.injury}</span>` : ''}</div>
-                  <div style="font-size:10px;"><span style="color:var(--muted);">${p.pos||''}</span> <span style="font-family:var(--mono);color:${dpmColor(pDpm(p))};font-weight:600;">${fmtDpm(pDpm(p))}</span></div>
+                  <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;max-width:100px;">${p.name}</div>
+                  <div style="font-size:10px;"><span style="color:var(--muted);">${p.pos||''}</span> <span style="font-family:var(--mono);color:${dpmColor(pDpm(p))};font-weight:600;">${fmtDpm(pDpm(p))}</span>${p.injury ? ` <span class="inj-badge" onmouseenter="showInjTip(event,this)" onmouseleave="hideInjTip()" data-inj="${(p.injury_detail||'No details available').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}" style="background:#c62828;color:#fff;font-size:8px;font-weight:700;padding:1px 3px;border-radius:2px;margin-left:3px;cursor:help;">${p.injury}</span>` : ''}</div>
                 </div>
               </div>
             </td>
@@ -2559,7 +2567,7 @@ function renderTeamBaseline() {
         <div style="display:flex;align-items:center;gap:8px;">
           <img src="${hsUrl || placeholder}" style="width:36px;height:28px;object-fit:cover;object-position:top;border-radius:3px;background:#e0e0e0;flex-shrink:0;" onerror="this.src='${placeholder}'" />
           <div>
-            <div style="font-size:14px;font-weight:600;">${p.name}${p.injury ? `<span title="${(p.injury_detail||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;')}" style="background:#c62828;color:#fff;font-size:8px;font-weight:700;padding:1px 3px;border-radius:2px;margin-left:3px;cursor:help;">${p.injury}</span>` : ''}</div>
+            <div style="font-size:14px;font-weight:600;">${p.name}${p.injury ? `<span class="inj-badge" onmouseenter="showInjTip(event,this)" onmouseleave="hideInjTip()" data-inj="${(p.injury_detail||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}" style="background:#c62828;color:#fff;font-size:8px;font-weight:700;padding:1px 3px;border-radius:2px;margin-left:3px;cursor:help;">${p.injury}</span>` : ''}</div>
             <div style="font-size:11px;"><span style="color:var(--muted);">${p.pos||''}</span> <span style="font-family:var(--mono);color:${dpmColor(pDpm(p))};font-weight:600;">${fmtDpm(pDpm(p))}</span></div>
           </div>
         </div>
@@ -3147,7 +3155,7 @@ function renderAllPlayers() {
         <div style="display:flex;align-items:center;gap:8px;">
           ${hs}
           <div>
-            <div style="font-size:14px;font-weight:600;">${p.name}${p.injury ? `<span title="${(p.injury_detail||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;')}" style="background:#c62828;color:#fff;font-size:8px;font-weight:700;padding:1px 3px;border-radius:2px;margin-left:3px;cursor:help;">${p.injury}</span>` : ''}</div>
+            <div style="font-size:14px;font-weight:600;">${p.name}${p.injury ? `<span class="inj-badge" onmouseenter="showInjTip(event,this)" onmouseleave="hideInjTip()" data-inj="${(p.injury_detail||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}" style="background:#c62828;color:#fff;font-size:8px;font-weight:700;padding:1px 3px;border-radius:2px;margin-left:3px;cursor:help;">${p.injury}</span>` : ''}</div>
             <div style="font-size:10px;color:var(--muted);">${p.pos||''}</div>
           </div>
         </div>
@@ -3542,6 +3550,18 @@ function setupRealtimeListener() {
     populatePickDropdown();
   });
 }
+
+function showInjTip(e, el) {
+  const tip = document.getElementById('inj-tooltip');
+  const text = el.getAttribute('data-inj') || 'No details available';
+  if (!text) return;
+  const tmp = document.createElement('textarea'); tmp.innerHTML = text; tip.textContent = tmp.value;
+  tip.style.display = 'block';
+  const r = el.getBoundingClientRect();
+  tip.style.left = Math.min(r.left, window.innerWidth - 340) + 'px';
+  tip.style.top = (r.top - tip.offsetHeight - 6) + 'px';
+}
+function hideInjTip() { document.getElementById('inj-tooltip').style.display = 'none'; }
 </script>
 </body>
 </html>
