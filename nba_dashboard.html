@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v69</title>
+<title>NBA ALGO v70</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1045,6 +1045,18 @@ input[type=number] { -moz-appearance: textfield; }
     <div class="novig-body" id="novig-body">
       <div style="text-align:center;padding:40px;color:var(--muted);">Loading...</div>
     </div>
+  </div>
+</div>
+
+<!-- ═══════════ BET CONFIRMATION MODAL ═══════════ -->
+<div id="bet-overlay" class="novig-overlay" onclick="if(event.target===this)closeBetModal()">
+  <div style="background:var(--surface);border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,.25);width:480px;max-width:90vw;padding:24px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h3 id="bet-title" style="font-size:18px;font-weight:700;">Place Bet</h3>
+      <button onclick="closeBetModal()" style="font-size:20px;cursor:pointer;background:none;border:none;color:var(--muted);">&times;</button>
+    </div>
+    <div id="bet-details"></div>
+    <div id="bet-form"></div>
   </div>
 </div>
 
@@ -2375,6 +2387,74 @@ function closeNovigBook() {
   clearInterval(_novigAgeTimer);
 }
 
+// ── Bet Confirmation Modal ─────────────────────────────────────────────
+function openBetModal(data) {
+  const overlay = document.getElementById('bet-overlay');
+  const details = document.getElementById('bet-details');
+  const form = document.getElementById('bet-form');
+  const mlNum = probToML(data.price);
+  const mlStr = fmtML(mlNum);
+  const evStr = data.ev != null ? data.ev.toFixed(1) + '%' : '--';
+  const evColor = data.ev > 0 ? 'var(--green)' : 'var(--muted)';
+  const teamColor = data.teamColor || '#333';
+  const logoUrl = data.teamLogo || '';
+
+  details.innerHTML = `
+    <div style="text-align:center;margin-bottom:16px;">
+      <img src="${teamLogo(data.away)}" style="width:32px;height:32px;object-fit:contain;vertical-align:middle;" onerror="this.style.display='none'" />
+      <span style="font-size:14px;font-weight:600;margin:0 8px;">${data.away} @ ${data.home}</span>
+      <img src="${teamLogo(data.home)}" style="width:32px;height:32px;object-fit:contain;vertical-align:middle;" onerror="this.style.display='none'" />
+    </div>
+    <div style="text-align:center;margin-bottom:12px;">
+      ${logoUrl ? `<img src="${logoUrl}" style="width:28px;height:28px;object-fit:contain;vertical-align:middle;margin-right:6px;" onerror="this.style.display='none'" />` : ''}
+      <span style="font-size:22px;font-weight:800;">${data.description}</span>
+    </div>
+    <div style="display:flex;justify-content:center;gap:24px;margin-bottom:16px;">
+      <div style="text-align:center;">
+        <div style="font-size:10px;text-transform:uppercase;color:var(--muted);letter-spacing:.06em;">Price</div>
+        <div style="font-size:22px;font-weight:700;font-family:var(--mono);">${mlStr}</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:10px;text-transform:uppercase;color:var(--muted);letter-spacing:.06em;">EV</div>
+        <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:${evColor};">${evStr}</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:10px;text-transform:uppercase;color:var(--muted);letter-spacing:.06em;">Liquidity</div>
+        <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--green);">${fmtFill(data.fill)}</div>
+      </div>
+    </div>
+  `;
+
+  form.innerHTML = `
+    <div style="margin-bottom:12px;">
+      <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);display:block;margin-bottom:4px;">Risk Amount ($)</label>
+      <input type="number" id="bet-risk-input" min="0" step="1" placeholder="0" style="width:100%;padding:10px 12px;font-size:16px;font-family:var(--mono);border:2px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);box-sizing:border-box;" oninput="updateBetWin()" />
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <span style="font-size:12px;color:var(--muted);">To Win</span>
+      <span id="bet-win-amount" style="font-size:18px;font-weight:700;font-family:var(--mono);color:var(--green);">$0.00</span>
+    </div>
+    <button disabled style="width:100%;padding:14px;font-size:15px;font-weight:700;border:none;border-radius:6px;background:${teamColor};color:#fff;opacity:0.5;cursor:not-allowed;">Coming Soon</button>
+  `;
+
+  // Store ML for win calculation
+  overlay.dataset.ml = mlNum;
+  overlay.classList.add('open');
+}
+
+function closeBetModal() {
+  document.getElementById('bet-overlay').classList.remove('open');
+}
+
+function updateBetWin() {
+  const risk = parseFloat(document.getElementById('bet-risk-input').value) || 0;
+  const ml = parseFloat(document.getElementById('bet-overlay').dataset.ml) || 0;
+  let win = 0;
+  if (ml > 0) win = risk * (ml / 100);
+  else if (ml < 0) win = risk * (100 / Math.abs(ml));
+  document.getElementById('bet-win-amount').textContent = '$' + win.toFixed(2);
+}
+
 function _calcAltSpreadEV(g, strike, price, side) {
   // EV for an alt spread line
   // strike = home spread (positive = home is underdog)
@@ -2437,28 +2517,41 @@ function renderNovigBook(data, g) {
       const isBest = idx === bestSpreadIdx;
       const edgeColor = COLORS[evSideTeam] || '#2e7d32';
       const rowStyle = isBest ? `background:${edgeColor}15;` : (isPrimary ? 'background:#f0f0f0;' : '');
-      // Build wager description for hover
-      const wagerSide = r.evSide === 'away' ? g.away : g.home;
-      const wagerSpread = r.evSide === 'away' ? fmtSpread(-s.strike) : fmtSpread(s.strike);
-      const wagerPrice = r.evSide === 'away' ? (s.away_price != null ? fmtML(probToML(s.away_price)) : '') : (s.home_price != null ? fmtML(probToML(s.home_price)) : '');
-      const wagerTip = `${wagerSide} ${wagerSpread} (${wagerPrice})`;
-      // Best EV cell: dark green bg, show wager text on hover
+      // Best EV cell: dark team-color bg
       const isBestAw = isBest && r.evSide === 'away';
       const isBestHw = isBest && r.evSide === 'home';
-      const bestStyle = 'background:' + edgeColor + ';color:#fff;font-weight:700;cursor:pointer;padding:4px 6px;';
+      const bestStyle = 'background:' + edgeColor + ';color:#fff;font-weight:700;padding:4px 6px;';
       const awContent = s.away_price != null ? fmtProbML(s.away_price) : '—';
       const hwContent = s.home_price != null ? fmtProbML(s.home_price) : '—';
+      // Away side hover/click data
+      const awDesc = g.away + ' ' + fmtSpread(-s.strike);
+      const awMLStr = s.away_price != null ? fmtML(probToML(s.away_price)) : '';
+      const awTip = awDesc + ' (' + awMLStr + ')';
+      const awColor = COLORS[g.away] || '#333';
+      const awEVVal = r.awEV != null ? r.awEV : 0;
+      // Home side hover/click data
+      const hwDesc = g.home + ' ' + fmtSpread(s.strike);
+      const hwMLStr = s.home_price != null ? fmtML(probToML(s.home_price)) : '';
+      const hwTip = hwDesc + ' (' + hwMLStr + ')';
+      const hwColor = COLORS[g.home] || '#333';
+      const hwEVVal = r.hwEV != null ? r.hwEV : 0;
+      // Build bet data JSON for away side
+      const awBetData = s.away_price != null ? JSON.stringify({away:g.away,home:g.home,type:'spread',description:awDesc,price:s.away_price,priceML:awMLStr,fill:s.away_fill||0,ev:awEVVal,strike:s.strike,side:'away',teamColor:awColor,teamLogo:teamLogo(g.away)}).replace(/'/g,'&#39;') : '';
+      // Build bet data JSON for home side
+      const hwBetData = s.home_price != null ? JSON.stringify({away:g.away,home:g.home,type:'spread',description:hwDesc,price:s.home_price,priceML:hwMLStr,fill:s.home_fill||0,ev:hwEVVal,strike:s.strike,side:'home',teamColor:hwColor,teamLogo:teamLogo(g.home)}).replace(/'/g,'&#39;') : '';
 
       html += `<tr style="${rowStyle}">`;
       html += `<td>${_spreadEdgeTeam === g.away ? g.away + ' ' + fmtSpread(-s.strike) : g.home + ' ' + fmtSpread(s.strike)}</td>`;
-      if (isBestAw) {
-        html += `<td style="${bestStyle}" onmouseenter="this.dataset.orig=this.textContent;this.textContent='${wagerTip}'" onmouseleave="this.textContent=this.dataset.orig">${awContent}</td>`;
+      if (s.away_price != null) {
+        const awCellStyle = isBestAw ? bestStyle + 'cursor:pointer;' : 'cursor:pointer;';
+        html += `<td style="${awCellStyle}" onmouseenter="this.dataset.orig=this.innerHTML;this.textContent='${awTip.replace(/'/g,'\\&#39;')}';this.style.filter='brightness(0.92)'" onmouseleave="this.innerHTML=this.dataset.orig;this.style.filter=''" onclick='openBetModal(${awBetData})'>${awContent}</td>`;
       } else {
         html += `<td>${awContent}</td>`;
       }
       html += `<td style="color:var(--green);">${fmtFill(s.away_fill)}</td>`;
-      if (isBestHw) {
-        html += `<td style="${bestStyle}" onmouseenter="this.dataset.orig=this.textContent;this.textContent='${wagerTip}'" onmouseleave="this.textContent=this.dataset.orig">${hwContent}</td>`;
+      if (s.home_price != null) {
+        const hwCellStyle = isBestHw ? bestStyle + 'cursor:pointer;' : 'cursor:pointer;';
+        html += `<td style="${hwCellStyle}" onmouseenter="this.dataset.orig=this.innerHTML;this.textContent='${hwTip.replace(/'/g,'\\&#39;')}';this.style.filter='brightness(0.92)'" onmouseleave="this.innerHTML=this.dataset.orig;this.style.filter=''" onclick='openBetModal(${hwBetData})'>${hwContent}</td>`;
       } else {
         html += `<td>${hwContent}</td>`;
       }
@@ -2502,24 +2595,38 @@ function renderNovigBook(data, g) {
       const isBest = idx === bestTotalIdx;
       const totalEdgeColor = COLORS[_spreadEdgeTeam] || '#2e7d32';
       const rowStyle = isBest ? `background:${totalEdgeColor}15;` : (isPrimary ? 'background:#f0f0f0;' : '');
-      const bestStyle = `background:${totalEdgeColor};color:#fff;font-weight:700;cursor:pointer;padding:4px 6px;`;
+      const bestStyle = `background:${totalEdgeColor};color:#fff;font-weight:700;padding:4px 6px;`;
       const isBestOv = isBest && r.evSide === 'over';
       const isBestUn = isBest && r.evSide === 'under';
       const ovContent = t.over_price != null ? fmtProbML(t.over_price) : '—';
       const unContent = t.under_price != null ? fmtProbML(t.under_price) : '—';
-      const wagerPrice = r.evSide === 'over' ? (t.over_price != null ? fmtML(probToML(t.over_price)) : '') : (t.under_price != null ? fmtML(probToML(t.under_price)) : '');
-      const wagerTip = `${r.evSide === 'over' ? 'O' : 'U'} ${t.strike.toFixed(1)} (${wagerPrice})`;
+      // Over side hover/click data
+      const ovDesc = 'O ' + t.strike.toFixed(1);
+      const ovMLStr = t.over_price != null ? fmtML(probToML(t.over_price)) : '';
+      const ovTip = ovDesc + ' (' + ovMLStr + ')';
+      const ovEVVal = r.ovEV != null ? r.ovEV : 0;
+      const totColor = COLORS[_spreadEdgeTeam] || '#333';
+      // Under side hover/click data
+      const unDesc = 'U ' + t.strike.toFixed(1);
+      const unMLStr = t.under_price != null ? fmtML(probToML(t.under_price)) : '';
+      const unTip = unDesc + ' (' + unMLStr + ')';
+      const unEVVal = r.unEV != null ? r.unEV : 0;
+      // Build bet data JSON
+      const ovBetData = t.over_price != null ? JSON.stringify({away:g.away,home:g.home,type:'total',description:ovDesc,price:t.over_price,priceML:ovMLStr,fill:t.over_fill||0,ev:ovEVVal,strike:t.strike,side:'over',teamColor:totColor,teamLogo:teamLogo(_spreadEdgeTeam)}).replace(/'/g,'&#39;') : '';
+      const unBetData = t.under_price != null ? JSON.stringify({away:g.away,home:g.home,type:'total',description:unDesc,price:t.under_price,priceML:unMLStr,fill:t.under_fill||0,ev:unEVVal,strike:t.strike,side:'under',teamColor:totColor,teamLogo:teamLogo(_spreadEdgeTeam)}).replace(/'/g,'&#39;') : '';
 
       html += `<tr style="${rowStyle}">`;
       html += `<td>${t.strike.toFixed(1)}</td>`;
-      if (isBestOv) {
-        html += `<td style="${bestStyle}" onmouseenter="this.dataset.orig=this.textContent;this.textContent='${wagerTip}'" onmouseleave="this.textContent=this.dataset.orig">${ovContent}</td>`;
+      if (t.over_price != null) {
+        const ovCellStyle = isBestOv ? bestStyle + 'cursor:pointer;' : 'cursor:pointer;';
+        html += `<td style="${ovCellStyle}" onmouseenter="this.dataset.orig=this.innerHTML;this.textContent='${ovTip.replace(/'/g,'\\&#39;')}';this.style.filter='brightness(0.92)'" onmouseleave="this.innerHTML=this.dataset.orig;this.style.filter=''" onclick='openBetModal(${ovBetData})'>${ovContent}</td>`;
       } else {
         html += `<td>${ovContent}</td>`;
       }
       html += `<td style="color:var(--green);">${fmtFill(t.over_fill)}</td>`;
-      if (isBestUn) {
-        html += `<td style="${bestStyle}" onmouseenter="this.dataset.orig=this.textContent;this.textContent='${wagerTip}'" onmouseleave="this.textContent=this.dataset.orig">${unContent}</td>`;
+      if (t.under_price != null) {
+        const unCellStyle = isBestUn ? bestStyle + 'cursor:pointer;' : 'cursor:pointer;';
+        html += `<td style="${unCellStyle}" onmouseenter="this.dataset.orig=this.innerHTML;this.textContent='${unTip.replace(/'/g,'\\&#39;')}';this.style.filter='brightness(0.92)'" onmouseleave="this.innerHTML=this.dataset.orig;this.style.filter=''" onclick='openBetModal(${unBetData})'>${unContent}</td>`;
       } else {
         html += `<td>${unContent}</td>`;
       }
@@ -2549,14 +2656,38 @@ function renderNovigBook(data, g) {
     const hwMLEV = (hwWinProb != null && ml.home_price != null) ? Math.round((hwWinProb - ml.home_price) * 1000) / 10 : null;
     html += '<div class="novig-ml"><div style="font-size:11px;font-weight:700;margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);">Moneyline</div>';
     html += '<table><thead><tr><th>Side</th><th>Price</th><th>Fill</th><th>Model Win%</th><th>EV%</th></tr></thead><tbody>';
-    html += `<tr><td>${g.away}</td><td>${ml.away_price != null ? fmtProbML(ml.away_price) : '—'}</td><td style="color:var(--green);">${fmtFill(ml.away_fill)}</td>`;
+    // Away ML
+    const awMLStr = ml.away_price != null ? fmtML(probToML(ml.away_price)) : '';
+    const awMLDesc = g.away + ' ML';
+    const awMLTip = awMLDesc + ' (' + awMLStr + ')';
+    const awMLColor = COLORS[g.away] || '#333';
+    const awMLBetData = ml.away_price != null ? JSON.stringify({away:g.away,home:g.home,type:'ml',description:awMLDesc,price:ml.away_price,priceML:awMLStr,fill:ml.away_fill||0,ev:awMLEV||0,strike:0,side:'away',teamColor:awMLColor,teamLogo:teamLogo(g.away)}).replace(/'/g,'&#39;') : '';
+    html += `<tr><td>${g.away}</td>`;
+    if (ml.away_price != null) {
+      html += `<td style="cursor:pointer;" onmouseenter="this.dataset.orig=this.innerHTML;this.textContent='${awMLTip.replace(/'/g,'\\&#39;')}';this.style.filter='brightness(0.92)'" onmouseleave="this.innerHTML=this.dataset.orig;this.style.filter=''" onclick='openBetModal(${awMLBetData})'>${fmtProbML(ml.away_price)}</td>`;
+    } else {
+      html += `<td>—</td>`;
+    }
+    html += `<td style="color:var(--green);">${fmtFill(ml.away_fill)}</td>`;
     html += `<td>${awWinProb != null ? (awWinProb*100).toFixed(1)+'%' : '—'}</td>`;
     if (awMLEV != null && awMLEV > 0) {
       const cls = awMLEV >= 8 ? 'hi' : awMLEV >= 4 ? 'mid' : 'lo';
       html += `<td style="color:var(--green);font-weight:600;"><span class="edge-chip ${cls}" style="font-size:9px;padding:1px 4px;">${awMLEV.toFixed(1)}%</span></td>`;
     } else { html += '<td style="color:var(--muted);">—</td>'; }
     html += '</tr>';
-    html += `<tr><td>${g.home}</td><td>${ml.home_price != null ? fmtProbML(ml.home_price) : '—'}</td><td style="color:var(--green);">${fmtFill(ml.home_fill)}</td>`;
+    // Home ML
+    const hwMLStr = ml.home_price != null ? fmtML(probToML(ml.home_price)) : '';
+    const hwMLDesc = g.home + ' ML';
+    const hwMLTip = hwMLDesc + ' (' + hwMLStr + ')';
+    const hwMLColor = COLORS[g.home] || '#333';
+    const hwMLBetData = ml.home_price != null ? JSON.stringify({away:g.away,home:g.home,type:'ml',description:hwMLDesc,price:ml.home_price,priceML:hwMLStr,fill:ml.home_fill||0,ev:hwMLEV||0,strike:0,side:'home',teamColor:hwMLColor,teamLogo:teamLogo(g.home)}).replace(/'/g,'&#39;') : '';
+    html += `<tr><td>${g.home}</td>`;
+    if (ml.home_price != null) {
+      html += `<td style="cursor:pointer;" onmouseenter="this.dataset.orig=this.innerHTML;this.textContent='${hwMLTip.replace(/'/g,'\\&#39;')}';this.style.filter='brightness(0.92)'" onmouseleave="this.innerHTML=this.dataset.orig;this.style.filter=''" onclick='openBetModal(${hwMLBetData})'>${fmtProbML(ml.home_price)}</td>`;
+    } else {
+      html += `<td>—</td>`;
+    }
+    html += `<td style="color:var(--green);">${fmtFill(ml.home_fill)}</td>`;
     html += `<td>${hwWinProb != null ? (hwWinProb*100).toFixed(1)+'%' : '—'}</td>`;
     if (hwMLEV != null && hwMLEV > 0) {
       const cls = hwMLEV >= 8 ? 'hi' : hwMLEV >= 4 ? 'mid' : 'lo';
