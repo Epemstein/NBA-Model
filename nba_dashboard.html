@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v38</title>
+<title>NBA ALGO v39</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -579,15 +579,57 @@ input[type=number] { -moz-appearance: textfield; }
       </div>
     </div>
 
-    <!-- @UnderdogNBA Feed -->
-    <div class="card" style="width:380px;flex-shrink:0;position:sticky;top:56px;max-height:calc(100vh - 180px);overflow:hidden;padding:0;">
-      <div style="padding:8px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
-        <span style="font-weight:700;font-size:12px;">@UnderdogNBA</span>
-        <a href="https://x.com/UnderdogNBA" target="_blank" style="font-size:10px;color:var(--accent);">Open in X &rarr;</a>
+    <!-- Live NBA News Feed -->
+    <div class="card" style="width:350px;flex-shrink:0;position:sticky;top:56px;max-height:calc(100vh - 180px);overflow:hidden;padding:0;display:flex;flex-direction:column;">
+      <div style="padding:8px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+        <span style="font-weight:700;font-size:12px;">NBA News</span>
+        <a href="https://x.com/UnderdogNBA" target="_blank" style="font-size:10px;color:var(--accent);">@UnderdogNBA &rarr;</a>
       </div>
-      <a class="twitter-timeline" data-height="800" data-theme="light" data-chrome="noheader nofooter noborders transparent" href="https://twitter.com/UnderdogNBA">Loading tweets...</a>
-      <script async src="https://platform.twitter.com/widgets.js"></script>
+      <div id="news-feed" style="flex:1;overflow-y:auto;padding:8px;font-size:11px;">
+        <div style="color:var(--muted);text-align:center;padding:20px;">Loading news...</div>
+      </div>
     </div>
+    <script>
+    (function loadNewsFeed() {
+      const RSS_URL = 'https://www.rotowire.com/rss/news.php?sport=NBA';
+      const PROXY = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(RSS_URL);
+      fetch(PROXY).then(r => r.text()).then(xml => {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(xml, 'text/xml');
+        const items = doc.querySelectorAll('item');
+        const feed = document.getElementById('news-feed');
+        if (!items.length) { feed.innerHTML = '<div style="color:var(--muted);text-align:center;">No news available</div>'; return; }
+        let html = '';
+        items.forEach((item, i) => {
+          if (i >= 30) return;
+          const title = item.querySelector('title')?.textContent || '';
+          const desc = item.querySelector('description')?.textContent || '';
+          const link = item.querySelector('link')?.textContent || '';
+          const pubDate = item.querySelector('pubDate')?.textContent || '';
+          const ago = pubDate ? _timeAgo(new Date(pubDate)) : '';
+          const isInjury = /injur|out |day-to-day|questionable|doubtful|ruled out|miss/i.test(title + desc);
+          html += `<div style="padding:6px 0;border-bottom:1px solid #f0f0f0;${isInjury ? 'background:#fff8f8;margin:0 -8px;padding-left:8px;padding-right:8px;' : ''}">
+            <div style="font-weight:600;font-size:11px;${isInjury ? 'color:#c62828;' : ''}">${title}</div>
+            <div style="color:var(--text2);font-size:10px;margin-top:2px;line-height:1.3;">${desc.substring(0, 150)}${desc.length > 150 ? '...' : ''}</div>
+            <div style="color:var(--muted);font-size:9px;margin-top:2px;">${ago}</div>
+          </div>`;
+        });
+        feed.innerHTML = html;
+      }).catch(e => {
+        document.getElementById('news-feed').innerHTML = '<div style="color:var(--muted);text-align:center;padding:20px;">Could not load news feed</div>';
+      });
+      function _timeAgo(date) {
+        const mins = Math.floor((Date.now() - date.getTime()) / 60000);
+        if (mins < 1) return 'just now';
+        if (mins < 60) return mins + 'm ago';
+        const hrs = Math.floor(mins / 60);
+        if (hrs < 24) return hrs + 'h ago';
+        return Math.floor(hrs / 24) + 'd ago';
+      }
+      // Refresh every 5 minutes
+      setTimeout(loadNewsFeed, 300000);
+    })();
+    </script>
 
   </div>
 
