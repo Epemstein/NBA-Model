@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v67</title>
+<title>NBA ALGO v68</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -2449,7 +2449,7 @@ function renderNovigBook(data, g) {
       const hwContent = s.home_price != null ? fmtProbML(s.home_price) : '—';
 
       html += `<tr style="${rowStyle}">`;
-      html += `<td>${g.away} ${fmtSpread(-s.strike)}</td>`;
+      html += `<td>${_spreadEdgeTeam === g.away ? g.away + ' ' + fmtSpread(-s.strike) : g.home + ' ' + fmtSpread(s.strike)}</td>`;
       if (isBestAw) {
         html += `<td style="${bestStyle}" onmouseenter="this.dataset.orig=this.textContent;this.textContent='${wagerTip}'" onmouseleave="this.textContent=this.dataset.orig">${awContent}</td>`;
       } else {
