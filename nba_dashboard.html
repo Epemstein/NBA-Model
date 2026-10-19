@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v84</title>
+<title>NBA ALGO v85</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -73,7 +73,7 @@ nav button:hover { color: var(--text); background: rgba(0,0,0,.04); border-radiu
 nav button.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; background: rgba(0,150,240,.06); border-radius: 4px 4px 0 0; }
 
 /* ── MAIN ── */
-main { padding: 16px 20px; max-width: 1800px; margin: 0 auto; }
+main { padding: 16px 20px 56px; max-width: 1800px; margin: 0 auto; }
 .panel { display: none; animation: fi .15s ease; }
 .panel.active { display: block; }
 @keyframes fi { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; } }
@@ -529,6 +529,130 @@ input[type=number] { -moz-appearance: textfield; }
   .stat-strip { flex-wrap: wrap; }
   .stat-strip-item { min-width: 50%; }
 }
+
+/* ── BET QUEUE PANEL ── */
+#bet-queue-panel {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 300;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  box-shadow: 0 -2px 12px rgba(0,0,0,.3);
+  transition: max-height .3s ease, opacity .15s ease;
+  max-height: 40px;
+  overflow: hidden;
+}
+#bet-queue-panel.expanded { max-height: 40vh; }
+#bet-queue-bar {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  cursor: pointer;
+  user-select: none;
+}
+#bet-queue-bar .bq-title { font-size: 13px; font-weight: 700; letter-spacing: .03em; }
+#bet-queue-bar .bq-right { display: flex; align-items: center; gap: 12px; font-size: 12px; font-family: var(--mono); }
+#bet-queue-bar .bq-chevron { font-size: 16px; transition: transform .3s; }
+#bet-queue-panel.expanded #bet-queue-bar .bq-chevron { transform: rotate(180deg); }
+#bet-queue-body {
+  max-height: calc(40vh - 40px);
+  overflow-y: auto;
+  padding: 0 12px 8px;
+}
+#bet-queue-body table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+#bet-queue-body th {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: #888;
+  font-weight: 600;
+  text-align: left;
+  padding: 6px 6px;
+  border-bottom: 1px solid #333;
+  position: sticky;
+  top: 0;
+  background: #1a1a2e;
+}
+#bet-queue-body td {
+  padding: 5px 6px;
+  border-bottom: 1px solid #2a2a3e;
+  vertical-align: middle;
+}
+#bet-queue-body tr:hover { background: rgba(255,255,255,.04); }
+#bet-queue-body .bq-stake-input {
+  width: 70px;
+  padding: 3px 6px;
+  font-size: 12px;
+  font-family: var(--mono);
+  border: 1px solid #444;
+  border-radius: 3px;
+  background: #2a2a3e;
+  color: #e0e0e0;
+  text-align: right;
+}
+#bet-queue-body .bq-remove {
+  background: none;
+  border: none;
+  color: #c62828;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 2px 6px;
+}
+#bet-queue-body .bq-remove:hover { color: #ff5252; }
+#bet-queue-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-top: 1px solid #333;
+  font-size: 12px;
+}
+#bet-queue-footer .bq-totals { display: flex; gap: 20px; font-family: var(--mono); }
+#bet-queue-footer .bq-actions { display: flex; gap: 8px; }
+.bq-btn {
+  padding: 6px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+  border: none;
+  font-family: var(--sans);
+}
+.bq-btn-clear { background: #333; color: #ccc; }
+.bq-btn-clear:hover { background: #444; }
+.bq-btn-review { background: #555; color: #888; cursor: not-allowed; opacity: 0.6; }
+.bq-btn-auto { background: var(--accent); color: #fff; }
+.bq-btn-auto:hover { background: #1b7ec5; }
+
+/* ── TOAST ── */
+#bq-toast {
+  position: fixed;
+  bottom: 56px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: #333;
+  color: #fff;
+  padding: 8px 18px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  z-index: 400;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s, transform .2s;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0,0,0,.3);
+}
+#bq-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 </style>
 </head>
 <body>
@@ -950,6 +1074,8 @@ input[type=number] { -moz-appearance: textfield; }
       <div class="fg"><label class="fl">Sigma (σ) — Spread Variance</label><input id="set-sigma" type="number" value="13" min="8" max="18" step="0.5"></div>
       <div class="fg"><label class="fl">Total Sigma (σ) — O/U Variance</label><input id="set-total-sigma" type="number" value="17" min="10" max="25" step="0.5"></div>
       <div class="fg"><label class="fl">Min Liquidity ($)</label><input id="set-min-liq" type="number" value="500" min="0" max="10000" step="100"></div>
+      <div class="fg"><label class="fl">Default Stake ($)</label><input id="set-default-stake" type="number" value="100" min="1" max="100000" step="1"></div>
+      <div class="fg"><label class="fl">Min EV% (Auto-fill)</label><input id="set-min-ev" type="number" value="2.0" min="0" max="20" step="0.5"></div>
     </div>
     <div class="ct" style="margin-top:14px;">MODEL Blend Weights</div>
     <div style="display:flex;gap:12px;align-items:center;margin-bottom:10px;">
@@ -1116,7 +1242,7 @@ let STATE = {
   history: JSON.parse(localStorage.getItem('nba_history') || '[]'),
   overrides: JSON.parse(localStorage.getItem('nba_overrides') || '{}'),
   bankroll: JSON.parse(localStorage.getItem('nba_bankroll') || '{"start":10000,"kelly":0.5,"maxPct":3}'),
-  settings: JSON.parse(localStorage.getItem('nba_settings') || '{"spreadEdge":2,"totalEdge":2,"hca":1.5,"paceMult":0.95,"sigma":13,"totalSigma":17,"minLiquidity":500,"blendDarko":60,"blendLebron":25,"blendEpm":15}'),
+  settings: JSON.parse(localStorage.getItem('nba_settings') || '{"spreadEdge":2,"totalEdge":2,"hca":1.5,"paceMult":0.95,"sigma":13,"totalSigma":17,"minLiquidity":500,"defaultStake":100,"minEV":2.0,"blendDarko":60,"blendLebron":25,"blendEpm":15}'),
   teamRatings: {},
   leagueAvgPace: 100,
   leagueAvgOrtg: 113.1,
@@ -2425,7 +2551,10 @@ function _priceHoverOut(el) {
   el.style.color = '';
 }
 
+let _currentBetModalData = null;
+
 function openBetModal(data) {
+  _currentBetModalData = data;
   const overlay = document.getElementById('bet-overlay');
   const details = document.getElementById('bet-details');
   const form = document.getElementById('bet-form');
@@ -2463,7 +2592,7 @@ function openBetModal(data) {
     <div style="margin-bottom:12px;">
       <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);display:block;margin-bottom:4px;">Risk Amount ($)</label>
       <div style="position:relative;">
-        <input type="number" id="bet-risk-input" min="0" step="1" placeholder="" style="width:100%;padding:10px 60px 10px 12px;font-size:16px;font-family:var(--mono);border:2px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);box-sizing:border-box;" oninput="updateBetWin()" autofocus />
+        <input type="number" id="bet-risk-input" min="0" step="1" value="${STATE.settings?.defaultStake || 100}" style="width:100%;padding:10px 60px 10px 12px;font-size:16px;font-family:var(--mono);border:2px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);box-sizing:border-box;" oninput="updateBetWin()" autofocus />
         <button onclick="document.getElementById('bet-risk-input').value=${data.fill};updateBetWin();" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);padding:4px 10px;font-size:11px;font-weight:700;border:1px solid var(--accent);border-radius:4px;background:var(--accent);color:#fff;cursor:pointer;">MAX</button>
       </div>
     </div>
@@ -2471,14 +2600,14 @@ function openBetModal(data) {
       <span style="font-size:12px;color:var(--muted);">To Win</span>
       <span id="bet-win-amount" style="font-size:18px;font-weight:700;font-family:var(--mono);color:var(--green);">$0.00</span>
     </div>
-    <button disabled style="width:100%;padding:14px;font-size:15px;font-weight:700;border:none;border-radius:6px;background:${teamColor};color:#fff;opacity:0.5;cursor:not-allowed;">Coming Soon</button>
+    <button onclick="_addBetFromModal()" style="width:100%;padding:14px;font-size:15px;font-weight:700;border:none;border-radius:6px;background:${teamColor};color:#fff;cursor:pointer;transition:opacity .15s;" onmouseenter="this.style.opacity='0.85'" onmouseleave="this.style.opacity='1'">Add to Queue</button>
   `;
 
   // Store ML and fill for win calculation
   overlay.dataset.ml = mlNum;
   overlay.dataset.fill = data.fill || 0;
   overlay.classList.add('open');
-  setTimeout(() => { const inp = document.getElementById('bet-risk-input'); if (inp) inp.focus(); }, 100);
+  setTimeout(() => { const inp = document.getElementById('bet-risk-input'); if (inp) { inp.focus(); inp.select(); } updateBetWin(); }, 100);
 }
 
 function closeBetModal() {
@@ -2495,6 +2624,29 @@ function updateBetWin() {
   else if (ml < 0) win = risk * (100 / Math.abs(ml));
   document.getElementById('bet-win-amount').textContent = '$' + win.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
   inp.style.borderColor = risk > maxFill ? 'var(--red)' : 'var(--border)';
+}
+
+function _addBetFromModal() {
+  if (!_currentBetModalData) return;
+  const d = _currentBetModalData;
+  const inp = document.getElementById('bet-risk-input');
+  const stake = parseFloat(inp?.value) || STATE.settings?.defaultStake || 100;
+  addToQueue({
+    away: d.away,
+    home: d.home,
+    type: d.type || 'spread',
+    description: d.description,
+    price: d.price,
+    priceML: d.priceML || fmtML(probToML(d.price)),
+    fill: d.fill || 0,
+    ev: d.ev || 0,
+    strike: d.strike,
+    side: d.side,
+    teamColor: d.teamColor || '#333',
+    teamLogo: d.teamLogo || '',
+    stake: stake,
+  });
+  closeBetModal();
 }
 
 function _calcAltSpreadEV(g, strike, price, side) {
@@ -2946,6 +3098,8 @@ function saveSettings() {
     sigma: parseFloat(document.getElementById('set-sigma').value) || 13,
     totalSigma: parseFloat(document.getElementById('set-total-sigma').value) || 17,
     minLiquidity: parseInt(document.getElementById('set-min-liq').value) || 500,
+    defaultStake: parseFloat(document.getElementById('set-default-stake').value) || 100,
+    minEV: parseFloat(document.getElementById('set-min-ev').value) || 2.0,
     blendDarko: parseInt(document.getElementById('set-blend-darko').value) || 60,
     blendLebron: parseInt(document.getElementById('set-blend-lebron').value) || 25,
     blendEpm: parseInt(document.getElementById('set-blend-epm').value) || 15,
@@ -2969,6 +3123,8 @@ function loadSettingsUI() {
   document.getElementById('set-sigma').value = STATE.settings.sigma ?? 13;
   document.getElementById('set-total-sigma').value = STATE.settings.totalSigma ?? 17;
   document.getElementById('set-min-liq').value = STATE.settings.minLiquidity ?? 500;
+  document.getElementById('set-default-stake').value = STATE.settings.defaultStake ?? 100;
+  document.getElementById('set-min-ev').value = STATE.settings.minEV ?? 2.0;
   document.getElementById('set-blend-darko').value = STATE.settings.blendDarko ?? 60;
   document.getElementById('set-blend-lebron').value = STATE.settings.blendLebron ?? 25;
   document.getElementById('set-blend-epm').value = STATE.settings.blendEpm ?? 15;
@@ -4160,6 +4316,230 @@ function showInjTip(e, el) {
   tip.style.top = (r.top - tip.offsetHeight - 6) + 'px';
 }
 function hideInjTip() { document.getElementById('inj-tooltip').style.display = 'none'; }
+
+// ── Bet Queue ──────────────────────────────────────────────────────────
+let _betQueue = JSON.parse(localStorage.getItem('nba_bet_queue') || '[]');
+
+function _saveBetQueue() {
+  localStorage.setItem('nba_bet_queue', JSON.stringify(_betQueue));
+}
+
+function _genBetId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+function addToQueue(data) {
+  const item = {
+    id: _genBetId(),
+    away: data.away,
+    home: data.home,
+    type: data.type || 'spread',
+    description: data.description,
+    price: data.price,
+    priceML: data.priceML || fmtML(probToML(data.price)),
+    fill: data.fill || 0,
+    ev: data.ev || 0,
+    strike: data.strike,
+    side: data.side,
+    teamColor: data.teamColor || '#333',
+    teamLogo: data.teamLogo || '',
+    stake: data.stake || STATE.settings.defaultStake || 100,
+    addedAt: Date.now(),
+  };
+  // Prevent exact duplicate (same game + description)
+  const dup = _betQueue.find(b => b.away === item.away && b.home === item.home && b.description === item.description);
+  if (dup) {
+    _showBQToast(item.description + ' already in queue');
+    return;
+  }
+  _betQueue.push(item);
+  _saveBetQueue();
+  renderQueue();
+  _showBQToast('Added ' + item.description + ' to queue');
+}
+
+function removeFromQueue(id) {
+  _betQueue = _betQueue.filter(b => b.id !== id);
+  _saveBetQueue();
+  renderQueue();
+}
+
+function clearQueue() {
+  if (!_betQueue.length) return;
+  if (!confirm('Clear all ' + _betQueue.length + ' bets from queue?')) return;
+  _betQueue = [];
+  _saveBetQueue();
+  renderQueue();
+}
+
+function updateQueueStake(id, stake) {
+  const item = _betQueue.find(b => b.id === id);
+  if (item) {
+    item.stake = parseFloat(stake) || 0;
+    _saveBetQueue();
+    renderQueue();
+  }
+}
+
+function _calcToWin(stake, ml) {
+  if (!stake || !ml) return 0;
+  const mlNum = typeof ml === 'string' ? parseFloat(ml) : ml;
+  if (mlNum > 0) return stake * (mlNum / 100);
+  if (mlNum < 0) return stake * (100 / Math.abs(mlNum));
+  return 0;
+}
+
+function renderQueue() {
+  const panel = document.getElementById('bet-queue-panel');
+  const titleEl = document.getElementById('bq-title-text');
+  const bodyEl = document.getElementById('bet-queue-tbody');
+  const footerEl = document.getElementById('bet-queue-footer');
+  const barStake = document.getElementById('bq-bar-stake');
+
+  if (!_betQueue.length) {
+    titleEl.textContent = 'Bet Queue (0)';
+    barStake.textContent = '';
+    bodyEl.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#666;padding:16px;">Queue is empty. Click a price to add bets, or use Auto-fill.</td></tr>';
+    footerEl.style.display = 'none';
+    return;
+  }
+
+  titleEl.textContent = 'Bet Queue (' + _betQueue.length + ')';
+  let totalRisk = 0, totalWin = 0;
+  let html = '';
+  _betQueue.forEach(b => {
+    const mlNum = probToML(b.price);
+    const mlStr = fmtML(mlNum);
+    const toWin = _calcToWin(b.stake, mlNum);
+    totalRisk += b.stake || 0;
+    totalWin += toWin;
+    const evColor = b.ev > 0 ? '#4caf50' : '#888';
+    html += `<tr>
+      <td style="white-space:nowrap;">${b.teamLogo ? `<img src="${b.teamLogo}" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;margin-right:4px;" onerror="this.style.display='none'" />` : ''}${b.away} @ ${b.home}</td>
+      <td style="font-weight:600;color:#fff;">${b.description}</td>
+      <td style="font-family:var(--mono);font-weight:600;">${mlStr}</td>
+      <td style="font-family:var(--mono);font-weight:600;color:${evColor};">${b.ev != null ? b.ev.toFixed(1) + '%' : '--'}</td>
+      <td style="font-family:var(--mono);color:#4caf50;">${fmtFill(b.fill)}</td>
+      <td><input class="bq-stake-input" type="number" min="0" step="1" value="${b.stake || 0}" onchange="updateQueueStake('${b.id}', this.value)" /></td>
+      <td style="font-family:var(--mono);color:#4caf50;font-weight:600;">$${toWin.toFixed(2)}</td>
+      <td><button class="bq-remove" onclick="removeFromQueue('${b.id}')">&times;</button></td>
+    </tr>`;
+  });
+  bodyEl.innerHTML = html;
+  barStake.textContent = '$' + totalRisk.toLocaleString('en-US', {minimumFractionDigits:0, maximumFractionDigits:0}) + ' risk';
+
+  // Footer
+  footerEl.style.display = 'flex';
+  document.getElementById('bq-total-risk').textContent = '$' + totalRisk.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+  document.getElementById('bq-total-win').textContent = '$' + totalWin.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+
+function toggleQueuePanel() {
+  document.getElementById('bet-queue-panel').classList.toggle('expanded');
+}
+
+function autoPopulateQueue() {
+  const minEV = STATE.settings?.minEV || 2.0;
+  const minLiq = STATE.settings?.minLiquidity || 500;
+  const defaultStake = STATE.settings?.defaultStake || 100;
+  let added = 0;
+
+  for (const g of STATE.games) {
+    // Check if we already have a spread bet queued for this game
+    const gameKey = g.away + '@' + g.home;
+    const alreadyQueued = _betQueue.some(b => b.away === g.away && b.home === g.home && b.type === 'spread');
+    if (alreadyQueued) continue;
+
+    // Calculate EV for both sides of the primary spread
+    const awEV = calcSpreadEV(g, 'away');
+    const hwEV = calcSpreadEV(g, 'home');
+
+    // Find best side meeting thresholds
+    let bestSide = null, bestEV = -999;
+    if (awEV != null && awEV >= minEV && (g.away_spread_fill || 0) >= minLiq && awEV > bestEV) {
+      bestSide = 'away'; bestEV = awEV;
+    }
+    if (hwEV != null && hwEV >= minEV && (g.home_spread_fill || 0) >= minLiq && hwEV > bestEV) {
+      bestSide = 'home'; bestEV = hwEV;
+    }
+
+    if (bestSide) {
+      const team = bestSide === 'away' ? g.away : g.home;
+      const spread = bestSide === 'away' ? -g.book_spread : g.book_spread;
+      const price = bestSide === 'away' ? g.away_spread_price : g.home_spread_price;
+      const fill = bestSide === 'away' ? g.away_spread_fill : g.home_spread_fill;
+      addToQueue({
+        away: g.away,
+        home: g.home,
+        type: 'spread',
+        description: team + ' ' + fmtSpread(spread),
+        price: price,
+        priceML: fmtML(probToML(price)),
+        fill: fill || 0,
+        ev: bestEV,
+        strike: g.book_spread,
+        side: bestSide,
+        teamColor: COLORS[team] || '#333',
+        teamLogo: teamLogo(team),
+        stake: defaultStake,
+      });
+      added++;
+    }
+  }
+
+  if (added === 0) {
+    _showBQToast('No qualifying bets found (min ' + minEV + '% EV, $' + minLiq + ' liq)');
+  } else {
+    _showBQToast('Added ' + added + ' bet' + (added > 1 ? 's' : '') + ' to queue');
+  }
+}
+
+function _showBQToast(msg) {
+  const el = document.getElementById('bq-toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(el._timer);
+  el._timer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+// Render on load
+document.addEventListener('DOMContentLoaded', () => { renderQueue(); });
 </script>
+
+<!-- ═══════════ BET QUEUE PANEL ═══════════ -->
+<div id="bet-queue-panel">
+  <div id="bet-queue-bar" onclick="toggleQueuePanel()">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span class="bq-title" id="bq-title-text">Bet Queue (0)</span>
+      <button class="bq-btn bq-btn-auto" onclick="event.stopPropagation();autoPopulateQueue();" style="padding:3px 10px;font-size:10px;">Auto-fill</button>
+    </div>
+    <div class="bq-right">
+      <span id="bq-bar-stake"></span>
+      <span class="bq-chevron">&#9650;</span>
+    </div>
+  </div>
+  <div id="bet-queue-body">
+    <table>
+      <thead>
+        <tr>
+          <th>Game</th><th>Bet</th><th>Price</th><th>EV%</th><th>Liquidity</th><th>Stake</th><th>To Win</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="bet-queue-tbody"></tbody>
+    </table>
+  </div>
+  <div id="bet-queue-footer" style="display:none;">
+    <div class="bq-totals">
+      <span>Risk: <strong id="bq-total-risk">$0.00</strong></span>
+      <span>To Win: <strong id="bq-total-win" style="color:#4caf50;">$0.00</strong></span>
+    </div>
+    <div class="bq-actions">
+      <button class="bq-btn bq-btn-clear" onclick="clearQueue()">Clear All</button>
+      <button class="bq-btn bq-btn-review" disabled>Coming Soon</button>
+    </div>
+  </div>
+</div>
+<div id="bq-toast"></div>
+
 </body>
 </html>
