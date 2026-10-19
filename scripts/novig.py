@@ -297,19 +297,23 @@ def get_novig_nba_lines(client, target_date=None):
         else:
             home_team, away_team = teams[1], teams[0]
 
-        # Fetch order books for all spreads in parallel, pick highest liquidity
+        # Pick highest liquidity spread from 5 around median
         from concurrent.futures import ThreadPoolExecutor
+        candidates = ev['spreads']
+        if len(candidates) > 5:
+            candidates.sort(key=lambda m: float(m['strike']))
+            mid = len(candidates) // 2
+            candidates = candidates[max(0,mid-2):mid+3]
         spread_books = {}
         def _fetch_sp_book(m):
             try:
                 return m['marketId'], client.get_book(m['marketId'])
             except:
                 return m['marketId'], None
-        with ThreadPoolExecutor(max_workers=8) as ex:
-            for mid, book in ex.map(lambda m: _fetch_sp_book(m), ev['spreads']):
+        with ThreadPoolExecutor(max_workers=5) as ex:
+            for mid, book in ex.map(lambda m: _fetch_sp_book(m), candidates):
                 spread_books[mid] = book
 
-        # Pick spread with most total fillable dollars
         best_liq = -1
         sp = ev['spreads'][len(ev['spreads']) // 2]  # fallback to median
         for m in ev['spreads']:
