@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v78</title>
+<title>NBA ALGO v79</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -2446,6 +2446,7 @@ function openBetModal(data) {
       <div style="text-align:center;">
         <div style="font-size:10px;text-transform:uppercase;color:var(--muted);letter-spacing:.06em;">Price</div>
         <div style="font-size:22px;font-weight:700;font-family:var(--mono);">${mlStr}</div>
+        <div style="font-size:11px;color:var(--muted);font-family:var(--mono);">${(data.price * 100).toFixed(0)}%</div>
       </div>
       <div style="text-align:center;">
         <div style="font-size:10px;text-transform:uppercase;color:var(--muted);letter-spacing:.06em;">EV</div>
@@ -2473,8 +2474,9 @@ function openBetModal(data) {
     <button disabled style="width:100%;padding:14px;font-size:15px;font-weight:700;border:none;border-radius:6px;background:${teamColor};color:#fff;opacity:0.5;cursor:not-allowed;">Coming Soon</button>
   `;
 
-  // Store ML for win calculation
+  // Store ML and fill for win calculation
   overlay.dataset.ml = mlNum;
+  overlay.dataset.fill = data.fill || 0;
   overlay.classList.add('open');
   setTimeout(() => { const inp = document.getElementById('bet-risk-input'); if (inp) inp.focus(); }, 100);
 }
@@ -2484,12 +2486,15 @@ function closeBetModal() {
 }
 
 function updateBetWin() {
-  const risk = parseFloat(document.getElementById('bet-risk-input').value) || 0;
+  const inp = document.getElementById('bet-risk-input');
+  const risk = parseFloat(inp.value) || 0;
   const ml = parseFloat(document.getElementById('bet-overlay').dataset.ml) || 0;
+  const maxFill = parseFloat(document.getElementById('bet-overlay').dataset.fill) || 999999;
   let win = 0;
   if (ml > 0) win = risk * (ml / 100);
   else if (ml < 0) win = risk * (100 / Math.abs(ml));
   document.getElementById('bet-win-amount').textContent = '$' + win.toFixed(2);
+  inp.style.borderColor = risk > maxFill ? 'var(--red)' : 'var(--border)';
 }
 
 function _calcAltSpreadEV(g, strike, price, side) {
