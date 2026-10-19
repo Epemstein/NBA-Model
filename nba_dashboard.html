@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v40</title>
+<title>NBA ALGO v41</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -114,7 +114,7 @@ main { padding: 16px 20px; max-width: 1800px; margin: 0 auto; }
   transition: box-shadow .15s;
 }
 .gc:hover { box-shadow: 0 4px 12px rgba(0,0,0,.1); }
-.gc.has-edge { border-left: 3px solid var(--green); }
+.gc.has-edge { }
 
 .gc-time {
   text-align: center;
@@ -536,7 +536,7 @@ input[type=number] { -moz-appearance: textfield; }
     <span id="date-label" style="font-size:12px;color:var(--muted);font-family:var(--sans);"></span>
   </div>
 
-  <div class="stat-strip" id="games-strip">
+  <div class="stat-strip" id="games-strip" style="display:none;">
     <div class="stat-strip-item"><div class="sl">Games</div><div class="sv a" id="ss-games">—</div></div>
     <div class="stat-strip-item"><div class="sl">Spread Plays</div><div class="sv g" id="ss-spreads">0</div></div>
     <div class="stat-strip-item"><div class="sl">Total Plays</div><div class="sv g" id="ss-totals">0</div></div>
@@ -581,9 +581,8 @@ input[type=number] { -moz-appearance: textfield; }
 
     <!-- Live NBA News Feed -->
     <div class="card" style="width:350px;flex-shrink:0;position:sticky;top:56px;max-height:calc(100vh - 180px);overflow:hidden;padding:0;display:flex;flex-direction:column;">
-      <div style="padding:8px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+      <div style="padding:8px 12px;border-bottom:1px solid var(--border);flex-shrink:0;">
         <span style="font-weight:700;font-size:12px;">NBA News</span>
-        <a href="https://x.com/UnderdogNBA" target="_blank" style="font-size:10px;color:var(--accent);">@UnderdogNBA &rarr;</a>
       </div>
       <div id="news-feed" style="flex:1;overflow-y:auto;padding:8px;font-size:11px;">
         <div style="color:var(--muted);text-align:center;padding:20px;">Loading news...</div>
@@ -607,10 +606,13 @@ input[type=number] { -moz-appearance: textfield; }
           const pubDate = item.querySelector('pubDate')?.textContent || '';
           const ago = pubDate ? _timeAgo(new Date(pubDate)) : '';
           const isInjury = /injur|out |day-to-day|questionable|doubtful|ruled out|miss/i.test(title + desc);
-          html += `<div style="padding:6px 0;border-bottom:1px solid #f0f0f0;${isInjury ? 'background:#fff8f8;margin:0 -8px;padding-left:8px;padding-right:8px;' : ''}">
-            <div style="font-weight:600;font-size:11px;${isInjury ? 'color:#c62828;' : ''}">${title}</div>
-            <div style="color:var(--text2);font-size:10px;margin-top:2px;line-height:1.3;">${desc.substring(0, 150)}${desc.length > 150 ? '...' : ''}</div>
-            <div style="color:var(--muted);font-size:9px;margin-top:2px;">${ago}</div>
+          const safeDesc = desc.replace(/'/g,'&#39;').replace(/"/g,'&quot;');
+          html += `<div style="padding:5px 0;border-bottom:1px solid #f0f0f0;${isInjury ? 'background:#fff8f8;margin:0 -8px;padding-left:8px;padding-right:8px;' : ''}cursor:pointer;" onclick="this.querySelector('.news-desc').style.display=this.querySelector('.news-desc').style.display==='none'?'block':'none'">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;">
+              <div style="font-weight:600;font-size:11px;${isInjury ? 'color:#c62828;' : ''}">${title}</div>
+              <span style="color:var(--muted);font-size:9px;white-space:nowrap;margin-left:6px;">${ago}</span>
+            </div>
+            <div class="news-desc" style="display:none;color:var(--text2);font-size:10px;margin-top:3px;line-height:1.4;">${desc}</div>
           </div>`;
         });
         feed.innerHTML = html;
@@ -1433,67 +1435,50 @@ function renderGames() {
         }
         return `<div class="gc-time">${g.game_time_et || g.status_text || ''}</div>`;
       })()}
-      <div class="gc-teams">
-        <div class="gc-team-hdr away" style="background:${awColor};cursor:pointer;" onclick="openRoster(${i},'away')">
-          <img src="${teamLogo(g.away)}" style="position:absolute;left:6px;top:50%;transform:translateY(-50%);width:62px;height:62px;object-fit:contain;opacity:.45;pointer-events:none;filter:brightness(1.05) drop-shadow(0 0 2px rgba(0,0,0,.15));${awBad ? 'filter:grayscale(1);' : ''}" onerror="this.style.display='none'" />
-          <span class="team-hdr-name" style="padding-left:52px;">${g.away}</span>
-          <div style="text-align:right;position:relative;z-index:1;">
-            <div class="team-hdr-proj">${gVal(g,"away_proj") != null ? gVal(g,"away_proj") : '—'}</div>
-            ${gVal(g,"proj_spread") != null ? `<div style="font-size:10px;font-family:var(--mono);opacity:.8;margin-top:1px;">${(spreadToWinProb(-gVal(g,"proj_spread"))*100).toFixed(0)}% · ${fmtML(spreadToML(-gVal(g,"proj_spread")))}</div>` : ''}
-          </div>
-        </div>
-        <div class="gc-team-hdr home" style="background:${hwColor};cursor:pointer;" onclick="openRoster(${i},'home')">
-          <div style="text-align:left;position:relative;z-index:1;">
-            <div class="team-hdr-proj">${gVal(g,"home_proj") != null ? gVal(g,"home_proj") : '—'}</div>
-            ${gVal(g,"proj_spread") != null ? `<div style="font-size:10px;font-family:var(--mono);opacity:.8;margin-top:1px;">${(spreadToWinProb(gVal(g,"proj_spread"))*100).toFixed(0)}% · ${fmtML(spreadToML(gVal(g,"proj_spread")))}</div>` : ''}
-          </div>
-          <span class="team-hdr-name" style="padding-right:52px;">${g.home}</span>
-          <img src="${teamLogo(g.home)}" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);width:62px;height:62px;object-fit:contain;opacity:.45;pointer-events:none;filter:brightness(1.05) drop-shadow(0 0 2px rgba(0,0,0,.15));${hwBad ? 'filter:grayscale(1);' : ''}" onerror="this.style.display='none'" />
-        </div>
-      </div>
-
       ${(() => {
         const edgeSideAway = gVal(g,"spread_edge") != null ? gVal(g,"spread_edge") > 0 : (gVal(g,"proj_spread") != null && gVal(g,"proj_spread") > 0);
         const edgeTeam = edgeSideAway ? g.away : g.home;
         const edgeSpread = edgeSideAway ? (gVal(g,"proj_spread") != null ? -gVal(g,"proj_spread") : null) : gVal(g,"proj_spread");
         const bookEdgeSpread = g.book_spread != null ? (edgeSideAway ? -g.book_spread : g.book_spread) : null;
-        return `
-      <div style="display:flex;border-top:1px solid var(--border);">
-        <div style="flex:1;padding:6px 10px;text-align:center;border-right:1px solid var(--border);font-size:10px;">
-          <div style="font-weight:700;font-family:var(--mono);font-size:13px;">${gVal(g,"proj_total") != null ? gVal(g,"proj_total").toFixed(1) : '—'}</div>
-          ${g.book_total != null ? `<div style="color:var(--muted);">Mkt ${g.book_total}</div>` : ''}
-          ${gVal(g,"total_edge") != null ? `<span class="edge-chip ${edgeClass(gVal(g,"total_edge"))}" style="font-size:9px;">${gVal(g,"total_edge") > 0 ? 'O' : 'U'} ${Math.abs(gVal(g,"total_edge")).toFixed(1)}</span>` : ''}
-        </div>
-        <div style="flex:2;">
-          <div class="gc-ratings">
-            <div class="gc-ratings-side">
-              <span style="font-size:10px;color:var(--muted)">OFF</span>
-              <span class="rating-chip ${(gVal(g,"away_off")||0) >= 0 ? 'pos' : 'neg'}">${fmtRating(gVal(g,"away_off")||0)}</span>
-              <span style="font-size:10px;color:var(--muted)">DEF</span>
-              <span class="rating-chip ${(gVal(g,"away_def")||0) >= 0 ? 'pos' : 'neg'}">${fmtRating(gVal(g,"away_def")||0)}</span>
-            </div>
-            <div class="gc-ratings-side">
-              <span style="font-size:10px;color:var(--muted)">OFF</span>
-              <span class="rating-chip ${(gVal(g,"home_off")||0) >= 0 ? 'pos' : 'neg'}">${fmtRating(gVal(g,"home_off")||0)}</span>
-              <span style="font-size:10px;color:var(--muted)">DEF</span>
-              <span class="rating-chip ${(gVal(g,"home_def")||0) >= 0 ? 'pos' : 'neg'}">${fmtRating(gVal(g,"home_def")||0)}</span>
-            </div>
-          </div>
-        </div>
-        <div style="flex:1;padding:6px 10px;text-align:center;border-left:1px solid var(--border);font-size:10px;">
-          <div style="font-weight:700;font-family:var(--mono);font-size:13px;">${edgeSpread != null ? edgeTeam + ' ' + fmtSpread(edgeSpread) : '—'}</div>
+        const spreadBox = `<div style="width:130px;padding:8px 10px;text-align:center;font-size:10px;display:flex;flex-direction:column;justify-content:center;">
+          <div style="font-weight:700;font-family:var(--mono);font-size:14px;">${edgeSpread != null ? edgeTeam + ' ' + fmtSpread(edgeSpread) : '—'}</div>
           ${bookEdgeSpread != null ? `<div style="color:var(--muted);">Mkt ${edgeTeam} ${fmtSpread(bookEdgeSpread)}</div>` : ''}
           ${gVal(g,"spread_edge") != null ? `<span class="edge-chip ${edgeClass(gVal(g,"spread_edge"))}" style="font-size:9px;">${fmtSpread(Math.abs(gVal(g,"spread_edge")))} edge</span>` : ''}
+        </div>`;
+        const totalBox = `<div style="width:130px;padding:8px 10px;text-align:center;font-size:10px;display:flex;flex-direction:column;justify-content:center;">
+          <div style="font-weight:700;font-family:var(--mono);font-size:15px;">${gVal(g,"proj_total") != null ? gVal(g,"proj_total").toFixed(1) : '—'}</div>
+          ${g.book_total != null ? `<div style="color:var(--muted);">Mkt ${g.book_total}</div>` : ''}
+          ${gVal(g,"total_edge") != null ? `<span class="edge-chip ${edgeClass(gVal(g,"total_edge"))}" style="font-size:9px;">${gVal(g,"total_edge") > 0 ? 'O' : 'U'} ${Math.abs(gVal(g,"total_edge")).toFixed(1)}</span>` : ''}
+        </div>`;
+        // Spread on the edge team's side, total on the other
+        const leftBox = edgeSideAway ? spreadBox : totalBox;
+        const rightBox = edgeSideAway ? totalBox : spreadBox;
+        return `
+      <div style="display:flex;">
+        <div style="border-right:1px solid var(--border);">${leftBox}</div>
+        <div class="gc-teams" style="flex:1;">
+          <div class="gc-team-hdr away" style="background:${awColor};cursor:pointer;" onclick="openRoster(${i},'away')">
+            <img src="${teamLogo(g.away)}" style="position:absolute;left:6px;top:50%;transform:translateY(-50%);width:62px;height:62px;object-fit:contain;opacity:.45;pointer-events:none;filter:brightness(1.05) drop-shadow(0 0 2px rgba(0,0,0,.15));${awBad ? 'filter:grayscale(1);' : ''}" onerror="this.style.display='none'" />
+            <span class="team-hdr-name" style="padding-left:52px;">${g.away}</span>
+            <div style="text-align:right;position:relative;z-index:1;">
+              <div class="team-hdr-proj">${gVal(g,"away_proj") != null ? gVal(g,"away_proj") : '—'}</div>
+              ${gVal(g,"proj_spread") != null ? `<div style="font-size:10px;font-family:var(--mono);opacity:.8;margin-top:1px;">${(spreadToWinProb(-gVal(g,"proj_spread"))*100).toFixed(0)}% · ${fmtML(spreadToML(-gVal(g,"proj_spread")))}</div>` : ''}
+            </div>
+          </div>
+          <div class="gc-team-hdr home" style="background:${hwColor};cursor:pointer;" onclick="openRoster(${i},'home')">
+            <div style="text-align:left;position:relative;z-index:1;">
+              <div class="team-hdr-proj">${gVal(g,"home_proj") != null ? gVal(g,"home_proj") : '—'}</div>
+              ${gVal(g,"proj_spread") != null ? `<div style="font-size:10px;font-family:var(--mono);opacity:.8;margin-top:1px;">${(spreadToWinProb(gVal(g,"proj_spread"))*100).toFixed(0)}% · ${fmtML(spreadToML(gVal(g,"proj_spread")))}</div>` : ''}
+            </div>
+            <span class="team-hdr-name" style="padding-right:52px;">${g.home}</span>
+            <img src="${teamLogo(g.home)}" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);width:62px;height:62px;object-fit:contain;opacity:.45;pointer-events:none;filter:brightness(1.05) drop-shadow(0 0 2px rgba(0,0,0,.15));${hwBad ? 'filter:grayscale(1);' : ''}" onerror="this.style.display='none'" />
+          </div>
         </div>
-      </div>`;
+        <div style="border-left:1px solid var(--border);">${rightBox}</div>
+      </div>
+      `;
       })()}
 
-      ${hasEdge ? `
-      <div style="padding:4px 12px;background:#f0fff0;border-top:1px solid #c8e6c9;font-size:10px;color:var(--green);font-weight:600;">
-        ${hasSpreadEdge ? `SPREAD: ${gVal(g,"spread_edge") > 0 ? g.away : g.home} ${gVal(g,"spread_edge") > 0 ? fmtSpread(-g.book_spread) : fmtSpread(g.book_spread)}` : ''}
-        ${hasSpreadEdge && hasTotalEdge ? ' | ' : ''}
-        ${hasTotalEdge ? `TOTAL: ${gVal(g,"total_edge") > 0 ? 'Over' : 'Under'} ${g.book_total}` : ''}
-      </div>` : ''}
 
       <div class="gc-expand" style="gap:6px;">
         <button onclick="togglePlayers(${i})">Players</button>
