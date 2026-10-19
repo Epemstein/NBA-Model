@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v85</title>
+<title>NBA ALGO v86</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -566,23 +566,23 @@ input[type=number] { -moz-appearance: textfield; }
 #bet-queue-body table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 11px;
+  font-size: 13px;
 }
 #bet-queue-body th {
-  font-size: 9px;
+  font-size: 10px;
   text-transform: uppercase;
   letter-spacing: .06em;
   color: #888;
   font-weight: 600;
   text-align: left;
-  padding: 6px 6px;
+  padding: 8px 10px;
   border-bottom: 1px solid #333;
   position: sticky;
   top: 0;
   background: #1a1a2e;
 }
 #bet-queue-body td {
-  padding: 5px 6px;
+  padding: 10px 10px;
   border-bottom: 1px solid #2a2a3e;
   vertical-align: middle;
 }
@@ -4377,7 +4377,18 @@ function updateQueueStake(id, stake) {
   if (item) {
     item.stake = parseFloat(stake) || 0;
     _saveBetQueue();
-    renderQueue();
+    // Update To Win inline without re-rendering (preserves focus)
+    const ml = probToML(item.price);
+    const win = _calcToWin(item.stake, ml);
+    const winEl = document.getElementById('bq-win-' + id);
+    if (winEl) winEl.textContent = '$' + win.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+    // Update footer totals
+    const totalRisk = _betQueue.reduce((s, b) => s + (b.stake || 0), 0);
+    const totalWin = _betQueue.reduce((s, b) => s + _calcToWin(b.stake || 0, probToML(b.price)), 0);
+    const riskEl = document.getElementById('bq-total-risk');
+    const winTotEl = document.getElementById('bq-total-win');
+    if (riskEl) riskEl.textContent = '$' + totalRisk.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+    if (winTotEl) winTotEl.textContent = '$' + totalWin.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
   }
 }
 
@@ -4421,7 +4432,7 @@ function renderQueue() {
       <td style="font-family:var(--mono);font-weight:600;color:${evColor};">${b.ev != null ? b.ev.toFixed(1) + '%' : '--'}</td>
       <td style="font-family:var(--mono);color:#4caf50;">${fmtFill(b.fill)}</td>
       <td><input class="bq-stake-input" type="number" min="0" step="1" value="${b.stake || 0}" onchange="updateQueueStake('${b.id}', this.value)" /></td>
-      <td style="font-family:var(--mono);color:#4caf50;font-weight:600;">$${toWin.toFixed(2)}</td>
+      <td id="bq-win-${b.id}" style="font-family:var(--mono);color:#4caf50;font-weight:600;">$${toWin.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
       <td><button class="bq-remove" onclick="removeFromQueue('${b.id}')">&times;</button></td>
     </tr>`;
   });
@@ -4484,6 +4495,35 @@ function autoPopulateQueue() {
         stake: defaultStake,
       });
       added++;
+    }
+
+    // Also check totals
+    const totalAlready = _betQueue.some(b => b.away === g.away && b.home === g.home && b.type === 'total');
+    if (!totalAlready && g.book_total != null && gVal(g, 'proj_total') != null) {
+      const sigma = STATE.settings?.totalSigma || 17;
+      const pt = gVal(g, 'proj_total');
+      const cushionO = pt - g.book_total;
+      const cushionU = g.book_total - pt;
+      const coverO = normCdf(cushionO / sigma);
+      const coverU = normCdf(cushionU / sigma);
+      const ovEV = g.over_price != null ? Math.round((coverO - g.over_price) * 1000) / 10 : null;
+      const unEV = g.under_price != null ? Math.round((coverU - g.under_price) * 1000) / 10 : null;
+      let totSide = null, totBestEV = -999;
+      if (ovEV != null && ovEV >= minEV && (g.over_fill || 0) >= minLiq && ovEV > totBestEV) { totSide = 'over'; totBestEV = ovEV; }
+      if (unEV != null && unEV >= minEV && (g.under_fill || 0) >= minLiq && unEV > totBestEV) { totSide = 'under'; totBestEV = unEV; }
+      if (totSide) {
+        const desc = (totSide === 'over' ? 'O' : 'U') + ' ' + g.book_total;
+        const tPrice = totSide === 'over' ? g.over_price : g.under_price;
+        const tFill = totSide === 'over' ? g.over_fill : g.under_fill;
+        addToQueue({
+          away: g.away, home: g.home, type: 'total',
+          description: desc, price: tPrice, priceML: fmtML(probToML(tPrice)),
+          fill: tFill || 0, ev: totBestEV, strike: g.book_total, side: totSide,
+          teamColor: '#2e7d32', teamLogo: '',
+          stake: defaultStake,
+        });
+        added++;
+      }
     }
   }
 
