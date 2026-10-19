@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v86</title>
+<title>NBA ALGO v87</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -4453,15 +4453,72 @@ function autoPopulateQueue() {
   const minEV = STATE.settings?.minEV || 2.0;
   const minLiq = STATE.settings?.minLiquidity || 500;
   const defaultStake = STATE.settings?.defaultStake || 100;
+  const tab = _oddsTab; // 'spread', 'ml', or 'total'
   let added = 0;
 
   for (const g of STATE.games) {
-    // Check if we already have a spread bet queued for this game
     const gameKey = g.away + '@' + g.home;
+
+    // ML auto-fill
+    if (tab === 'ml') {
+      const alreadyQueued = _betQueue.some(b => b.away === g.away && b.home === g.home && b.type === 'ml');
+      if (alreadyQueued) continue;
+      const ps = gVal(g, 'proj_spread');
+      if (ps == null) continue;
+      const awProb = spreadToWinProb(-ps);
+      const hwProb = spreadToWinProb(ps);
+      const awMLEV = g.away_ml_price != null ? Math.round((awProb - g.away_ml_price) * 1000) / 10 : null;
+      const hwMLEV = g.home_ml_price != null ? Math.round((hwProb - g.home_ml_price) * 1000) / 10 : null;
+      let bestSide = null, bestEV = -999;
+      if (awMLEV != null && awMLEV >= minEV && (g.away_ml_fill || 0) >= minLiq && awMLEV > bestEV) { bestSide = 'away'; bestEV = awMLEV; }
+      if (hwMLEV != null && hwMLEV >= minEV && (g.home_ml_fill || 0) >= minLiq && hwMLEV > bestEV) { bestSide = 'home'; bestEV = hwMLEV; }
+      if (bestSide) {
+        const team = bestSide === 'away' ? g.away : g.home;
+        const price = bestSide === 'away' ? g.away_ml_price : g.home_ml_price;
+        const fill = bestSide === 'away' ? g.away_ml_fill : g.home_ml_fill;
+        addToQueue({
+          away: g.away, home: g.home, type: 'ml',
+          description: team + ' ML', price: price, priceML: fmtML(probToML(price)),
+          fill: fill || 0, ev: bestEV, strike: 0, side: bestSide,
+          teamColor: COLORS[team] || '#333', teamLogo: teamLogo(team), stake: defaultStake,
+        });
+        added++;
+      }
+      continue;
+    }
+
+    // Total auto-fill
+    if (tab === 'total') {
+      const totalAlready = _betQueue.some(b => b.away === g.away && b.home === g.home && b.type === 'total');
+      if (totalAlready) continue;
+      if (g.book_total == null || gVal(g, 'proj_total') == null) continue;
+      const sigma = STATE.settings?.totalSigma || 17;
+      const pt = gVal(g, 'proj_total');
+      const coverO = normCdf((pt - g.book_total) / sigma);
+      const coverU = normCdf((g.book_total - pt) / sigma);
+      const ovEV = g.over_price != null ? Math.round((coverO - g.over_price) * 1000) / 10 : null;
+      const unEV = g.under_price != null ? Math.round((coverU - g.under_price) * 1000) / 10 : null;
+      let totSide = null, totBestEV = -999;
+      if (ovEV != null && ovEV >= minEV && (g.over_fill || 0) >= minLiq && ovEV > totBestEV) { totSide = 'over'; totBestEV = ovEV; }
+      if (unEV != null && unEV >= minEV && (g.under_fill || 0) >= minLiq && unEV > totBestEV) { totSide = 'under'; totBestEV = unEV; }
+      if (totSide) {
+        const desc = (totSide === 'over' ? 'O' : 'U') + ' ' + g.book_total;
+        const tPrice = totSide === 'over' ? g.over_price : g.under_price;
+        const tFill = totSide === 'over' ? g.over_fill : g.under_fill;
+        addToQueue({
+          away: g.away, home: g.home, type: 'total',
+          description: desc, price: tPrice, priceML: fmtML(probToML(tPrice)),
+          fill: tFill || 0, ev: totBestEV, strike: g.book_total, side: totSide,
+          teamColor: '#2e7d32', teamLogo: '', stake: defaultStake,
+        });
+        added++;
+      }
+      continue;
+    }
+
+    // Spread auto-fill (default)
     const alreadyQueued = _betQueue.some(b => b.away === g.away && b.home === g.home && b.type === 'spread');
     if (alreadyQueued) continue;
-
-    // Calculate EV for both sides of the primary spread
     const awEV = calcSpreadEV(g, 'away');
     const hwEV = calcSpreadEV(g, 'home');
 
@@ -4497,34 +4554,6 @@ function autoPopulateQueue() {
       added++;
     }
 
-    // Also check totals
-    const totalAlready = _betQueue.some(b => b.away === g.away && b.home === g.home && b.type === 'total');
-    if (!totalAlready && g.book_total != null && gVal(g, 'proj_total') != null) {
-      const sigma = STATE.settings?.totalSigma || 17;
-      const pt = gVal(g, 'proj_total');
-      const cushionO = pt - g.book_total;
-      const cushionU = g.book_total - pt;
-      const coverO = normCdf(cushionO / sigma);
-      const coverU = normCdf(cushionU / sigma);
-      const ovEV = g.over_price != null ? Math.round((coverO - g.over_price) * 1000) / 10 : null;
-      const unEV = g.under_price != null ? Math.round((coverU - g.under_price) * 1000) / 10 : null;
-      let totSide = null, totBestEV = -999;
-      if (ovEV != null && ovEV >= minEV && (g.over_fill || 0) >= minLiq && ovEV > totBestEV) { totSide = 'over'; totBestEV = ovEV; }
-      if (unEV != null && unEV >= minEV && (g.under_fill || 0) >= minLiq && unEV > totBestEV) { totSide = 'under'; totBestEV = unEV; }
-      if (totSide) {
-        const desc = (totSide === 'over' ? 'O' : 'U') + ' ' + g.book_total;
-        const tPrice = totSide === 'over' ? g.over_price : g.under_price;
-        const tFill = totSide === 'over' ? g.over_fill : g.under_fill;
-        addToQueue({
-          away: g.away, home: g.home, type: 'total',
-          description: desc, price: tPrice, priceML: fmtML(probToML(tPrice)),
-          fill: tFill || 0, ev: totBestEV, strike: g.book_total, side: totSide,
-          teamColor: '#2e7d32', teamLogo: '',
-          stake: defaultStake,
-        });
-        added++;
-      }
-    }
   }
 
   if (added === 0) {
