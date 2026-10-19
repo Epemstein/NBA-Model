@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v54</title>
+<title>NBA ALGO v55</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -2331,9 +2331,10 @@ async function _fetchNovigBook(gameIdx, keepExisting) {
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || 'Failed');
     _novigBookCache[gameKey] = { data, ts: Date.now() };
-    renderNovigBook(data, g);
+    // Only render if this is still the open game (prevent race condition)
+    if (_novigBookGameIdx === gameIdx) renderNovigBook(data, g);
   } catch (e) {
-    if (!keepExisting) {
+    if (!keepExisting && _novigBookGameIdx === gameIdx) {
       document.getElementById('novig-body').innerHTML = `<div style="text-align:center;padding:40px;color:var(--red);">Error: ${e.message}</div>`;
     }
   }
