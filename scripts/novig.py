@@ -513,7 +513,18 @@ def get_novig_all_lines(client, target_date, game_key):
     total_markets = sorted([m for m in totals_raw if m['eventId'] == target_eid], key=lambda x: float(x['strike']))
     money_market = next((m for m in moneys_raw if m['eventId'] == target_eid), None)
 
-    # Fetch all order books in parallel, then trim to 9 centered on highest liquidity
+    # Pre-limit to 15 closest to median before fetching (avoid 50+ API calls on free tier)
+    MAX_PREFETCH = 15
+    if len(spread_markets) > MAX_PREFETCH:
+        mid_idx = len(spread_markets) // 2
+        start = max(0, mid_idx - MAX_PREFETCH // 2)
+        spread_markets = spread_markets[start:start + MAX_PREFETCH]
+    if len(total_markets) > MAX_PREFETCH:
+        mid_idx = len(total_markets) // 2
+        start = max(0, mid_idx - MAX_PREFETCH // 2)
+        total_markets = total_markets[start:start + MAX_PREFETCH]
+
+    # Fetch order books in parallel, then trim to 9 centered on highest liquidity
     from concurrent.futures import ThreadPoolExecutor
     all_markets = spread_markets + total_markets + ([money_market] if money_market else [])
     market_ids = [m['marketId'] for m in all_markets]
