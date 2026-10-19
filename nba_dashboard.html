@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v46</title>
+<title>NBA ALGO v47</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1034,7 +1034,10 @@ input[type=number] { -moz-appearance: textfield; }
   <div class="novig-modal">
     <div class="novig-header">
       <h3 id="novig-title">—</h3>
-      <button class="novig-close" onclick="closeNovigBook()">&times;</button>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button class="btn bp" id="novig-refresh-btn" onclick="refreshNovigBook()" style="font-size:9px;padding:3px 8px;">Refresh</button>
+        <button class="novig-close" onclick="closeNovigBook()">&times;</button>
+      </div>
     </div>
     <div class="novig-body" id="novig-body">
       <div style="text-align:center;padding:40px;color:var(--muted);">Loading...</div>
@@ -2275,7 +2278,10 @@ function renderOddsSummary() {
 }
 
 // ── Novig Book Modal ────────────────────────────────────────────────────
+let _novigBookGameIdx = null;
+function refreshNovigBook() { if (_novigBookGameIdx != null) openNovigBook(_novigBookGameIdx); }
 async function openNovigBook(gameIdx) {
+  _novigBookGameIdx = gameIdx;
   const g = STATE.games[gameIdx];
   if (!g) return;
   const gameKey = `${g.away}@${g.home}`;
