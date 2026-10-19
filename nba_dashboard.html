@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v49</title>
+<title>NBA ALGO v50</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -946,6 +946,7 @@ input[type=number] { -moz-appearance: textfield; }
       <div class="fg"><label class="fl">Home Court Advantage</label><input id="set-hca" type="number" value="1.5" step="0.5"></div>
       <div class="fg"><label class="fl">Pace Multiplier</label><input id="set-pace-mult" type="number" value="0.95" step="0.01"></div>
       <div class="fg"><label class="fl">Sigma (σ) — Spread Variance</label><input id="set-sigma" type="number" value="13" min="8" max="18" step="0.5"></div>
+      <div class="fg"><label class="fl">Min Liquidity ($)</label><input id="set-min-liq" type="number" value="500" min="0" max="10000" step="100"></div>
     </div>
     <div class="ct" style="margin-top:14px;">MODEL Blend Weights</div>
     <div style="display:flex;gap:12px;align-items:center;margin-bottom:10px;">
@@ -1099,7 +1100,7 @@ let STATE = {
   history: JSON.parse(localStorage.getItem('nba_history') || '[]'),
   overrides: JSON.parse(localStorage.getItem('nba_overrides') || '{}'),
   bankroll: JSON.parse(localStorage.getItem('nba_bankroll') || '{"start":10000,"kelly":0.5,"maxPct":3}'),
-  settings: JSON.parse(localStorage.getItem('nba_settings') || '{"spreadEdge":2,"totalEdge":2,"hca":1.5,"paceMult":0.95,"sigma":13,"blendDarko":60,"blendLebron":25,"blendEpm":15}'),
+  settings: JSON.parse(localStorage.getItem('nba_settings') || '{"spreadEdge":2,"totalEdge":2,"hca":1.5,"paceMult":0.95,"sigma":13,"minLiquidity":500,"blendDarko":60,"blendLebron":25,"blendEpm":15}'),
   teamRatings: {},
   leagueAvgPace: 100,
   leagueAvgOrtg: 113.1,
@@ -2342,29 +2343,52 @@ function renderNovigBook(data, g) {
   // Spreads table
   html += '<div><div style="font-size:11px;font-weight:700;margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);">Spreads</div>';
   if (data.spreads && data.spreads.length) {
-    html += '<table><thead><tr><th>Strike</th><th>' + g.away + ' Price</th><th>' + g.away + ' Fill</th><th>' + g.home + ' Price</th><th>' + g.home + ' Fill</th><th>EV%</th></tr></thead><tbody>';
-    for (const s of data.spreads) {
+    // First pass: find best EV row (must meet min liquidity)
+    const minLiq = STATE.settings?.minLiquidity || 500;
+    let bestSpreadEV = -999, bestSpreadIdx = -1, bestSpreadSide = '';
+    const spreadRows = data.spreads.map((s, idx) => {
       const awEV = _calcAltSpreadEV(g, s.strike, s.away_price, 'away');
       const hwEV = _calcAltSpreadEV(g, s.strike, s.home_price, 'home');
-      const bestEV = [awEV, hwEV].filter(v => v != null && v > 0);
-      const evDisplay = bestEV.length ? Math.max(...bestEV) : (awEV != null || hwEV != null ? Math.max(awEV || -999, hwEV || -999) : null);
-      const evSide = hwEV != null && hwEV === evDisplay ? g.home : g.away;
+      const posEVs = [awEV, hwEV].filter(v => v != null && v > 0);
+      const evDisplay = posEVs.length ? Math.max(...posEVs) : null;
+      const evSide = (hwEV != null && hwEV === evDisplay) ? 'home' : 'away';
+      const edgeFill = evSide === 'away' ? (s.away_fill||0) : (s.home_fill||0);
+      if (evDisplay != null && evDisplay > bestSpreadEV && edgeFill >= minLiq) { bestSpreadEV = evDisplay; bestSpreadIdx = idx; bestSpreadSide = evSide; }
+      return { s, awEV, hwEV, evDisplay, evSide: evDisplay > 0 ? evSide : null };
+    });
+
+    html += '<table><thead><tr><th>Strike</th><th>' + g.away + ' Price</th><th>' + g.away + ' Fill</th><th>' + g.home + ' Price</th><th>' + g.home + ' Fill</th><th>EV%</th></tr></thead><tbody>';
+    spreadRows.forEach((r, idx) => {
+      const s = r.s;
+      const evSideTeam = r.evSide === 'home' ? g.home : g.away;
       const isPrimary = g.book_spread != null && Math.abs(s.strike - g.book_spread) < 0.01;
-      const rowStyle = isPrimary ? 'background:#f0f7ff;font-weight:600;' : '';
+      const isBest = idx === bestSpreadIdx;
+      const rowStyle = isBest ? 'background:#e8f5e9;' : (isPrimary ? 'background:#f0f7ff;' : '');
+      // Build wager description for hover
+      const wagerSide = r.evSide === 'away' ? g.away : g.home;
+      const wagerSpread = r.evSide === 'away' ? fmtSpread(-s.strike) : fmtSpread(s.strike);
+      const wagerPrice = r.evSide === 'away' ? (s.away_price != null ? fmtML(probToML(s.away_price)) : '') : (s.home_price != null ? fmtML(probToML(s.home_price)) : '');
+      const wagerTip = `${wagerSide} ${wagerSpread} (${wagerPrice})`;
+      // Highlight the edge side's price cell
+      const awCellBg = isBest && r.evSide === 'away' ? 'background:#c8e6c9;cursor:help;' : '';
+      const hwCellBg = isBest && r.evSide === 'home' ? 'background:#c8e6c9;cursor:help;' : '';
+      const awTip = isBest && r.evSide === 'away' ? ` title="${wagerTip}"` : '';
+      const hwTip = isBest && r.evSide === 'home' ? ` title="${wagerTip}"` : '';
+
       html += `<tr style="${rowStyle}">`;
-      html += `<td>${evSide === g.away ? g.away + ' ' + fmtSpread(-s.strike) : g.home + ' ' + fmtSpread(s.strike)}</td>`;
-      html += `<td>${s.away_price != null ? fmtProbML(s.away_price) : '—'}</td>`;
+      html += `<td>${evSideTeam ? evSideTeam + ' ' + (r.evSide === 'away' ? fmtSpread(-s.strike) : fmtSpread(s.strike)) : g.home + ' ' + fmtSpread(s.strike)}</td>`;
+      html += `<td style="${awCellBg}"${awTip}>${s.away_price != null ? fmtProbML(s.away_price) : '—'}</td>`;
       html += `<td style="color:var(--green);">${fmtFill(s.away_fill)}</td>`;
-      html += `<td>${s.home_price != null ? fmtProbML(s.home_price) : '—'}</td>`;
+      html += `<td style="${hwCellBg}"${hwTip}>${s.home_price != null ? fmtProbML(s.home_price) : '—'}</td>`;
       html += `<td style="color:var(--green);">${fmtFill(s.home_fill)}</td>`;
-      if (evDisplay != null && evDisplay > 0) {
-        const cls = evDisplay >= 8 ? 'hi' : evDisplay >= 4 ? 'mid' : 'lo';
-        html += `<td style="color:var(--green);font-weight:600;"><span class="edge-chip ${cls}" style="font-size:9px;padding:1px 4px;">${evDisplay.toFixed(1)}%</span> ${evSide}</td>`;
+      if (r.evDisplay != null && r.evDisplay > 0) {
+        const cls = r.evDisplay >= 8 ? 'hi' : r.evDisplay >= 4 ? 'mid' : 'lo';
+        html += `<td style="color:var(--green);font-weight:600;"><span class="edge-chip ${cls}" style="font-size:9px;padding:1px 4px;">${r.evDisplay.toFixed(1)}%</span> ${evSideTeam}</td>`;
       } else {
         html += '<td style="color:var(--muted);">—</td>';
       }
       html += '</tr>';
-    }
+    });
     html += '</tbody></table>';
   } else {
     html += '<div style="color:var(--muted);font-size:11px;">No spread markets</div>';
@@ -2636,6 +2660,7 @@ function saveSettings() {
     hca: parseFloat(document.getElementById('set-hca').value) || 1.5,
     paceMult: parseFloat(document.getElementById('set-pace-mult').value) || 0.95,
     sigma: parseFloat(document.getElementById('set-sigma').value) || 13,
+    minLiquidity: parseInt(document.getElementById('set-min-liq').value) || 500,
     blendDarko: parseInt(document.getElementById('set-blend-darko').value) || 60,
     blendLebron: parseInt(document.getElementById('set-blend-lebron').value) || 25,
     blendEpm: parseInt(document.getElementById('set-blend-epm').value) || 15,
@@ -2657,6 +2682,7 @@ function loadSettingsUI() {
   document.getElementById('set-hca').value = STATE.settings.hca;
   document.getElementById('set-pace-mult').value = STATE.settings.paceMult;
   document.getElementById('set-sigma').value = STATE.settings.sigma ?? 13;
+  document.getElementById('set-min-liq').value = STATE.settings.minLiquidity ?? 500;
   document.getElementById('set-blend-darko').value = STATE.settings.blendDarko ?? 60;
   document.getElementById('set-blend-lebron').value = STATE.settings.blendLebron ?? 25;
   document.getElementById('set-blend-epm').value = STATE.settings.blendEpm ?? 15;
