@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v80</title>
+<title>NBA ALGO v81</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -2394,23 +2394,15 @@ function _priceHoverIn(el) {
   const logo = el.dataset.logo;
   const color = el.dataset.color;
   const tip = el.dataset.tip;
-  if (logo) el.style.backgroundImage = `url(${logo})`;
-  if (color) el.style.backgroundColor = color + '15';
-  el.style.backgroundSize = '28px 28px';
-  el.style.backgroundRepeat = 'no-repeat';
-  el.style.backgroundPosition = 'center';
-  el.style.opacity = '1';
-  // Fade the logo by putting it behind a semi-transparent overlay
-  if (logo) {
-    // Create a faded logo using a pseudo-approach: overlay the logo as an img inside the cell
-    if (!el.querySelector('.hover-logo')) {
-      const img = document.createElement('img');
-      img.src = logo;
-      img.className = 'hover-logo';
-      img.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:30px;height:30px;object-fit:contain;opacity:0.15;pointer-events:none;';
-      el.style.position = 'relative';
-      el.appendChild(img);
-    }
+  if (color) el.style.backgroundColor = color + '12';
+  // Add faded logo overlay
+  if (logo && !el.querySelector('.hover-logo')) {
+    const img = document.createElement('img');
+    img.src = logo;
+    img.className = 'hover-logo';
+    img.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:28px;height:28px;object-fit:contain;opacity:0.12;pointer-events:none;';
+    el.style.position = 'relative';
+    el.appendChild(img);
   }
   if (!el.dataset.orig) el.dataset.orig = el.innerHTML;
   // Show just the numbers, no team name
