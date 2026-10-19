@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v44</title>
+<title>NBA ALGO v45</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -2346,7 +2346,7 @@ function renderNovigBook(data, g) {
       const isPrimary = g.book_spread != null && Math.abs(s.strike - g.book_spread) < 0.01;
       const rowStyle = isPrimary ? 'background:#f0f7ff;font-weight:600;' : '';
       html += `<tr style="${rowStyle}">`;
-      html += `<td>${s.strike > 0 ? '+' : ''}${s.strike.toFixed(1)}</td>`;
+      html += `<td>${g.home} ${s.strike > 0 ? '+' : ''}${s.strike.toFixed(1)}</td>`;
       html += `<td>${s.away_price != null ? fmtProbML(s.away_price) : '—'}</td>`;
       html += `<td style="color:var(--green);">${fmtFill(s.away_fill)}</td>`;
       html += `<td>${s.home_price != null ? fmtProbML(s.home_price) : '—'}</td>`;
