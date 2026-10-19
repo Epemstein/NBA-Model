@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v64</title>
+<title>NBA ALGO v65</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -2354,7 +2354,9 @@ async function _fetchNovigBook(gameIdx, keepExisting) {
   const g = STATE.games[gameIdx];
   const gameKey = `${g.away}@${g.home}`;
   try {
-    const r = await fetch(`${RENDER_URL}/novig-book?date=${selectedDate}&game=${gameKey}`);
+    const sp = g.book_spread != null ? `&spread=${g.book_spread}` : '';
+    const tot = g.book_total != null ? `&total=${g.book_total}` : '';
+    const r = await fetch(`${RENDER_URL}/novig-book?date=${selectedDate}&game=${gameKey}${sp}${tot}`);
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || 'Failed');
     _novigBookCache[gameKey] = { data, ts: Date.now() };

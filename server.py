@@ -329,8 +329,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._json_response(400, {'error': 'Missing game param (e.g. BOS@DET)'})
                 return
 
+            center_spread = float(qs.get('spread', [0])[0]) if qs.get('spread') else None
+            center_total = float(qs.get('total', [0])[0]) if qs.get('total') else None
+
             nc = NovigClient(novig_key, novig_pem)
-            result = get_novig_all_lines(nc, target_date, game_key)
+            result = get_novig_all_lines(nc, target_date, game_key, center_spread=center_spread, center_total=center_total)
             self._json_response(200, result)
         except Exception as e:
             print(f'Novig book failed: {e}')

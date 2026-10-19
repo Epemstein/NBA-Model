@@ -464,7 +464,7 @@ def get_novig_nba_lines(client, target_date=None):
 
 
 # ── All alt lines for a single game ─────────────────────────────────────
-def get_novig_all_lines(client, target_date, game_key):
+def get_novig_all_lines(client, target_date, game_key, center_spread=None, center_total=None):
     """Fetch ALL alt spread/total/money markets for a specific game.
     game_key: 'AWAY@HOME' e.g. 'BOS@DET'
     Returns { spreads: [...], totals: [...], money: {...} }
@@ -616,25 +616,24 @@ def get_novig_all_lines(client, target_date, game_key):
             start = max(0, end - n)
         return lines[start:end]
 
-    # Find highest liquidity spread to center on
-    best_sp_liq = -1
-    best_sp_strike = spreads_out[len(spreads_out)//2]['strike'] if spreads_out else 0
-    for s in spreads_out:
-        total = (s.get('away_fill') or 0) + (s.get('home_fill') or 0)
-        if total > best_sp_liq:
-            best_sp_liq = total
-            best_sp_strike = s['strike']
-    spreads_out = _trim_centered(spreads_out, best_sp_strike)
+    # Center on provided strike (from odds summary primary) or fall back to highest liquidity
+    if center_spread is not None:
+        spreads_out = _trim_centered(spreads_out, center_spread)
+    elif spreads_out:
+        best_liq, best_strike = -1, spreads_out[len(spreads_out)//2]['strike']
+        for s in spreads_out:
+            t = (s.get('away_fill') or 0) + (s.get('home_fill') or 0)
+            if t > best_liq: best_liq, best_strike = t, s['strike']
+        spreads_out = _trim_centered(spreads_out, best_strike)
 
-    # Find highest liquidity total to center on
-    best_tot_liq = -1
-    best_tot_strike = totals_out[len(totals_out)//2]['strike'] if totals_out else 0
-    for t in totals_out:
-        total = (t.get('over_fill') or 0) + (t.get('under_fill') or 0)
-        if total > best_tot_liq:
-            best_tot_liq = total
-            best_tot_strike = t['strike']
-    totals_out = _trim_centered(totals_out, best_tot_strike)
+    if center_total is not None:
+        totals_out = _trim_centered(totals_out, center_total)
+    elif totals_out:
+        best_liq, best_strike = -1, totals_out[len(totals_out)//2]['strike']
+        for t in totals_out:
+            tl = (t.get('over_fill') or 0) + (t.get('under_fill') or 0)
+            if tl > best_liq: best_liq, best_strike = tl, t['strike']
+        totals_out = _trim_centered(totals_out, best_strike)
 
     # Process moneyline
     money_out = None
