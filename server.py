@@ -61,6 +61,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._refresh_odds()
             return
 
+        if self.path == '/rss/nba':
+            self._proxy('https://www.rotowire.com/rss/news.php?sport=NBA', {'User-Agent': 'Mozilla/5.0', 'Accept': 'application/rss+xml, */*'})
+            return
+
         if self.path.startswith('/load-date'):
             self._load_date()
             return
