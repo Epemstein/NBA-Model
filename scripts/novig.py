@@ -513,18 +513,7 @@ def get_novig_all_lines(client, target_date, game_key):
     total_markets = sorted([m for m in totals_raw if m['eventId'] == target_eid], key=lambda x: float(x['strike']))
     money_market = next((m for m in moneys_raw if m['eventId'] == target_eid), None)
 
-    # Limit to 10 closest to primary strike (parallel fetches keep it fast)
-    MAX_LINES = 10
-    if len(spread_markets) > MAX_LINES:
-        strikes = [float(m['strike']) for m in spread_markets]
-        primary = round((min(strikes) + max(strikes)) / 2 * 2) / 2
-        spread_markets.sort(key=lambda m: abs(float(m['strike']) - primary))
-        spread_markets = sorted(spread_markets[:MAX_LINES], key=lambda m: float(m['strike']))
-    if len(total_markets) > MAX_LINES:
-        strikes = [float(m['strike']) for m in total_markets]
-        primary = round((min(strikes) + max(strikes)) / 2 * 2) / 2
-        total_markets.sort(key=lambda m: abs(float(m['strike']) - primary))
-        total_markets = sorted(total_markets[:MAX_LINES], key=lambda m: float(m['strike']))
+    # No limit — popup shows all lines, parallel fetches keep it fast
 
     # Fetch all order books in parallel
     from concurrent.futures import ThreadPoolExecutor
