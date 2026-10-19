@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v31</title>
+<title>NBA ALGO v32</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1354,10 +1354,14 @@ function renderGames() {
     const hasTotalEdge = gVal(g,"total_edge") != null && Math.abs(gVal(g,"total_edge")) >= STATE.settings.totalEdge;
     const hasEdge = hasSpreadEdge || hasTotalEdge;
 
-    const awMin = (g.away_players||[]).reduce((s,p) => s+p.min, 0);
-    const hwMin = (g.home_players||[]).reduce((s,p) => s+p.min, 0);
-    const awBad = Math.abs(awMin - 240) > 0.5;
-    const hwBad = Math.abs(hwMin - 240) > 0.5;
+    // Check total minutes — use OFF/DEF as proxy: if projections look real, baselines are applied
+    const awMin = (g.away_players||[]).reduce((s,p) => s+(p.min||0), 0);
+    const hwMin = (g.home_players||[]).reduce((s,p) => s+(p.min||0), 0);
+    // Don't flag if OFF/DEF are non-zero (baselines applied even if player list not updated)
+    const awHasRatings = Math.abs(g.away_off||0) > 0.01;
+    const hwHasRatings = Math.abs(g.home_off||0) > 0.01;
+    const awBad = Math.abs(awMin - 240) > 0.5 && !awHasRatings;
+    const hwBad = Math.abs(hwMin - 240) > 0.5 && !hwHasRatings;
     const anyBad = awBad || hwBad;
 
     const awColor = anyBad ? (awBad ? '#999' : COLORS[g.away] || '#333') : COLORS[g.away] || '#333';
@@ -1957,9 +1961,9 @@ function renderOddsSummary() {
       const lEdge = bk != null ? Math.round((lSprd - bk) * 10) / 10 : null;
       const eEdge = bk != null ? Math.round((eSprd - bk) * 10) / 10 : null;
       function srcEdge(e, isAway) { const v = isAway ? e : -e; return (e != null && v > 0) ? `<span class="edge-chip lo">${v.toFixed(1)}</span>` : ''; }
-      const awMin = (g.away_players||[]).reduce((s,p) => s+p.min, 0);
-      const hwMin = (g.home_players||[]).reduce((s,p) => s+p.min, 0);
-      const incomplete = Math.abs(awMin-240) > 1 || Math.abs(hwMin-240) > 1;
+      const awMin = (g.away_players||[]).reduce((s,p) => s+(p.min||0), 0);
+      const hwMin = (g.home_players||[]).reduce((s,p) => s+(p.min||0), 0);
+      const incomplete = (Math.abs(awMin-240) > 1 && Math.abs(g.away_off||0) < 0.01) || (Math.abs(hwMin-240) > 1 && Math.abs(g.home_off||0) < 0.01);
       const awLogo = `<img src="${teamLogo(g.away)}" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;" onerror="this.style.display='none'" />`;
       const hwLogo = `<img src="${teamLogo(g.home)}" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;" onerror="this.style.display='none'" />`;
       html += `<tr style="border-bottom:none;${incomplete ? 'opacity:0.35;' : ''}">
@@ -2011,9 +2015,9 @@ function renderOddsSummary() {
         return e > 0 ? `<span class="edge-chip lo">${e.toFixed(1)}%</span>` : '';
       }
 
-      const _awMin = (g.away_players||[]).reduce((s,p) => s+p.min, 0);
-      const _hwMin = (g.home_players||[]).reduce((s,p) => s+p.min, 0);
-      const _inc = Math.abs(_awMin-240) > 1 || Math.abs(_hwMin-240) > 1;
+      const _awMin = (g.away_players||[]).reduce((s,p) => s+(p.min||0), 0);
+      const _hwMin = (g.home_players||[]).reduce((s,p) => s+(p.min||0), 0);
+      const _inc = (Math.abs(_awMin-240) > 1 && Math.abs(g.away_off||0) < 0.01) || (Math.abs(_hwMin-240) > 1 && Math.abs(g.home_off||0) < 0.01);
       html += `<tr style="border-bottom:none;${_inc ? 'opacity:0.35;' : ''}">
         <td rowspan="2" style="font-family:var(--sans);font-weight:600;font-size:10px;vertical-align:middle;border-bottom:2px solid var(--border);white-space:nowrap;">
           ${g.away} @<br>${g.home}<br><span style="color:var(--muted);font-weight:400;font-size:9px;">${g.game_time_et || ''}</span>
@@ -2053,9 +2057,9 @@ function renderOddsSummary() {
       const eTotEdge = bkTot != null && eTot != null ? Math.round((eTot - bkTot) * 10) / 10 : null;
       function totSrcOver(e) { return e != null && e > 0 ? `<span class="edge-chip lo">${e.toFixed(1)}</span>` : ''; }
       function totSrcUnder(e) { return e != null && e < 0 ? `<span class="edge-chip lo">${Math.abs(e).toFixed(1)}</span>` : ''; }
-      const __awMin = (g.away_players||[]).reduce((s,p) => s+p.min, 0);
-      const __hwMin = (g.home_players||[]).reduce((s,p) => s+p.min, 0);
-      const __inc = Math.abs(__awMin-240) > 1 || Math.abs(__hwMin-240) > 1;
+      const __awMin = (g.away_players||[]).reduce((s,p) => s+(p.min||0), 0);
+      const __hwMin = (g.home_players||[]).reduce((s,p) => s+(p.min||0), 0);
+      const __inc = (Math.abs(__awMin-240) > 1 && Math.abs(g.away_off||0) < 0.01) || (Math.abs(__hwMin-240) > 1 && Math.abs(g.home_off||0) < 0.01);
       html += `<tr style="border-bottom:none;${__inc ? 'opacity:0.35;' : ''}">
         <td rowspan="2" style="font-family:var(--sans);font-weight:600;font-size:10px;vertical-align:middle;border-bottom:2px solid var(--border);white-space:nowrap;">
           ${g.away} @<br>${g.home}<br><span style="color:var(--muted);font-weight:400;font-size:9px;">${g.game_time_et || ''}</span>
