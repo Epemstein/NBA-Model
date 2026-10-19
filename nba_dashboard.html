@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v83</title>
+<title>NBA ALGO v84</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -2396,21 +2396,21 @@ function _priceHoverIn(el) {
   const tip = el.dataset.tip;
   if (color) el.style.backgroundColor = color + '12';
   if (!el.dataset.orig) el.dataset.orig = el.innerHTML;
-  // Add faded logo overlay
-  if (logo && !el.querySelector('.hover-logo')) {
+  // Set text first (this wipes children)
+  if (tip) {
+    const shortTip = tip.replace(/^[A-Z]{2,3}\s+/, '');
+    el.textContent = shortTip;
+    el.style.fontWeight = '800';
+    el.style.color = '#111';
+  }
+  // Then add faded logo overlay on top
+  if (logo) {
     const img = document.createElement('img');
     img.src = logo;
     img.className = 'hover-logo';
     img.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:28px;height:28px;object-fit:contain;opacity:0.12;pointer-events:none;';
     el.style.position = 'relative';
     el.appendChild(img);
-  }
-  // Show just the numbers, no team name
-  if (tip) {
-    const shortTip = tip.replace(/^[A-Z]{2,3}\s+/, '');
-    el.textContent = shortTip;
-    el.style.fontWeight = '800';
-    el.style.color = '#111';
   }
 }
 function _priceHoverOut(el) {
