@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v56</title>
+<title>NBA ALGO v57</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1036,7 +1036,8 @@ input[type=number] { -moz-appearance: textfield; }
     <div class="novig-header">
       <h3 id="novig-title">—</h3>
       <div style="display:flex;align-items:center;gap:8px;">
-        <button class="btn bp" id="novig-refresh-btn" onclick="refreshNovigBook()" style="font-size:9px;padding:3px 8px;">Refresh</button>
+        <span id="novig-cache-age" style="font-size:10px;color:var(--muted);font-family:var(--mono);"></span>
+        <button class="btn bp" id="novig-refresh-btn" onclick="refreshNovigBook()" style="font-size:11px;padding:5px 14px;font-weight:600;">Refresh</button>
         <button class="novig-close" onclick="closeNovigBook()">&times;</button>
       </div>
     </div>
@@ -2281,6 +2282,21 @@ function renderOddsSummary() {
 // ── Novig Book Modal ────────────────────────────────────────────────────
 let _novigBookGameIdx = null;
 let _novigBookCache = {}; // { gameKey: { data, ts } }
+let _novigAgeTimer = null;
+
+function _updateNovigAge() {
+  if (_novigBookGameIdx == null) return;
+  const g = STATE.games[_novigBookGameIdx];
+  if (!g) return;
+  const cached = _novigBookCache[`${g.away}@${g.home}`];
+  const el = document.getElementById('novig-cache-age');
+  if (!el) return;
+  if (!cached) { el.textContent = ''; return; }
+  const secs = Math.floor((Date.now() - cached.ts) / 1000);
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  el.textContent = `${m}:${s.toString().padStart(2,'0')} ago`;
+}
 
 function _novigBookTitle(g) {
   const ps = gVal(g, "proj_spread");
@@ -2308,6 +2324,9 @@ async function openNovigBook(gameIdx) {
 
   document.getElementById('novig-title').innerHTML = _novigBookTitle(g);
   document.getElementById('novig-overlay').classList.add('open');
+  clearInterval(_novigAgeTimer);
+  _updateNovigAge();
+  _novigAgeTimer = setInterval(_updateNovigAge, 1000);
 
   // Check cache (10 min TTL)
   const cached = _novigBookCache[gameKey];
@@ -2342,6 +2361,7 @@ async function _fetchNovigBook(gameIdx, keepExisting) {
 
 function closeNovigBook() {
   document.getElementById('novig-overlay').classList.remove('open');
+  clearInterval(_novigAgeTimer);
 }
 
 function _calcAltSpreadEV(g, strike, price, side) {
@@ -2403,7 +2423,8 @@ function renderNovigBook(data, g) {
       const evSideTeam = r.evSide === 'home' ? g.home : g.away;
       const isPrimary = g.book_spread != null && Math.abs(s.strike - g.book_spread) < 0.01;
       const isBest = idx === bestSpreadIdx;
-      const rowStyle = isBest ? 'background:#e8f5e9;' : (isPrimary ? 'background:#f0f0f0;' : '');
+      const edgeColor = COLORS[evSideTeam] || '#2e7d32';
+      const rowStyle = isBest ? `background:${edgeColor}15;` : (isPrimary ? 'background:#f0f0f0;' : '');
       // Build wager description for hover
       const wagerSide = r.evSide === 'away' ? g.away : g.home;
       const wagerSpread = r.evSide === 'away' ? fmtSpread(-s.strike) : fmtSpread(s.strike);
