@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v72</title>
+<title>NBA ALGO v75</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -2393,16 +2393,24 @@ function closeNovigBook() {
 function _priceHoverIn(el) {
   const logo = el.dataset.logo;
   const color = el.dataset.color;
+  const tip = el.dataset.tip;
   if (logo) el.style.backgroundImage = `url(${logo})`;
-  if (color) el.style.backgroundColor = color + '18';
-  el.style.backgroundSize = '36px 36px';
+  if (color) el.style.backgroundColor = color + '08';
+  el.style.backgroundSize = '32px 32px';
   el.style.backgroundRepeat = 'no-repeat';
   el.style.backgroundPosition = 'center';
+  el.style.backgroundBlendMode = 'luminosity';
+  if (!el.dataset.orig) el.dataset.orig = el.innerHTML;
+  if (tip) { el.textContent = tip; el.style.fontWeight = '800'; el.style.color = '#111'; }
 }
 function _priceHoverOut(el) {
   el.style.backgroundImage = '';
   el.style.backgroundColor = el.dataset.origBg || '';
   el.style.backgroundSize = '';
+  el.style.backgroundBlendMode = '';
+  if (el.dataset.orig) { el.innerHTML = el.dataset.orig; el.dataset.orig = ''; }
+  el.style.fontWeight = '';
+  el.style.color = '';
 }
 
 function openBetModal(data) {
@@ -2417,6 +2425,7 @@ function openBetModal(data) {
   const logoUrl = data.teamLogo || '';
 
   details.innerHTML = `
+    <div style="text-align:center;margin-bottom:6px;font-size:12px;color:var(--muted);">${data.away} @ ${data.home}</div>
     <div style="text-align:center;margin-bottom:16px;">
       ${logoUrl ? `<img src="${logoUrl}" style="width:48px;height:48px;object-fit:contain;vertical-align:middle;margin-right:10px;" onerror="this.style.display='none'" />` : ''}
       <span style="font-size:26px;font-weight:800;">${data.description}</span>
@@ -2440,7 +2449,10 @@ function openBetModal(data) {
   form.innerHTML = `
     <div style="margin-bottom:12px;">
       <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);display:block;margin-bottom:4px;">Risk Amount ($)</label>
-      <input type="number" id="bet-risk-input" min="0" step="1" placeholder="" style="width:100%;padding:10px 12px;font-size:16px;font-family:var(--mono);border:2px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);box-sizing:border-box;" oninput="updateBetWin()" autofocus />
+      <div style="position:relative;">
+        <input type="number" id="bet-risk-input" min="0" step="1" placeholder="" style="width:100%;padding:10px 60px 10px 12px;font-size:16px;font-family:var(--mono);border:2px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);box-sizing:border-box;" oninput="updateBetWin()" autofocus />
+        <button onclick="document.getElementById('bet-risk-input').value=${data.fill};updateBetWin();" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);padding:4px 10px;font-size:11px;font-weight:700;border:1px solid var(--accent);border-radius:4px;background:var(--accent);color:#fff;cursor:pointer;">MAX</button>
+      </div>
     </div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
       <span style="font-size:12px;color:var(--muted);">To Win</span>
@@ -2533,7 +2545,7 @@ function renderNovigBook(data, g) {
       // Best EV cell: dark team-color bg
       const isBestAw = isBest && r.evSide === 'away';
       const isBestHw = isBest && r.evSide === 'home';
-      const bestStyle = 'background:' + edgeColor + ';color:#fff;font-weight:700;padding:4px 6px;';
+      const bestStyle = 'background:' + edgeColor + ';color:#fff;font-weight:700;padding:4px 6px;border:3px solid ' + edgeColor + ';box-shadow:0 0 0 1px #fff inset;';
       const awContent = s.away_price != null ? fmtProbML(s.away_price) : '—';
       const hwContent = s.home_price != null ? fmtProbML(s.home_price) : '—';
       // Away side hover/click data
@@ -2557,14 +2569,14 @@ function renderNovigBook(data, g) {
       html += `<td>${_spreadEdgeTeam === g.away ? g.away + ' ' + fmtSpread(-s.strike) : g.home + ' ' + fmtSpread(s.strike)}</td>`;
       if (s.away_price != null) {
         const awCellStyle = isBestAw ? bestStyle + 'cursor:pointer;' : 'cursor:pointer;';
-        html += `<td style="${awCellStyle}" data-logo="${teamLogo(g.away)}" data-color="${COLORS[g.away]||'#333'}" onmouseenter="_priceHoverIn(this)" onmouseleave="_priceHoverOut(this)" onclick='openBetModal(${awBetData})'>${awContent}</td>`;
+        html += `<td style="${awCellStyle}" data-logo="${teamLogo(g.away)}" data-color="${COLORS[g.away]||'#333'}" data-tip="${awTip}" onmouseenter="_priceHoverIn(this)" onmouseleave="_priceHoverOut(this)" onclick='openBetModal(${awBetData})'>${awContent}</td>`;
       } else {
         html += `<td>${awContent}</td>`;
       }
       html += `<td style="color:var(--green);">${fmtFill(s.away_fill)}</td>`;
       if (s.home_price != null) {
         const hwCellStyle = isBestHw ? bestStyle + 'cursor:pointer;' : 'cursor:pointer;';
-        html += `<td style="${hwCellStyle}" data-logo="${teamLogo(g.home)}" data-color="${COLORS[g.home]||'#333'}" onmouseenter="_priceHoverIn(this)" onmouseleave="_priceHoverOut(this)" onclick='openBetModal(${hwBetData})'>${hwContent}</td>`;
+        html += `<td style="${hwCellStyle}" data-logo="${teamLogo(g.home)}" data-color="${COLORS[g.home]||'#333'}" data-tip="${hwTip}" onmouseenter="_priceHoverIn(this)" onmouseleave="_priceHoverOut(this)" onclick='openBetModal(${hwBetData})'>${hwContent}</td>`;
       } else {
         html += `<td>${hwContent}</td>`;
       }
@@ -2608,7 +2620,7 @@ function renderNovigBook(data, g) {
       const isBest = idx === bestTotalIdx;
       const totalEdgeColor = COLORS[_spreadEdgeTeam] || '#2e7d32';
       const rowStyle = isBest ? `background:${totalEdgeColor}15;` : (isPrimary ? 'background:#f0f0f0;' : '');
-      const bestStyle = `background:${totalEdgeColor};color:#fff;font-weight:700;padding:4px 6px;`;
+      const bestStyle = `background:${totalEdgeColor};color:#fff;font-weight:700;padding:4px 6px;border:3px solid ${totalEdgeColor};box-shadow:0 0 0 1px #fff inset;`;
       const isBestOv = isBest && r.evSide === 'over';
       const isBestUn = isBest && r.evSide === 'under';
       const ovContent = t.over_price != null ? fmtProbML(t.over_price) : '—';
@@ -2632,14 +2644,14 @@ function renderNovigBook(data, g) {
       html += `<td>${t.strike.toFixed(1)}</td>`;
       if (t.over_price != null) {
         const ovCellStyle = isBestOv ? bestStyle + 'cursor:pointer;' : 'cursor:pointer;';
-        html += `<td style="${ovCellStyle}" data-logo="" data-color="#2e7d32" onmouseenter="_priceHoverIn(this)" onmouseleave="_priceHoverOut(this)" onclick='openBetModal(${ovBetData})'>${ovContent}</td>`;
+        html += `<td style="${ovCellStyle}" data-logo="" data-color="#2e7d32" data-tip="${ovTip}" onmouseenter="_priceHoverIn(this)" onmouseleave="_priceHoverOut(this)" onclick='openBetModal(${ovBetData})'>${ovContent}</td>`;
       } else {
         html += `<td>${ovContent}</td>`;
       }
       html += `<td style="color:var(--green);">${fmtFill(t.over_fill)}</td>`;
       if (t.under_price != null) {
         const unCellStyle = isBestUn ? bestStyle + 'cursor:pointer;' : 'cursor:pointer;';
-        html += `<td style="${unCellStyle}" data-logo="" data-color="#c62828" onmouseenter="_priceHoverIn(this)" onmouseleave="_priceHoverOut(this)" onclick='openBetModal(${unBetData})'>${unContent}</td>`;
+        html += `<td style="${unCellStyle}" data-logo="" data-color="#c62828" data-tip="${unTip}" onmouseenter="_priceHoverIn(this)" onmouseleave="_priceHoverOut(this)" onclick='openBetModal(${unBetData})'>${unContent}</td>`;
       } else {
         html += `<td>${unContent}</td>`;
       }
@@ -2677,7 +2689,7 @@ function renderNovigBook(data, g) {
     const awMLBetData = ml.away_price != null ? JSON.stringify({away:g.away,home:g.home,type:'ml',description:awMLDesc,price:ml.away_price,priceML:awMLStr,fill:ml.away_fill||0,ev:awMLEV||0,strike:0,side:'away',teamColor:awMLColor,teamLogo:teamLogo(g.away)}).replace(/'/g,'&#39;') : '';
     html += `<tr><td>${g.away}</td>`;
     if (ml.away_price != null) {
-      html += `<td style="cursor:pointer;" data-logo="${teamLogo(g.away)}" data-color="${COLORS[g.away]||'#333'}" onmouseenter="_priceHoverIn(this)" onmouseleave="_priceHoverOut(this)" onclick='openBetModal(${awMLBetData})'>${fmtProbML(ml.away_price)}</td>`;
+      html += `<td style="cursor:pointer;" data-logo="${teamLogo(g.away)}" data-color="${COLORS[g.away]||'#333'}" data-tip="${awTip}" onmouseenter="_priceHoverIn(this)" onmouseleave="_priceHoverOut(this)" onclick='openBetModal(${awMLBetData})'>${fmtProbML(ml.away_price)}</td>`;
     } else {
       html += `<td>—</td>`;
     }
@@ -2696,7 +2708,7 @@ function renderNovigBook(data, g) {
     const hwMLBetData = ml.home_price != null ? JSON.stringify({away:g.away,home:g.home,type:'ml',description:hwMLDesc,price:ml.home_price,priceML:hwMLStr,fill:ml.home_fill||0,ev:hwMLEV||0,strike:0,side:'home',teamColor:hwMLColor,teamLogo:teamLogo(g.home)}).replace(/'/g,'&#39;') : '';
     html += `<tr><td>${g.home}</td>`;
     if (ml.home_price != null) {
-      html += `<td style="cursor:pointer;" data-logo="${teamLogo(g.home)}" data-color="${COLORS[g.home]||'#333'}" onmouseenter="_priceHoverIn(this)" onmouseleave="_priceHoverOut(this)" onclick='openBetModal(${hwMLBetData})'>${fmtProbML(ml.home_price)}</td>`;
+      html += `<td style="cursor:pointer;" data-logo="${teamLogo(g.home)}" data-color="${COLORS[g.home]||'#333'}" data-tip="${hwTip}" onmouseenter="_priceHoverIn(this)" onmouseleave="_priceHoverOut(this)" onclick='openBetModal(${hwMLBetData})'>${fmtProbML(ml.home_price)}</td>`;
     } else {
       html += `<td>—</td>`;
     }
