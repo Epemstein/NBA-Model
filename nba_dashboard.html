@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v65</title>
+<title>NBA ALGO v66</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -2434,7 +2434,7 @@ function renderNovigBook(data, g) {
       const evSideTeam = r.evSide === 'home' ? g.home : g.away;
       const isPrimary = g.book_spread != null && Math.abs(s.strike - g.book_spread) < 0.01;
       const isBest = idx === bestSpreadIdx;
-      const edgeColor = COLORS[_spreadEdgeTeam] || '#2e7d32';
+      const edgeColor = COLORS[evSideTeam] || '#2e7d32';
       const rowStyle = isBest ? `background:${edgeColor}15;` : (isPrimary ? 'background:#f0f0f0;' : '');
       // Build wager description for hover
       const wagerSide = r.evSide === 'away' ? g.away : g.home;
@@ -2464,7 +2464,7 @@ function renderNovigBook(data, g) {
       html += `<td style="color:var(--green);">${fmtFill(s.home_fill)}</td>`;
       if (r.evDisplay != null && r.evDisplay > 0) {
         const cls = r.evDisplay >= 8 ? 'hi' : r.evDisplay >= 4 ? 'mid' : 'lo';
-        html += `<td style="color:var(--green);font-weight:600;"><span class="edge-chip ${cls}" style="font-size:9px;padding:1px 4px;">${r.evDisplay.toFixed(1)}%</span> ${evSideTeam}</td>`;
+        html += `<td style="font-weight:600;"><span class="edge-chip ${cls}" style="font-size:9px;padding:1px 4px;">${r.evDisplay.toFixed(1)}%</span> <img src="${teamLogo(evSideTeam)}" style="width:16px;height:16px;object-fit:contain;vertical-align:middle;" onerror="this.textContent='${evSideTeam}'" /></td>`;
       } else {
         html += '<td style="color:var(--muted);">—</td>';
       }
