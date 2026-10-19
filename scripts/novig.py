@@ -297,40 +297,85 @@ def get_novig_nba_lines(client, target_date=None):
         else:
             home_team, away_team = teams[1], teams[0]
 
-        # Pick primary spread: most balanced prices (closest to 50/50)
+        # Pick primary spread: most balanced order book prices (closest to 50/50)
+        # Fetch 5 books around median, pick the one where implied probs are most equal
+        from concurrent.futures import ThreadPoolExecutor
         ev['spreads'].sort(key=lambda m: float(m['strike']))
+        candidates = ev['spreads']
+        if len(candidates) > 5:
+            mid = len(candidates) // 2
+            candidates = candidates[max(0, mid - 2):mid + 3]
+        spread_books = {}
+        def _fetch_sp_book(m):
+            try:
+                return m['marketId'], client.get_book(m['marketId'])
+            except:
+                return m['marketId'], None
+        with ThreadPoolExecutor(max_workers=5) as ex:
+            for mid, book in ex.map(lambda m: _fetch_sp_book(m), candidates):
+                spread_books[mid] = book
+
         sp = ev['spreads'][len(ev['spreads']) // 2]  # fallback to median
         best_balance = 999
-        for m in ev['spreads']:
+        for m in candidates:
+            book = spread_books.get(m['marketId'])
+            if not book or not book.get('orders'):
+                continue
             outs = m.get('outcomes', [])
             if len(outs) != 2:
                 continue
-            p1 = outs[0].get('price')
-            p2 = outs[1].get('price')
-            if p1 is None or p2 is None:
+            # Compute implied prices from best bids
+            oid_a, oid_b = outs[0]['outcomeId'], outs[1]['outcomeId']
+            orders_a = book['orders'].get(oid_a, [])
+            orders_b = book['orders'].get(oid_b, [])
+            if not orders_a or not orders_b:
                 continue
-            balance = abs(float(p1) - float(p2))
+            best_a = max(float(o['price']) for o in orders_a)
+            best_b = max(float(o['price']) for o in orders_b)
+            # Ask price = 1 - other side's best bid
+            ask_a = 1 - best_b
+            ask_b = 1 - best_a
+            balance = abs(ask_a - ask_b)
             if balance < best_balance:
                 best_balance = balance
                 sp = m
         outcomes = sp['outcomes']
         strike = float(sp['strike'])
 
-        # Pick primary total: most balanced prices (closest to 50/50)
+        # Pick primary total: most balanced order book prices
         total_data = None
         if ev['totals']:
             ev['totals'].sort(key=lambda m: float(m['strike']))
+            tot_candidates = ev['totals']
+            if len(tot_candidates) > 5:
+                tmid = len(tot_candidates) // 2
+                tot_candidates = tot_candidates[max(0, tmid - 2):tmid + 3]
+            tot_books = {}
+            def _fetch_tot_book(m):
+                try:
+                    return m['marketId'], client.get_book(m['marketId'])
+                except:
+                    return m['marketId'], None
+            with ThreadPoolExecutor(max_workers=5) as ex:
+                for tmid, book in ex.map(lambda m: _fetch_tot_book(m), tot_candidates):
+                    tot_books[tmid] = book
             total_data = ev['totals'][len(ev['totals']) // 2]  # fallback
             best_tb = 999
-            for m in ev['totals']:
+            for m in tot_candidates:
+                book = tot_books.get(m['marketId'])
+                if not book or not book.get('orders'):
+                    continue
                 outs = m.get('outcomes', [])
                 if len(outs) != 2:
                     continue
-                p1 = outs[0].get('price')
-                p2 = outs[1].get('price')
-                if p1 is None or p2 is None:
+                oid_a, oid_b = outs[0]['outcomeId'], outs[1]['outcomeId']
+                orders_a = book['orders'].get(oid_a, [])
+                orders_b = book['orders'].get(oid_b, [])
+                if not orders_a or not orders_b:
                     continue
-                bal = abs(float(p1) - float(p2))
+                best_a = max(float(o['price']) for o in orders_a)
+                best_b = max(float(o['price']) for o in orders_b)
+                bal = abs((1 - best_b) - (1 - best_a))
                 if bal < best_tb:
                     best_tb = bal
                     total_data = m
