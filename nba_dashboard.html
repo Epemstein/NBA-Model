@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v52</title>
+<title>NBA ALGO v53</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -2280,23 +2280,62 @@ function renderOddsSummary() {
 
 // ── Novig Book Modal ────────────────────────────────────────────────────
 let _novigBookGameIdx = null;
-function refreshNovigBook() { if (_novigBookGameIdx != null) openNovigBook(_novigBookGameIdx); }
+let _novigBookCache = {}; // { gameKey: { data, ts } }
+
+function _novigBookTitle(g) {
+  const ps = gVal(g, "proj_spread");
+  const pt = gVal(g, "proj_total");
+  const fav = ps != null ? (ps > 0 ? g.away : g.home) : '?';
+  const favSpread = ps != null ? Math.abs(ps).toFixed(1) : '?';
+  const totalStr = pt != null ? pt.toFixed(1) : '?';
+  return `<img src="${teamLogo(g.away)}" style="width:28px;height:28px;object-fit:contain;vertical-align:middle;margin-right:6px;" onerror="this.style.display='none'" />${g.away} @ ${g.home}<img src="${teamLogo(g.home)}" style="width:28px;height:28px;object-fit:contain;vertical-align:middle;margin-left:6px;" onerror="this.style.display='none'" /> <span style="font-size:12px;color:var(--muted);font-weight:400;margin-left:8px;">(Model: ${fav} -${favSpread}, Total ${totalStr})</span>`;
+}
+
+function refreshNovigBook() {
+  if (_novigBookGameIdx == null) return;
+  const g = STATE.games[_novigBookGameIdx];
+  if (!g) return;
+  const gameKey = `${g.away}@${g.home}`;
+  delete _novigBookCache[gameKey]; // force refresh
+  _fetchNovigBook(_novigBookGameIdx, false);
+}
+
 async function openNovigBook(gameIdx) {
   _novigBookGameIdx = gameIdx;
   const g = STATE.games[gameIdx];
   if (!g) return;
   const gameKey = `${g.away}@${g.home}`;
-  document.getElementById('novig-title').innerHTML = `<img src="${teamLogo(g.away)}" style="width:28px;height:28px;object-fit:contain;vertical-align:middle;margin-right:6px;" onerror="this.style.display='none'" />${g.away} @ ${g.home}<img src="${teamLogo(g.home)}" style="width:28px;height:28px;object-fit:contain;vertical-align:middle;margin-left:6px;" onerror="this.style.display='none'" /> — Novig Order Book`;
-  document.getElementById('novig-body').innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);">Loading order book...</div>';
+
+  document.getElementById('novig-title').innerHTML = _novigBookTitle(g);
   document.getElementById('novig-overlay').classList.add('open');
 
+  // Check cache (10 min TTL)
+  const cached = _novigBookCache[gameKey];
+  if (cached && (Date.now() - cached.ts < 600000)) {
+    renderNovigBook(cached.data, g);
+    return;
+  }
+
+  // Show loading only if no cached data to display
+  if (!cached) {
+    document.getElementById('novig-body').innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);">Loading order book...</div>';
+  }
+  _fetchNovigBook(gameIdx, !!cached);
+}
+
+async function _fetchNovigBook(gameIdx, keepExisting) {
+  const g = STATE.games[gameIdx];
+  const gameKey = `${g.away}@${g.home}`;
   try {
     const r = await fetch(`${RENDER_URL}/novig-book?date=${selectedDate}&game=${gameKey}`);
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || 'Failed');
+    _novigBookCache[gameKey] = { data, ts: Date.now() };
     renderNovigBook(data, g);
   } catch (e) {
-    document.getElementById('novig-body').innerHTML = `<div style="text-align:center;padding:40px;color:var(--red);">Error: ${e.message}</div>`;
+    if (!keepExisting) {
+      document.getElementById('novig-body').innerHTML = `<div style="text-align:center;padding:40px;color:var(--red);">Error: ${e.message}</div>`;
+    }
   }
 }
 
