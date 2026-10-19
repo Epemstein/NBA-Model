@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v75</title>
+<title>NBA ALGO v76</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -2689,7 +2689,7 @@ function renderNovigBook(data, g) {
     const awMLBetData = ml.away_price != null ? JSON.stringify({away:g.away,home:g.home,type:'ml',description:awMLDesc,price:ml.away_price,priceML:awMLStr,fill:ml.away_fill||0,ev:awMLEV||0,strike:0,side:'away',teamColor:awMLColor,teamLogo:teamLogo(g.away)}).replace(/'/g,'&#39;') : '';
     html += `<tr><td>${g.away}</td>`;
     if (ml.away_price != null) {
-      html += `<td style="cursor:pointer;" data-logo="${teamLogo(g.away)}" data-color="${COLORS[g.away]||'#333'}" data-tip="${awTip}" onmouseenter="_priceHoverIn(this)" onmouseleave="_priceHoverOut(this)" onclick='openBetModal(${awMLBetData})'>${fmtProbML(ml.away_price)}</td>`;
+      html += `<td style="cursor:pointer;" data-logo="${teamLogo(g.away)}" data-color="${COLORS[g.away]||'#333'}" data-tip="${awMLTip}" onmouseenter="_priceHoverIn(this)" onmouseleave="_priceHoverOut(this)" onclick='openBetModal(${awMLBetData})'>${fmtProbML(ml.away_price)}</td>`;
     } else {
       html += `<td>—</td>`;
     }
@@ -2708,7 +2708,7 @@ function renderNovigBook(data, g) {
     const hwMLBetData = ml.home_price != null ? JSON.stringify({away:g.away,home:g.home,type:'ml',description:hwMLDesc,price:ml.home_price,priceML:hwMLStr,fill:ml.home_fill||0,ev:hwMLEV||0,strike:0,side:'home',teamColor:hwMLColor,teamLogo:teamLogo(g.home)}).replace(/'/g,'&#39;') : '';
     html += `<tr><td>${g.home}</td>`;
     if (ml.home_price != null) {
-      html += `<td style="cursor:pointer;" data-logo="${teamLogo(g.home)}" data-color="${COLORS[g.home]||'#333'}" data-tip="${hwTip}" onmouseenter="_priceHoverIn(this)" onmouseleave="_priceHoverOut(this)" onclick='openBetModal(${hwMLBetData})'>${fmtProbML(ml.home_price)}</td>`;
+      html += `<td style="cursor:pointer;" data-logo="${teamLogo(g.home)}" data-color="${COLORS[g.home]||'#333'}" data-tip="${hwMLTip}" onmouseenter="_priceHoverIn(this)" onmouseleave="_priceHoverOut(this)" onclick='openBetModal(${hwMLBetData})'>${fmtProbML(ml.home_price)}</td>`;
     } else {
       html += `<td>—</td>`;
     }
