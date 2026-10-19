@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v29</title>
+<title>NBA ALGO v30</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1300,6 +1300,8 @@ async function loadSlate() {
     STATE.leagueAvgOrtg = data.league_avg_ortg || 113.1;
     STATE.allTeamRatings = data.all_team_ratings || {};
 
+    // Lineup data (away_starters, home_starters, lineup_status) is already on each game object
+
     if (data.lastUpdatedMs) {
       const d = new Date(data.lastUpdatedMs);
       document.getElementById('last-update').textContent = d.toLocaleTimeString('en-US', {
@@ -1661,7 +1663,11 @@ function _renderInlinePlayersPanel(gameIdx) {
               if (cur === base) return '';
               return cur > base ? 'background:#e8f5e9;' : 'background:#ffebee;';
             }
-            return `<tr style="border-bottom:1px solid #f0f0f0;height:30px;${dimmed}">
+            const startersKey = side === 'away' ? 'away_starters' : 'home_starters';
+            const starters = g[startersKey] || [];
+            const isStarter = p.nba_id && starters.includes(String(p.nba_id));
+            const starterBg = isStarter ? (g.lineup_status === 'verified' ? 'background:#c8e6c9;' : 'background:#fff9c4;') : '';
+            return `<tr style="border-bottom:1px solid #f0f0f0;height:30px;${dimmed}${starterBg}">
             <td style="padding:4px 0;font-family:var(--sans);white-space:nowrap;">
               <div style="display:flex;align-items:center;gap:3px;">
                 <img src="${hs(p.nba_id)}" style="width:22px;height:17px;object-fit:cover;object-position:top;border-radius:2px;background:#e0e0e0;flex-shrink:0;" onerror="this.src='${placeholder}'" />
@@ -3444,8 +3450,12 @@ function setupRealtimeListener() {
         'away_spread_price','away_spread_fill','over_price','over_fill','under_price','under_fill',
         'home_ml_price','home_ml_fill','away_ml_price','away_ml_fill',
         'novig_spread_home_oid','novig_spread_away_oid','novig_total_over_oid','novig_total_under_oid'];
+      const lineupFields = ['away_starters','home_starters','lineup_status'];
       for (let i = 0; i < incoming.length; i++) {
         for (const f of oddsFields) {
+          if (incoming[i][f] !== undefined) STATE.games[i][f] = incoming[i][f];
+        }
+        for (const f of lineupFields) {
           if (incoming[i][f] !== undefined) STATE.games[i][f] = incoming[i][f];
         }
       }

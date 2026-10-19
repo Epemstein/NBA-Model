@@ -970,6 +970,243 @@ def get_baselines(team):
     return {}
 
 
+def fetch_lineups(target_date, darko, player_minutes):
+    """Fetch projected/verified starting lineups from Basketball Monster.
+    Parses the HTML tables on nbalineups.aspx to extract starters per game.
+    Maps BM player names to NBA IDs using norm_name() matching against darko/player_minutes.
+    Returns dict: {'BOS@DET': {'away_starters': [...], 'home_starters': [...], 'status': 'projected'|'verified'}, ...}
+    """
+    url = 'https://basketballmonster.com/nbalineups.aspx'
+    try:
+        r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=20)
+        r.raise_for_status()
+        html = r.text
+    except Exception as e:
+        print(f'Lineups fetch failed: {e}')
+        return {}
+
+    # BM team abbreviation mapping (BM uses some non-standard abbreviations)
+    BM_ABR_MAP = {
+        'GS': 'GSW', 'SA': 'SAS', 'NY': 'NYK', 'NO': 'NOP', 'PHO': 'PHX',
+        'WSH': 'WAS', 'CHA': 'CHA', 'BKN': 'BKN', 'BK': 'BKN',
+        'UTAH': 'UTA', 'UT': 'UTA',
+    }
+
+    def _resolve_nba_id(name_str):
+        """Resolve a BM player name to an NBA ID using darko and player_minutes."""
+        nn = norm_name(name_str)
+        # Try darko first (has nba_id)
+        dk = darko.get(nn)
+        if dk and dk.get('nba_id'):
+            return dk['nba_id']
+        # Try player_minutes
+        pm = player_minutes.get(nn)
+        if pm and pm.get('nba_id'):
+            return pm['nba_id']
+        return ''
+
+    def _normalize_bm_team(team_str):
+        """Normalize a BM team abbreviation to our standard."""
+        t = team_str.strip().upper()
+        return BM_ABR_MAP.get(t, t)
+
+    lineups = {}
+
+    # Parse lineup tables. BM structure has game sections with team matchups.
+    # Look for patterns like "TeamA @ TeamB" or "TeamA vs TeamB" in headers,
+    # then 5 starter rows per team.
+
+    # Strategy: find all lineup table sections using regex
+    # Each game section has an away team and home team with their starters
+
+    # Look for game header patterns and lineup rows
+    # BM typically has sections with team names and player rows in tables
+
+    # Try to find game sections - BM uses div/table sections per game
+    # Pattern: look for team abbreviation pairs and player names near them
+
+    # First, try to extract game blocks separated by matchup headers
+    # BM format: "AWAY @ HOME" or team logos/names, then starter tables
+
+    # Look for lineup container divs or tables
+    game_blocks = re.split(r'<div[^>]*class="[^"]*lineup-game[^"]*"[^>]*>', html)
+    if len(game_blocks) <= 1:
+        # Try alternative split patterns
+        game_blocks = re.split(r'<div[^>]*class="[^"]*game-card[^"]*"[^>]*>', html)
+    if len(game_blocks) <= 1:
+        # Try splitting on matchup header patterns (e.g., "BOS @ DET")
+        game_blocks = re.split(r'<tr[^>]*class="[^"]*lineup-header[^"]*"[^>]*>', html)
+
+    # Alternative approach: find all matchup patterns and extract surrounding player data
+    # Look for "TeamAbbr @ TeamAbbr" or similar matchup indicators
+    matchup_pattern = re.compile(
+        r'([A-Z]{2,4})\s*[@]\s*([A-Z]{2,4})',
+        re.IGNORECASE
+    )
+
+    # Find all tables with player lineup data
+    # BM typically puts starters in table rows with player names as links
+    # Try a comprehensive approach: find all <table> blocks and parse them
+
+    # Look for the lineup data in a structured way
+    # Each game has: away team starters (5 players) and home team starters (5 players)
+
+    # Find lineup sections by looking for team-pair patterns in the HTML
+    # Pattern: two team names/abbreviations close together, followed by player lists
+
+    # Try to find lineup containers with team names
+    # BM pages often have: <span class="team-name">BOS</span> ... player rows
+
+    # Simplified approach: find all player name links and their associated team context
+    # BM links players like: <a href="...playerid=XXXX">Player Name</a>
+
+    # Extract all lineup sections using a broad pattern
+    # Look for sections that contain position indicators (PG, SG, SF, PF, C)
+    pos_section_pattern = re.compile(
+        r'(PG|SG|SF|PF|C)\s*</(?:td|th|div|span)[^>]*>\s*(?:<[^>]*>)*\s*'
+        r'<a[^>]*>([^<]+)</a>',
+        re.IGNORECASE
+    )
+
+    # Find all team sections with their starters
+    # BM structure: each game has two lineup tables (away/home)
+    # Each table has 5 rows for PG/SG/SF/PF/C with player names
+
+    # Let's try a different approach: find all instances of team abbreviations
+    # followed by 5 position+player pairs
+
+    # Extract all player-link entries with their context
+    player_links = re.findall(
+        r'<a[^>]*href="[^"]*playerid[^"]*"[^>]*>([^<]+)</a>',
+        html, re.IGNORECASE
+    )
+
+    # Find team abbreviations near lineup sections
+    # BM uses spans or divs with team abbreviations
+    team_spans = re.findall(
+        r'<(?:span|div|td)[^>]*>\s*([A-Z]{2,4})\s*</(?:span|div|td)>',
+        html
+    )
+
+    # Most reliable: parse the structured lineup tables directly
+    # BM generates ASP.NET markup with predictable IDs
+
+    # Look for the main lineup container
+    # Try to find game sections with "Projected" or "Verified" labels
+    status_matches = re.findall(
+        r'(Projected|Verified)\s*(?:Lineup|Starting)',
+        html, re.IGNORECASE
+    )
+    default_status = 'projected'
+    if status_matches:
+        # Use the most common status found
+        verified_count = sum(1 for s in status_matches if s.lower() == 'verified')
+        if verified_count > len(status_matches) / 2:
+            default_status = 'verified'
+
+    # Final approach: parse all tables looking for the lineup structure
+    # Each lineup table has rows with: Position | Player Name | additional info
+    # Group them by nearby team abbreviations
+
+    # Find all table rows with position and player name
+    lineup_rows = re.findall(
+        r'<tr[^>]*>\s*<td[^>]*>\s*(?:<[^>]*>)*\s*(PG|SG|SF|PF|C)\s*(?:</[^>]*>)*\s*</td>'
+        r'\s*<td[^>]*>\s*(?:<[^>]*>)*\s*(?:<a[^>]*>)?([^<]+)(?:</a>)?\s*(?:</[^>]*>)*\s*</td>',
+        html, re.IGNORECASE
+    )
+
+    if not lineup_rows and not player_links:
+        print('Lineups: could not parse BM page structure')
+        # Try Firestore cache
+        if db:
+            try:
+                snap = db.collection('nba_lineups').document(target_date).get()
+                if snap.exists:
+                    data = snap.to_dict()
+                    lineups = {k: v for k, v in data.items() if k != 'ts' and k != '_ts'}
+                    print(f'Lineups loaded from cache ({len(lineups)} games)')
+                    return lineups
+            except Exception as e:
+                print(f'Lineups cache miss: {e}')
+        return {}
+
+    # If we found structured lineup rows, group them into games
+    if lineup_rows:
+        # Group into sets of 5 (one team's lineup)
+        teams_lineups = []
+        current_team_players = []
+        for pos, name in lineup_rows:
+            current_team_players.append((pos.upper(), name.strip()))
+            if len(current_team_players) == 5:
+                teams_lineups.append(current_team_players)
+                current_team_players = []
+        if current_team_players:
+            teams_lineups.append(current_team_players)
+
+        # Pair consecutive team lineups as away/home
+        # We need to find the team abbreviations associated with each lineup
+        # Search for team abbreviations near each lineup block in the HTML
+        for i in range(0, len(teams_lineups) - 1, 2):
+            away_players = teams_lineups[i]
+            home_players = teams_lineups[i + 1] if i + 1 < len(teams_lineups) else []
+
+            away_ids = [_resolve_nba_id(name) for _, name in away_players]
+            home_ids = [_resolve_nba_id(name) for _, name in home_players]
+
+            # Try to determine teams from player team assignments
+            away_team = None
+            home_team = None
+            for _, name in away_players:
+                nn = norm_name(name)
+                pm = player_minutes.get(nn)
+                if pm:
+                    away_team = pm['team_abr']
+                    break
+            for _, name in home_players:
+                nn = norm_name(name)
+                pm = player_minutes.get(nn)
+                if pm:
+                    home_team = pm['team_abr']
+                    break
+
+            if away_team and home_team:
+                key = f'{away_team}@{home_team}'
+                lineups[key] = {
+                    'away_starters': [id for id in away_ids if id],
+                    'home_starters': [id for id in home_ids if id],
+                    'status': default_status,
+                }
+                print(f'  Lineup: {key} ({len([id for id in away_ids if id])}v{len([id for id in home_ids if id])} starters)')
+
+    if not lineups:
+        print('Lineups: parsed HTML but could not match any games')
+        # Try Firestore cache
+        if db:
+            try:
+                snap = db.collection('nba_lineups').document(target_date).get()
+                if snap.exists:
+                    data = snap.to_dict()
+                    lineups = {k: v for k, v in data.items() if k != 'ts' and k != '_ts'}
+                    print(f'Lineups loaded from cache ({len(lineups)} games)')
+                    return lineups
+            except Exception as e:
+                print(f'Lineups cache miss: {e}')
+        return {}
+
+    print(f'Lineups: {len(lineups)} games parsed')
+
+    # Cache to Firestore
+    if db and lineups:
+        try:
+            cache_doc = dict(lineups)
+            cache_doc['_ts'] = int(time.time())
+            db.collection('nba_lineups').document(target_date).set(cache_doc)
+        except Exception as e:
+            print(f'Lineups cache write failed: {e}')
+
+    return lineups
+
+
 def get_game_overrides(date, away, home, team):
     """Fetch game-specific minute overrides for a team in a specific game.
     Returns dict: {player_name_lower: minutes}
@@ -1181,6 +1418,22 @@ def run(override_date=None):
         return
 
     # Overrides are now applied per-team per-game below (baseline + game-level)
+
+    # Fetch projected lineups from Basketball Monster
+    lineups = {}
+    try:
+        lineups = fetch_lineups(date, darko, player_minutes)
+    except Exception as e:
+        print(f'WARNING: Lineups fetch failed ({e}), skipping')
+
+    # Attach lineup data to games
+    for gm in games:
+        key = f'{gm["away"]}@{gm["home"]}'
+        lu = lineups.get(key, {})
+        if lu:
+            gm['away_starters'] = lu.get('away_starters', [])
+            gm['home_starters'] = lu.get('home_starters', [])
+            gm['lineup_status'] = lu.get('status', 'projected')
 
     # 2. Fetch odds — try Novig first, fall back to The Odds API
     novig_key_id = os.environ.get('NOVIG_KEY_ID', '')
