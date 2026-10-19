@@ -513,9 +513,7 @@ def get_novig_all_lines(client, target_date, game_key):
     total_markets = sorted([m for m in totals_raw if m['eventId'] == target_eid], key=lambda x: float(x['strike']))
     money_market = next((m for m in moneys_raw if m['eventId'] == target_eid), None)
 
-    # No limit — popup shows all lines, parallel fetches keep it fast
-
-    # Fetch all order books in parallel
+    # Fetch all order books in parallel, then trim to 9 centered on highest liquidity
     from concurrent.futures import ThreadPoolExecutor
     all_markets = spread_markets + total_markets + ([money_market] if money_market else [])
     market_ids = [m['marketId'] for m in all_markets]
@@ -582,6 +580,30 @@ def get_novig_all_lines(client, target_date, game_key):
             'over_price': over_price, 'over_fill': over_fill,
             'under_price': under_price, 'under_fill': under_fill,
         })
+
+    # Trim to 9 lines centered on highest liquidity
+    def _trim_centered(lines, fill_key_a, fill_key_b, n=9):
+        if len(lines) <= n:
+            return lines
+        # Find highest liquidity line
+        best_idx = 0
+        best_liq = -1
+        for i, l in enumerate(lines):
+            total = (l.get(fill_key_a) or 0) + (l.get(fill_key_b) or 0)
+            if total > best_liq:
+                best_liq = total
+                best_idx = i
+        # Take 4 on each side of best
+        half = n // 2
+        start = max(0, best_idx - half)
+        end = start + n
+        if end > len(lines):
+            end = len(lines)
+            start = max(0, end - n)
+        return lines[start:end]
+
+    spreads_out = _trim_centered(spreads_out, 'away_fill', 'home_fill')
+    totals_out = _trim_centered(totals_out, 'over_fill', 'under_fill')
 
     # Process moneyline
     money_out = None
