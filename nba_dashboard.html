@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v47</title>
+<title>NBA ALGO v48</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1997,7 +1997,7 @@ function _inlineSave(gameIdx, side) {
 // ── Odds Summary Sidebar ────────────────────────────────────────────────
 let _oddsTab = 'spread';
 
-const RENDER_URL = 'https://nba-model-7qcb.onrender.com';
+const RENDER_URL = location.hostname === 'localhost' ? `http://localhost:${location.port}` : 'https://nba-model-7qcb.onrender.com';
 
 async function loadDateGames() {
   const btn = document.getElementById('load-games-btn');
@@ -2352,7 +2352,7 @@ function renderNovigBook(data, g) {
       const isPrimary = g.book_spread != null && Math.abs(s.strike - g.book_spread) < 0.01;
       const rowStyle = isPrimary ? 'background:#f0f7ff;font-weight:600;' : '';
       html += `<tr style="${rowStyle}">`;
-      html += `<td>${g.home} ${s.strike > 0 ? '+' : ''}${s.strike.toFixed(1)}</td>`;
+      html += `<td>${evSide === g.away ? g.away + ' ' + fmtSpread(-s.strike) : g.home + ' ' + fmtSpread(s.strike)}</td>`;
       html += `<td>${s.away_price != null ? fmtProbML(s.away_price) : '—'}</td>`;
       html += `<td style="color:var(--green);">${fmtFill(s.away_fill)}</td>`;
       html += `<td>${s.home_price != null ? fmtProbML(s.home_price) : '—'}</td>`;
