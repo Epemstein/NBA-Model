@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v21</title>
+<title>NBA ALGO v22</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -499,6 +499,7 @@ input[type=number] { -moz-appearance: textfield; }
       <button class="rating-toggle active" data-rating="darko" onclick="switchRating('darko')" style="font-size:10px;padding:3px 8px;border:1px solid #555;border-radius:3px;cursor:pointer;background:#333;color:#fff;font-weight:600;">DARKO</button>
       <button class="rating-toggle" data-rating="lebron" onclick="switchRating('lebron')" style="font-size:10px;padding:3px 8px;border:1px solid #555;border-radius:3px;cursor:pointer;background:transparent;color:#888;">LEBRON</button>
       <button class="rating-toggle" data-rating="epm" onclick="switchRating('epm')" style="font-size:10px;padding:3px 8px;border:1px solid #555;border-radius:3px;cursor:pointer;background:transparent;color:#888;">EPM</button>
+      <button class="rating-toggle" data-rating="model" onclick="switchRating('model')" style="font-size:10px;padding:3px 8px;border:1px solid #555;border-radius:3px;cursor:pointer;background:transparent;color:#c090ff;">MODEL</button>
     </div>
     <div class="hpill">LAST UPDATE <strong id="last-update">—</strong></div>
     <div id="hdr-user" style="display:none;align-items:center;gap:6px;">
@@ -785,6 +786,19 @@ input[type=number] { -moz-appearance: textfield; }
           <tbody id="standings-body-epm"></tbody>
         </table>
       </div>
+      <div class="sw" style="max-height:800px;flex:1;min-width:320px;">
+        <div style="font-size:11px;font-weight:700;text-align:center;padding:4px;background:#f0e8ff;border-bottom:2px solid #c090ff;">MODEL</div>
+        <table class="dt" style="font-size:12px;">
+          <thead><tr>
+            <th style="width:24px;cursor:pointer;" onclick="sortStandingsTable('model','rank')">#</th>
+            <th style="cursor:pointer;width:100px;" onclick="sortStandingsTable('model','team')">Team</th>
+            <th style="text-align:right;width:55px;cursor:pointer;" onclick="sortStandingsTable('model','total')">Total</th>
+            <th style="text-align:right;width:55px;cursor:pointer;" onclick="sortStandingsTable('model','off')">OFF</th>
+            <th style="text-align:right;width:55px;cursor:pointer;" onclick="sortStandingsTable('model','def')">DEF</th>
+          </tr></thead>
+          <tbody id="standings-body-model"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 </div>
@@ -823,6 +837,13 @@ input[type=number] { -moz-appearance: textfield; }
       <div class="fg"><label class="fl">Min Total Edge (pts)</label><input id="set-total-edge" type="number" value="2.0" step="0.5"></div>
       <div class="fg"><label class="fl">Home Court Advantage</label><input id="set-hca" type="number" value="1.5" step="0.5"></div>
       <div class="fg"><label class="fl">Pace Multiplier</label><input id="set-pace-mult" type="number" value="0.95" step="0.01"></div>
+    </div>
+    <div class="ct" style="margin-top:14px;">MODEL Blend Weights</div>
+    <div style="display:flex;gap:12px;align-items:center;margin-bottom:10px;">
+      <div class="fg" style="flex:1;"><label class="fl">DARKO</label><input id="set-blend-darko" type="number" value="34" min="0" max="100" step="1" style="width:60px;"></div>
+      <div class="fg" style="flex:1;"><label class="fl">LEBRON</label><input id="set-blend-lebron" type="number" value="33" min="0" max="100" step="1" style="width:60px;"></div>
+      <div class="fg" style="flex:1;"><label class="fl">EPM</label><input id="set-blend-epm" type="number" value="33" min="0" max="100" step="1" style="width:60px;"></div>
+      <div style="font-size:10px;color:var(--muted);white-space:nowrap;" id="blend-sum-label">Sum: 100</div>
     </div>
     <button class="btn bp" onclick="saveSettings()">Save Settings</button>
   </div>
@@ -953,7 +974,7 @@ let STATE = {
   history: JSON.parse(localStorage.getItem('nba_history') || '[]'),
   overrides: JSON.parse(localStorage.getItem('nba_overrides') || '{}'),
   bankroll: JSON.parse(localStorage.getItem('nba_bankroll') || '{"start":10000,"kelly":0.5,"maxPct":3}'),
-  settings: JSON.parse(localStorage.getItem('nba_settings') || '{"spreadEdge":2,"totalEdge":2,"hca":1.5,"paceMult":0.95}'),
+  settings: JSON.parse(localStorage.getItem('nba_settings') || '{"spreadEdge":2,"totalEdge":2,"hca":1.5,"paceMult":0.95,"blendDarko":34,"blendLebron":33,"blendEpm":33}'),
   teamRatings: {},
   leagueAvgPace: 100,
   leagueAvgOrtg: 113.1,
@@ -994,10 +1015,13 @@ let _ratingSource = 'darko';  // 'darko', 'lebron', or 'epm'
 function switchRating(source) {
   _ratingSource = source;
   document.querySelectorAll('.rating-toggle').forEach(b => {
-    b.style.background = 'transparent'; b.style.color = '#888';
+    b.style.background = 'transparent'; b.style.color = b.dataset.rating === 'model' ? '#c090ff' : '#888'; b.style.fontWeight = '';
   });
   const active = document.querySelector(`.rating-toggle[data-rating="${source}"]`);
-  if (active) { active.style.background = '#333'; active.style.color = '#fff'; }
+  if (active) {
+    if (source === 'model') { active.style.background = '#6b3fa0'; active.style.color = '#fff'; active.style.fontWeight = '600'; }
+    else { active.style.background = '#333'; active.style.color = '#fff'; active.style.fontWeight = '600'; }
+  }
   buildRatingLookups(); recomputeProjections();
   // Preserve open player/math panels
   const openPlayers = new Set();
@@ -1020,7 +1044,34 @@ function switchRating(source) {
   if (_standingsData.length) renderStandings();
 }
 
+// Blend helper: returns {off, def, dpm} for MODEL mode with renormalized weights
+function blendPlayerOffDef(p) {
+  const s = STATE.settings;
+  const wd = (s.blendDarko ?? 34) / 100, wl = (s.blendLebron ?? 33) / 100, we = (s.blendEpm ?? 33) / 100;
+  const dk = getDarko(p);
+  const dkO = dk.o_dpm || 0, dkD = dk.d_dpm || 0;
+  const lbO = p.lb_o_dpm, lbD = p.lb_d_dpm;
+  const epO = p.epm_o, epD = p.epm_d;
+
+  let oSum = dkO * wd, oW = wd, dSum = dkD * wd, dW = wd;
+  if (lbO != null && lbD != null) { oSum += lbO * wl; oW += wl; dSum += lbD * wl; dW += wl; }
+  if (epO != null && epD != null) { oSum += epO * we; oW += we; dSum += epD * we; dW += we; }
+  const off = oW > 0 ? oSum / oW : 0;
+  const def = dW > 0 ? dSum / dW : 0;
+  return { off, def, dpm: off + def };
+}
+
+// Returns the player's off/def for the current rating source
+function getPlayerOffDef(p) {
+  if (_ratingSource === 'model') return blendPlayerOffDef(p);
+  if (_ratingSource === 'epm' && p.epm_o != null && p.epm_d != null) return { off: p.epm_o, def: p.epm_d, dpm: p.epm };
+  if (_ratingSource === 'lebron' && p.lb_o_dpm != null && p.lb_d_dpm != null) return { off: p.lb_o_dpm, def: p.lb_d_dpm, dpm: getLbDpm(p) };
+  const dk = getDarko(p);
+  return { off: dk.o_dpm || 0, def: dk.d_dpm || 0, dpm: dk.dpm || 0 };
+}
+
 function pDpm(p) {
+  if (_ratingSource === 'model') return blendPlayerOffDef(p).dpm;
   if (_ratingSource === 'epm') { const ep = p.epm; return ep != null ? ep : getDarko(p).dpm; }
   if (_ratingSource === 'lebron') { const lb = getLbDpm(p); return lb != null ? lb : getDarko(p).dpm; }
   return getDarko(p).dpm;
@@ -1080,7 +1131,11 @@ function recomputeProjections() {
       let off = 0, def = 0;
       for (const p of players) {
         const w = ((p.min || 0) / 48) * scale;
-        if (_ratingSource === 'epm' && p.epm_o != null && p.epm_d != null) {
+        if (_ratingSource === 'model') {
+          const bl = blendPlayerOffDef(p);
+          off += bl.off * w;
+          def += bl.def * w;
+        } else if (_ratingSource === 'epm' && p.epm_o != null && p.epm_d != null) {
           off += (p.epm_o || 0) * w;
           def += (p.epm_d || 0) * w;
         } else if (_ratingSource === 'lebron' && p.lb_o_dpm != null && p.lb_d_dpm != null) {
@@ -2035,9 +2090,16 @@ function saveSettings() {
     totalEdge: parseFloat(document.getElementById('set-total-edge').value) || 2,
     hca: parseFloat(document.getElementById('set-hca').value) || 1.5,
     paceMult: parseFloat(document.getElementById('set-pace-mult').value) || 0.95,
+    blendDarko: parseInt(document.getElementById('set-blend-darko').value) || 34,
+    blendLebron: parseInt(document.getElementById('set-blend-lebron').value) || 33,
+    blendEpm: parseInt(document.getElementById('set-blend-epm').value) || 33,
   };
   localStorage.setItem('nba_settings', JSON.stringify(STATE.settings));
   logActivity(`Settings: pace=${STATE.settings.paceMult}, HCA=${STATE.settings.hca}, edge=${STATE.settings.spreadEdge}`);
+  const blendSum = STATE.settings.blendDarko + STATE.settings.blendLebron + STATE.settings.blendEpm;
+  const sumLabel = document.getElementById('blend-sum-label');
+  if (sumLabel) sumLabel.textContent = `Sum: ${blendSum}`;
+  if (_ratingSource === 'model') { buildRatingLookups(); recomputeProjections(); }
   renderGames();
   renderOddsSummary();
   updateStrip();
@@ -2048,6 +2110,12 @@ function loadSettingsUI() {
   document.getElementById('set-total-edge').value = STATE.settings.totalEdge;
   document.getElementById('set-hca').value = STATE.settings.hca;
   document.getElementById('set-pace-mult').value = STATE.settings.paceMult;
+  document.getElementById('set-blend-darko').value = STATE.settings.blendDarko ?? 34;
+  document.getElementById('set-blend-lebron').value = STATE.settings.blendLebron ?? 33;
+  document.getElementById('set-blend-epm').value = STATE.settings.blendEpm ?? 33;
+  const blendSum = (STATE.settings.blendDarko ?? 34) + (STATE.settings.blendLebron ?? 33) + (STATE.settings.blendEpm ?? 33);
+  const sumLabel = document.getElementById('blend-sum-label');
+  if (sumLabel) sumLabel.textContent = `Sum: ${blendSum}`;
 }
 
 // ── Logo/headshot helpers ────────────────────────────────────────────────
@@ -2149,7 +2217,11 @@ function calcTeamRating(players) {
   let off = 0, def = 0;
   for (const p of players) {
     const w = ((p.pg+p.sg+p.sf+p.pf+p.c) / 48) * scale;
-    if (_ratingSource === 'epm' && p.epm_o != null && p.epm_d != null) {
+    if (_ratingSource === 'model') {
+      const bl = blendPlayerOffDef(p);
+      off += bl.off * w;
+      def += bl.def * w;
+    } else if (_ratingSource === 'epm' && p.epm_o != null && p.epm_d != null) {
       off += (p.epm_o||0) * w;
       def += (p.epm_d||0) * w;
     } else if (_ratingSource === 'lebron' && p.lb_o_dpm != null && p.lb_d_dpm != null) {
@@ -2175,6 +2247,18 @@ function renderTeamBaseline() {
   const atr = STATE.allTeamRatings || {};
   // Recompute all ratings with current toggle for accurate ranking
   const allRatings = Object.entries(atr).map(([t, r]) => {
+    if (_ratingSource === 'model') {
+      // Blend the three sources using configured weights
+      const s = STATE.settings;
+      const wd = (s.blendDarko ?? 34) / 100, wl = (s.blendLebron ?? 33) / 100, we = (s.blendEpm ?? 33) / 100;
+      let oSum = (r.off||0)*wd, oW = wd, dSum = (r.def||0)*wd, dW = wd;
+      if (r.lb_off != null) { oSum += r.lb_off*wl; oW += wl; }
+      if (r.lb_def != null) { dSum += r.lb_def*wl; dW += wl; }
+      if (r.epm_off != null) { oSum += r.epm_off*we; oW += we; }
+      if (r.epm_def != null) { dSum += r.epm_def*we; dW += we; }
+      const mOff = oW > 0 ? oSum/oW : 0, mDef = dW > 0 ? dSum/dW : 0;
+      return { team: t, off: mOff, def: mDef, total: mOff + mDef };
+    }
     // Use EPM values if toggled and available
     if (_ratingSource === 'epm' && r.epm_total != null) {
       return { team: t, off: r.epm_off, def: r.epm_def, total: r.epm_total };
@@ -2232,8 +2316,8 @@ function renderTeamBaseline() {
       <td style="text-align:center;padding:4px 2px;"><input type="number" value="${p.sf||''}" min="0" max="48" step="0.5" style="width:44px;text-align:center;font-size:13px;padding:4px 2px;" onchange="updatePosMin(${i},'sf',this.value)" placeholder="0"></td>
       <td style="text-align:center;padding:4px 2px;"><input type="number" value="${p.pf||''}" min="0" max="48" step="0.5" style="width:44px;text-align:center;font-size:13px;padding:4px 2px;" onchange="updatePosMin(${i},'pf',this.value)" placeholder="0"></td>
       <td style="text-align:center;padding:4px 2px;"><input type="number" value="${p.c||''}" min="0" max="48" step="0.5" style="width:44px;text-align:center;font-size:13px;padding:4px 2px;" onchange="updatePosMin(${i},'c',this.value)" placeholder="0"></td>
-      <td style="text-align:right;font-family:var(--mono);font-size:11px;color:${dpmColor(_ratingSource==='epm'&&p.epm_o!=null?p.epm_o:_ratingSource==='lebron'&&p.lb_o_dpm!=null?p.lb_o_dpm:p.o_dpm)};padding:6px 4px;">${fmtDpm(_ratingSource==='epm'&&p.epm_o!=null?p.epm_o:_ratingSource==='lebron'&&p.lb_o_dpm!=null?p.lb_o_dpm:p.o_dpm)}</td>
-      <td style="text-align:right;font-family:var(--mono);font-size:11px;color:${dpmColor(_ratingSource==='epm'&&p.epm_d!=null?p.epm_d:_ratingSource==='lebron'&&p.lb_d_dpm!=null?p.lb_d_dpm:p.d_dpm)};padding:6px 4px;">${fmtDpm(_ratingSource==='epm'&&p.epm_d!=null?p.epm_d:_ratingSource==='lebron'&&p.lb_d_dpm!=null?p.lb_d_dpm:p.d_dpm)}</td>
+      <td style="text-align:right;font-family:var(--mono);font-size:11px;color:${dpmColor(getPlayerOffDef(p).off)};padding:6px 4px;">${fmtDpm(getPlayerOffDef(p).off)}</td>
+      <td style="text-align:right;font-family:var(--mono);font-size:11px;color:${dpmColor(getPlayerOffDef(p).def)};padding:6px 4px;">${fmtDpm(getPlayerOffDef(p).def)}</td>
       <td style="text-align:right;font-family:var(--mono);font-size:11px;font-weight:700;color:${dpmColor(pDpm(p))};padding:6px 4px;">${fmtDpm(pDpm(p))}</td>
     </tr>`;
   }).join('');
@@ -2815,8 +2899,8 @@ function renderAllPlayers() {
       </td>
       <td style="padding:6px 4px;text-align:center;">${logo}<div style="font-size:10px;font-weight:600;">${p.team}</div></td>
       <td style="text-align:right;font-family:var(--mono);color:${dpmColor(pDpm(p))};font-weight:700;font-size:14px;padding:6px 8px;">${fmtDpm(pDpm(p))}</td>
-      <td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--text2);padding:6px 6px;">${fmtDpm(_ratingSource==='epm' && p.epm_o!=null ? p.epm_o : _ratingSource==='lebron' && p.lb_o_dpm!=null ? p.lb_o_dpm : p.o_dpm)}</td>
-      <td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--text2);padding:6px 6px;">${fmtDpm(_ratingSource==='epm' && p.epm_d!=null ? p.epm_d : _ratingSource==='lebron' && p.lb_d_dpm!=null ? p.lb_d_dpm : p.d_dpm)}</td>
+      <td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--text2);padding:6px 6px;">${fmtDpm(getPlayerOffDef(p).off)}</td>
+      <td style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--text2);padding:6px 6px;">${fmtDpm(getPlayerOffDef(p).def)}</td>
       <td style="text-align:right;font-family:var(--mono);font-size:10px;color:var(--muted);padding:6px 4px;">${p.nba_id||''}</td>
     </tr>`;
   }).join('');
@@ -2832,6 +2916,7 @@ let _standingsData = [];
 let _standingsSortDarko = 'total', _standingsDirDarko = -1;
 let _standingsSortLebron = 'total', _standingsDirLebron = -1;
 let _standingsSortEpm = 'total', _standingsDirEpm = -1;
+let _standingsSortModel = 'total', _standingsDirModel = -1;
 let _standingsConf = 'all';
 
 async function loadStandings() {
@@ -2893,11 +2978,19 @@ async function loadStandings() {
       }
     }
 
+    // MODEL blend — blend the three team-level totals (each already has per-player fallback)
+    const sett = STATE.settings;
+    const mwd = (sett.blendDarko ?? 34) / 100, mwl = (sett.blendLebron ?? 33) / 100, mwe = (sett.blendEpm ?? 33) / 100;
+    const mwTotal = mwd + mwl + mwe;
+    const mOffFinal = mwTotal > 0 ? (dOff * mwd + lOff * mwl + eOff * mwe) / mwTotal : dOff;
+    const mDefFinal = mwTotal > 0 ? (dDef * mwd + lDef * mwl + eDef * mwe) / mwTotal : dDef;
+
     return {
       team,
       off: Math.round(dOff*100)/100, def: Math.round(dDef*100)/100, total: Math.round((dOff+dDef)*100)/100,
       lb_off: Math.round(lOff*100)/100, lb_def: Math.round(lDef*100)/100, lb_total: Math.round((lOff+lDef)*100)/100,
       epm_off: Math.round(eOff*100)/100, epm_def: Math.round(eDef*100)/100, epm_total: Math.round((eOff+eDef)*100)/100,
+      model_off: Math.round(mOffFinal*100)/100, model_def: Math.round(mDefFinal*100)/100, model_total: Math.round((mOffFinal+mDefFinal)*100)/100,
     };
   });
 
@@ -2911,6 +3004,9 @@ function sortStandingsTable(source, col) {
   } else if (source === 'epm') {
     if (_standingsSortEpm === col) _standingsDirEpm *= -1;
     else { _standingsSortEpm = col; _standingsDirEpm = col === 'team' ? 1 : -1; }
+  } else if (source === 'model') {
+    if (_standingsSortModel === col) _standingsDirModel *= -1;
+    else { _standingsSortModel = col; _standingsDirModel = col === 'team' ? 1 : -1; }
   } else {
     if (_standingsSortLebron === col) _standingsDirLebron *= -1;
     else { _standingsSortLebron = col; _standingsDirLebron = col === 'team' ? 1 : -1; }
@@ -2977,6 +3073,7 @@ function renderStandings() {
   _renderOneStandingsTable('standings-body-darko', _standingsData, _standingsSortDarko, _standingsDirDarko, 'off', 'def', 'total');
   _renderOneStandingsTable('standings-body-lebron', _standingsData, _standingsSortLebron, _standingsDirLebron, 'lb_off', 'lb_def', 'lb_total');
   _renderOneStandingsTable('standings-body-epm', _standingsData, _standingsSortEpm, _standingsDirEpm, 'epm_off', 'epm_def', 'epm_total');
+  _renderOneStandingsTable('standings-body-model', _standingsData, _standingsSortModel, _standingsDirModel, 'model_off', 'model_def', 'model_total');
 }
 
 // ── Activity Log ────────────────────────────────────────────────────────
