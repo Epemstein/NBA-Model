@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v23</title>
+<title>NBA ALGO v24</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -546,7 +546,7 @@ input[type=number] { -moz-appearance: textfield; }
   <div style="display:flex;gap:12px;align-items:flex-start;">
 
     <!-- Odds Summary Sidebar -->
-    <div class="card" style="min-width:360px;max-width:420px;flex-shrink:0;position:sticky;top:56px;max-height:calc(100vh - 180px);overflow-y:auto;">
+    <div class="card" style="min-width:360px;max-width:620px;flex-shrink:0;position:sticky;top:56px;max-height:calc(100vh - 180px);overflow-y:auto;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
         <div style="display:flex;align-items:center;gap:8px;">
           <div class="ct" style="margin:0;padding:0;border:none;">Odds Summary</div>
@@ -1104,6 +1104,31 @@ function _gameSpreadForSource(g, source) {
   const awProj = (awPP100 / 100 * pace - hca);
   const hwProj = (hwPP100 / 100 * pace + hca);
   return Math.round((awProj - hwProj) * 10) / 10;
+}
+function _gameTotalForSource(g, source) {
+  const avgOrtg = STATE.leagueAvgOrtg || 114.8;
+  const paceMult = STATE.settings?.paceMult || 1.0;
+  const hca = (STATE.settings?.hca || 1.5) / 2;
+  const pace = (g._rawPace || g.matchup_pace || 95) * paceMult;
+  function teamRating(players, src) {
+    const totalRaw = players.reduce((s, p) => s + (p.min || 0) / 48, 0);
+    const scale = totalRaw > 0 ? 5.0 / totalRaw : 0;
+    let off = 0, def = 0;
+    for (const p of players) {
+      const w = ((p.min || 0) / 48) * scale;
+      if (src === 'epm' && p.epm_o != null) { off += p.epm_o * w; def += (p.epm_d||0) * w; }
+      else if (src === 'lebron' && p.lb_o_dpm != null) { off += p.lb_o_dpm * w; def += (p.lb_d_dpm||0) * w; }
+      else { const dk = getDarko(p); off += (dk.o_dpm||0) * w; def += (dk.d_dpm||0) * w; }
+    }
+    return { off, def };
+  }
+  const aw = teamRating(g.away_players || [], source);
+  const hw = teamRating(g.home_players || [], source);
+  const awPP100 = avgOrtg + aw.off - hw.def;
+  const hwPP100 = avgOrtg + hw.off - aw.def;
+  const awProj = (awPP100 / 100 * pace - hca);
+  const hwProj = (hwPP100 / 100 * pace + hca);
+  return Math.round((awProj + hwProj) * 10) / 10;
 }
 
 // ── Client-side projection engine ───────────────────────────────────────
@@ -1820,19 +1845,19 @@ function renderOddsSummary() {
   if (!STATE.games.length) { thead.innerHTML = ''; tbody.innerHTML = ''; return; }
 
   if (_oddsTab === 'spread') {
-    thead.innerHTML = '<tr><th>Game</th><th></th><th>Line</th><th>Model</th><th>Edge</th><th style="font-size:9px;color:var(--muted);">D</th><th style="font-size:9px;color:var(--muted);">L</th><th style="font-size:9px;color:var(--muted);">E</th><th>Price</th><th>Avail</th></tr>';
+    thead.innerHTML = '<tr><th>Game</th><th></th><th>Line</th><th>Model</th><th>Edge</th><th style="font-size:9px;">DARKO</th><th style="font-size:9px;">LEBRON</th><th style="font-size:9px;">EPM</th><th>Price</th><th>Avail</th></tr>';
     let html = '';
     for (const g of STATE.games) {
       const edge = gVal(g,"spread_edge");
       const bk = g.book_spread;
-      // Per-source edges
       const dSprd = _gameSpreadForSource(g, 'darko');
       const lSprd = _gameSpreadForSource(g, 'lebron');
       const eSprd = _gameSpreadForSource(g, 'epm');
       const dEdge = bk != null ? Math.round((dSprd - bk) * 10) / 10 : null;
       const lEdge = bk != null ? Math.round((lSprd - bk) * 10) / 10 : null;
       const eEdge = bk != null ? Math.round((eSprd - bk) * 10) / 10 : null;
-      function miniEdge(e, flip) { if (e == null) return '—'; const v = flip ? -e : e; return `<span style="font-family:var(--mono);font-size:9px;color:${v>0?'var(--green)':'var(--red)'}">${v>0?'+':''}${v.toFixed(1)}</span>`; }
+      // Positive edge = away side, negative = home side. Show only positive per row.
+      function srcEdge(e, isAway) { const v = isAway ? -e : e; return (e != null && v > 0) ? `<span class="edge-chip lo">${v.toFixed(1)}</span>` : ''; }
       const awLogo = `<img src="${teamLogo(g.away)}" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;" onerror="this.style.display='none'" />`;
       const hwLogo = `<img src="${teamLogo(g.home)}" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;" onerror="this.style.display='none'" />`;
       html += `<tr style="border-bottom:none;">
@@ -1843,7 +1868,7 @@ function renderOddsSummary() {
         <td style="font-family:var(--mono);">${bk != null ? fmtSpread(-bk) : '—'}</td>
         <td style="color:var(--accent);font-family:var(--mono);">${gVal(g,"proj_spread") != null ? fmtSpread(-gVal(g,"proj_spread")) : '—'}</td>
         <td>${edge != null && edge > 0 ? `<span class="edge-chip ${edgeClass(edge)}">${edge.toFixed(1)}</span>` : ''}</td>
-        <td>${miniEdge(dEdge, true)}</td><td>${miniEdge(lEdge, true)}</td><td>${miniEdge(eEdge, true)}</td>
+        <td>${srcEdge(dEdge, true)}</td><td>${srcEdge(lEdge, true)}</td><td>${srcEdge(eEdge, true)}</td>
         <td style="color:var(--accent);font-size:10px;">${fmtProbML(g.away_spread_price)}</td>
         <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.away_spread_fill)}</td>
       </tr>`;
@@ -1852,14 +1877,14 @@ function renderOddsSummary() {
         <td style="font-family:var(--mono);font-weight:600;">${bk != null ? fmtSpread(bk) : '—'}</td>
         <td style="color:var(--accent);font-family:var(--mono);font-weight:600;">${gVal(g,"proj_spread") != null ? fmtSpread(gVal(g,"proj_spread")) : '—'}</td>
         <td>${edge != null && edge < 0 ? `<span class="edge-chip ${edgeClass(edge)}">${Math.abs(edge).toFixed(1)}</span>` : ''}</td>
-        <td>${miniEdge(dEdge, false)}</td><td>${miniEdge(lEdge, false)}</td><td>${miniEdge(eEdge, false)}</td>
+        <td>${srcEdge(dEdge, false)}</td><td>${srcEdge(lEdge, false)}</td><td>${srcEdge(eEdge, false)}</td>
         <td style="color:var(--accent);font-size:10px;">${fmtProbML(g.home_spread_price)}</td>
         <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.home_spread_fill)}</td>
       </tr>`;
     }
     tbody.innerHTML = html;
   } else if (_oddsTab === 'ml') {
-    thead.innerHTML = '<tr><th>Game</th><th></th><th>Model</th><th>Book</th><th>Edge</th><th>Win%</th><th>Avail</th></tr>';
+    thead.innerHTML = '<tr><th>Game</th><th></th><th>Model</th><th>Book</th><th>Edge</th><th style="font-size:9px;">DARKO</th><th style="font-size:9px;">LEBRON</th><th style="font-size:9px;">EPM</th><th>Win%</th><th>Avail</th></tr>';
     let html = '';
     for (const g of STATE.games) {
       const awBookProb = g.away_ml_price;
@@ -1875,6 +1900,15 @@ function renderOddsSummary() {
       const awL = `<img src="${teamLogo(g.away)}" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;" onerror="this.style.display='none'" />`;
       const hwL = `<img src="${teamLogo(g.home)}" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;" onerror="this.style.display='none'" />`;
 
+      function mlSrcEdge(src, isAway) {
+        const sp = _gameSpreadForSource(g, src);
+        const prob = spreadToWinProb(isAway ? -sp : sp);
+        const bookProb = isAway ? awBookProb : hwBookProb;
+        if (prob == null || bookProb == null) return '';
+        const e = Math.round((prob - bookProb) * 1000) / 10;
+        return e > 0 ? `<span class="edge-chip lo">${e.toFixed(1)}%</span>` : '';
+      }
+
       html += `<tr style="border-bottom:none;">
         <td rowspan="2" style="font-family:var(--sans);font-weight:600;font-size:10px;vertical-align:middle;border-bottom:2px solid var(--border);white-space:nowrap;">
           ${g.away} @<br>${g.home}<br><span style="color:var(--muted);font-weight:400;font-size:9px;">${g.game_time_et || ''}</span>
@@ -1883,6 +1917,7 @@ function renderOddsSummary() {
         <td style="font-family:var(--mono);">${awModelML}</td>
         <td style="font-family:var(--mono);color:var(--accent);">${awBookML}</td>
         <td>${awEdge != null && awEdge > 0 ? `<span class="edge-chip ${awEdge>=5?'hi':awEdge>=2?'mid':'lo'}">${awEdge.toFixed(1)}%</span>` : ''}</td>
+        <td>${mlSrcEdge('darko',true)}</td><td>${mlSrcEdge('lebron',true)}</td><td>${mlSrcEdge('epm',true)}</td>
         <td style="font-size:10px;color:var(--text2);">${awModelProb != null ? (awModelProb*100).toFixed(0)+'%' : '—'}</td>
         <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.away_ml_fill)}</td>
       </tr>`;
@@ -1891,18 +1926,28 @@ function renderOddsSummary() {
         <td style="font-family:var(--mono);font-weight:600;">${hwModelML}</td>
         <td style="font-family:var(--mono);color:var(--accent);font-weight:600;">${hwBookML}</td>
         <td>${hwEdge != null && hwEdge > 0 ? `<span class="edge-chip ${hwEdge>=5?'hi':hwEdge>=2?'mid':'lo'}">${hwEdge.toFixed(1)}%</span>` : ''}</td>
+        <td>${mlSrcEdge('darko',false)}</td><td>${mlSrcEdge('lebron',false)}</td><td>${mlSrcEdge('epm',false)}</td>
         <td style="font-size:10px;color:var(--text2);font-weight:600;">${hwModelProb != null ? (hwModelProb*100).toFixed(0)+'%' : '—'}</td>
         <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.home_ml_fill)}</td>
       </tr>`;
     }
     tbody.innerHTML = html;
   } else {
-    thead.innerHTML = '<tr><th>Game</th><th>Side</th><th>Line</th><th>Model</th><th>Edge</th><th>Price</th><th>Avail</th></tr>';
+    thead.innerHTML = '<tr><th>Game</th><th>Side</th><th>Line</th><th>Model</th><th>Edge</th><th style="font-size:9px;">DARKO</th><th style="font-size:9px;">LEBRON</th><th style="font-size:9px;">EPM</th><th>Price</th><th>Avail</th></tr>';
     let html = '';
     for (const g of STATE.games) {
       const edge = gVal(g,"total_edge");
       const awL = `<img src="${teamLogo(g.away)}" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;" onerror="this.style.display='none'" />`;
       const hwL = `<img src="${teamLogo(g.home)}" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;" onerror="this.style.display='none'" />`;
+      const dTot = _gameTotalForSource(g, 'darko');
+      const lTot = _gameTotalForSource(g, 'lebron');
+      const eTot = _gameTotalForSource(g, 'epm');
+      const bkTot = g.book_total;
+      const dTotEdge = bkTot != null && dTot != null ? Math.round((dTot - bkTot) * 10) / 10 : null;
+      const lTotEdge = bkTot != null && lTot != null ? Math.round((lTot - bkTot) * 10) / 10 : null;
+      const eTotEdge = bkTot != null && eTot != null ? Math.round((eTot - bkTot) * 10) / 10 : null;
+      function totSrcOver(e) { return e != null && e > 0 ? `<span class="edge-chip lo">${e.toFixed(1)}</span>` : ''; }
+      function totSrcUnder(e) { return e != null && e < 0 ? `<span class="edge-chip lo">${Math.abs(e).toFixed(1)}</span>` : ''; }
       html += `<tr style="border-bottom:none;">
         <td rowspan="2" style="font-family:var(--sans);font-weight:600;font-size:10px;vertical-align:middle;border-bottom:2px solid var(--border);white-space:nowrap;">
           ${g.away} @<br>${g.home}<br><span style="color:var(--muted);font-weight:400;font-size:9px;">${g.game_time_et || ''}</span>
@@ -1911,6 +1956,7 @@ function renderOddsSummary() {
         <td style="font-family:var(--mono);">${g.book_total != null ? g.book_total : '—'}</td>
         <td style="color:var(--accent);font-family:var(--mono);">${gVal(g,"proj_total") != null ? gVal(g,"proj_total").toFixed(1) : '—'}</td>
         <td>${edge != null && edge > 0 ? `<span class="edge-chip ${edgeClass(edge)}">${edge.toFixed(1)}</span>` : ''}</td>
+        <td>${totSrcOver(dTotEdge)}</td><td>${totSrcOver(lTotEdge)}</td><td>${totSrcOver(eTotEdge)}</td>
         <td style="color:var(--accent);font-size:10px;">${fmtProbML(g.over_price)}</td>
         <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.over_fill)}</td>
       </tr>`;
@@ -1919,6 +1965,7 @@ function renderOddsSummary() {
         <td style="font-family:var(--mono);font-weight:600;">${g.book_total != null ? g.book_total : '—'}</td>
         <td style="color:var(--accent);font-family:var(--mono);font-weight:600;">${gVal(g,"proj_total") != null ? gVal(g,"proj_total").toFixed(1) : '—'}</td>
         <td>${edge != null && edge < 0 ? `<span class="edge-chip ${edgeClass(edge)}">${Math.abs(edge).toFixed(1)}</span>` : ''}</td>
+        <td>${totSrcUnder(dTotEdge)}</td><td>${totSrcUnder(lTotEdge)}</td><td>${totSrcUnder(eTotEdge)}</td>
         <td style="color:var(--accent);font-size:10px;">${fmtProbML(g.under_price)}</td>
         <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.under_fill)}</td>
       </tr>`;
