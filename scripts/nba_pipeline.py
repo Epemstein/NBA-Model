@@ -1012,10 +1012,10 @@ def fetch_lineups(target_date, darko, player_minutes):
 
     lineups = {}
 
-    # Detect status: "Projected Lineup" or "Verified Lineup"
+    # Default to projected — BM page legend contains both "Projected" and "Verified"
+    # text which gives false positives. Per-game status detection would require
+    # checking each game's background color (beige=projected, yellow=verified).
     default_status = 'projected'
-    if re.search(r'Verified\s+Lineup', html, re.IGNORECASE):
-        default_status = 'verified'
 
     # Find game matchup headers: "AWAY @ HOME"
     game_headers = re.findall(r'([A-Z]{2,4})\s*@\s*([A-Z]{2,4})\s+\d', html)
