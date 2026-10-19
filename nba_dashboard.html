@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v61</title>
+<title>NBA ALGO v62</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -2398,6 +2398,7 @@ function _evCell(ev) {
 
 function renderNovigBook(data, g) {
   const body = document.getElementById('novig-body');
+  const _spreadEdgeTeam = (gVal(g,'spread_edge')||0) > 0 ? g.away : g.home;
   let html = '<div class="novig-tables">';
 
   // Spreads table
@@ -2418,7 +2419,6 @@ function renderNovigBook(data, g) {
     });
 
     html += '<table><thead><tr><th>Strike</th><th>' + g.away + ' Price</th><th>' + g.away + ' Fill</th><th>' + g.home + ' Price</th><th>' + g.home + ' Fill</th><th>EV%</th></tr></thead><tbody>';
-    const _spreadEdgeTeam = (gVal(g,'spread_edge')||0) > 0 ? g.away : g.home;
     spreadRows.forEach((r, idx) => {
       const s = r.s;
       const evSideTeam = r.evSide === 'home' ? g.home : g.away;
