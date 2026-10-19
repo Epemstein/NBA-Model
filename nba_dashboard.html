@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v32</title>
+<title>NBA ALGO v33</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1510,28 +1510,26 @@ function _loadRosterData(team, gameIdx, side) {
   const g = STATE.games[gameIdx];
   const overKey = `${selectedDate}_${g.away}_${g.home}_${team}`;
   const cached = _inlineRosterCache[_inlineCacheKey(team)];
-  const needFull = !cached || (Date.now() - cached.ts > 300000); // 5 min TTL
+  const needRoster = !cached || !cached.roster || !cached.roster.length;
+  const needBaseline = !cached || !cached._blLoaded; // separate flag for baselines
 
-  const rosterP = needFull
+  const rosterP = needRoster
     ? fbDb.collection('nba_rosters').doc('all').get().then(s => {
         const teams = s.exists ? (s.data().teams || {}) : {};
-        // Cache all teams at once
         for (const [t, pl] of Object.entries(teams)) {
-          if (!_inlineRosterCache[t] || needFull) {
-            _inlineRosterCache[t] = _inlineRosterCache[t] || { roster: [], baselines: {}, ts: 0 };
-            _inlineRosterCache[t].roster = pl;
-            _inlineRosterCache[t].ts = Date.now();
-          }
+          _inlineRosterCache[t] = _inlineRosterCache[t] || { roster: [], baselines: {}, _blLoaded: false };
+          _inlineRosterCache[t].roster = pl;
         }
         return (_inlineRosterCache[team] || {}).roster || [];
       })
     : Promise.resolve(cached.roster);
 
-  const baseP = needFull
+  const baseP = needBaseline
     ? fbDb.collection('nba_baselines').doc(team).get().then(s => {
         const bl = s.exists ? (s.data().players || {}) : {};
-        _inlineRosterCache[team] = _inlineRosterCache[team] || { roster: [], baselines: {}, ts: 0 };
+        _inlineRosterCache[team] = _inlineRosterCache[team] || { roster: [], baselines: {}, _blLoaded: false };
         _inlineRosterCache[team].baselines = bl;
+        _inlineRosterCache[team]._blLoaded = true;
         return bl;
       })
     : Promise.resolve(cached.baselines);
