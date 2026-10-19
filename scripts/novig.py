@@ -441,6 +441,160 @@ def get_novig_nba_lines(client, target_date=None):
     return lines
 
 
+# ── All alt lines for a single game ─────────────────────────────────────
+def get_novig_all_lines(client, target_date, game_key):
+    """Fetch ALL alt spread/total/money markets for a specific game.
+    game_key: 'AWAY@HOME' e.g. 'BOS@DET'
+    Returns { spreads: [...], totals: [...], money: {...} }
+    """
+    from datetime import datetime as dt
+    from zoneinfo import ZoneInfo
+    ET = ZoneInfo('America/New_York')
+
+    away_team, home_team = game_key.split('@')
+
+    spreads_raw = client.get_nba_markets(market_type='SPREAD')
+    totals_raw = client.get_nba_markets(market_type='TOTAL')
+    moneys_raw = client.get_nba_markets(market_type='MONEY')
+
+    def _best_bid(book, outcome_id):
+        """Get best bid price and fillable qty at that price."""
+        if not book or not book.get('orders'):
+            return None, 0
+        orders = book['orders'].get(outcome_id, [])
+        if not orders:
+            return None, 0
+        best_price = max(float(o['price']) for o in orders)
+        qty_at_best = sum(o['qty'] for o in orders if float(o['price']) == best_price)
+        return best_price, qty_at_best
+
+    # Find the event ID for this game by matching teams
+    target_eid = None
+    for m in spreads_raw:
+        if target_date:
+            ts = m.get('startsTs', 0)
+            if ts:
+                game_date = dt.fromtimestamp(ts / 1000, tz=ET).strftime('%Y-%m-%d')
+                if game_date != target_date:
+                    continue
+        outcomes = m.get('outcomes', [])
+        teams = []
+        for o in outcomes:
+            parts = o['name'].split()
+            if parts:
+                teams.append(parts[0])
+        if len(teams) == 2 and set(teams) == {away_team, home_team}:
+            target_eid = m['eventId']
+            break
+
+    if not target_eid:
+        return {'spreads': [], 'totals': [], 'money': None}
+
+    # Collect all spread markets for this event
+    spread_markets = [m for m in spreads_raw if m['eventId'] == target_eid]
+    total_markets = [m for m in totals_raw if m['eventId'] == target_eid]
+    money_market = next((m for m in moneys_raw if m['eventId'] == target_eid), None)
+
+    # Process spreads
+    spreads_out = []
+    for m in sorted(spread_markets, key=lambda x: float(x['strike'])):
+        book = None
+        try:
+            book = client.get_book(m['marketId'])
+        except:
+            pass
+        strike = float(m['strike'])
+        outcomes = m.get('outcomes', [])
+        home_oid = away_oid = None
+        for o in outcomes:
+            if o['name'].startswith(home_team):
+                home_oid = o['outcomeId']
+            else:
+                away_oid = o['outcomeId']
+
+        # To buy HOME: cross with AWAY bids
+        away_bid, away_bid_qty = _best_bid(book, away_oid)
+        home_price = round(1 - away_bid, 4) if away_bid else None
+        home_fill = round(home_price * away_bid_qty / 100) if home_price and away_bid_qty else 0
+
+        # To buy AWAY: cross with HOME bids
+        home_bid, home_bid_qty = _best_bid(book, home_oid)
+        away_price = round(1 - home_bid, 4) if home_bid else None
+        away_fill = round(away_price * home_bid_qty / 100) if away_price and home_bid_qty else 0
+
+        spreads_out.append({
+            'strike': strike,
+            'home_price': home_price,
+            'home_fill': home_fill,
+            'away_price': away_price,
+            'away_fill': away_fill,
+        })
+
+    # Process totals
+    totals_out = []
+    for m in sorted(total_markets, key=lambda x: float(x['strike'])):
+        book = None
+        try:
+            book = client.get_book(m['marketId'])
+        except:
+            pass
+        strike = float(m['strike'])
+        outcomes = m.get('outcomes', [])
+        over_oid = under_oid = None
+        for o in outcomes:
+            if 'Over' in o['name']:
+                over_oid = o['outcomeId']
+            elif 'Under' in o['name']:
+                under_oid = o['outcomeId']
+
+        # To buy Over: cross with Under bids
+        under_bid, under_bid_qty = _best_bid(book, under_oid)
+        over_price = round(1 - under_bid, 4) if under_bid else None
+        over_fill = round(over_price * under_bid_qty / 100) if over_price and under_bid_qty else 0
+
+        # To buy Under: cross with Over bids
+        over_bid, over_bid_qty = _best_bid(book, over_oid)
+        under_price = round(1 - over_bid, 4) if over_bid else None
+        under_fill = round(under_price * over_bid_qty / 100) if under_price and over_bid_qty else 0
+
+        totals_out.append({
+            'strike': strike,
+            'over_price': over_price,
+            'over_fill': over_fill,
+            'under_price': under_price,
+            'under_fill': under_fill,
+        })
+
+    # Process moneyline
+    money_out = None
+    if money_market:
+        ml_book = None
+        try:
+            ml_book = client.get_book(money_market['marketId'])
+        except:
+            pass
+        money_out = {}
+        for o in money_market.get('outcomes', []):
+            oname = o['name'].strip()
+            other_oid = [x['outcomeId'] for x in money_market['outcomes'] if x['outcomeId'] != o['outcomeId']]
+            if other_oid:
+                other_bid, other_qty = _best_bid(ml_book, other_oid[0])
+                ask = round(1 - other_bid, 4) if other_bid else None
+                fillable = round(ask * other_qty / 100) if ask and other_qty else 0
+            else:
+                ask = None
+                fillable = 0
+
+            if oname == home_team:
+                money_out['home_price'] = ask
+                money_out['home_fill'] = fillable
+            else:
+                money_out['away_price'] = ask
+                money_out['away_fill'] = fillable
+
+    return {'spreads': spreads_out, 'totals': totals_out, 'money': money_out}
+
+
 # ── CLI test ─────────────────────────────────────────────────────────────
 if __name__ == '__main__':
     client = NovigClient()

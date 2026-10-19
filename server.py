@@ -56,6 +56,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(b'ok')
             return
 
+        # Novig order book for a single game (all alt lines)
+        if self.path.startswith('/novig-book'):
+            self._novig_book()
+            return
+
         # Refresh odds endpoint — fetches live Novig data and writes to Firestore
         if self.path.startswith('/refresh-odds'):
             self._refresh_odds()
@@ -292,6 +297,43 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._json_response(200, {'lines': result, 'date': target_date, 'count': len(result)})
         except Exception as e:
             print(f'Refresh odds failed: {e}')
+            import traceback; traceback.print_exc()
+            self._json_response(500, {'error': str(e)})
+
+    def _novig_book(self):
+        """Fetch all alt spread/total/money lines for a single game."""
+        import datetime
+        from zoneinfo import ZoneInfo
+        try:
+            from scripts.novig import NovigClient, get_novig_all_lines
+        except ImportError:
+            import sys
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            from scripts.novig import NovigClient, get_novig_all_lines
+
+        novig_key = os.environ.get('NOVIG_KEY_ID', '')
+        novig_pem = os.environ.get('NOVIG_PRIVATE_KEY', '')
+
+        if not novig_key or not novig_pem:
+            self._json_response(400, {'error': 'NOVIG keys not configured'})
+            return
+
+        try:
+            from urllib.parse import urlparse, parse_qs
+            qs = parse_qs(urlparse(self.path).query)
+            ET = ZoneInfo('America/New_York')
+            target_date = qs.get('date', [datetime.datetime.now(ET).strftime('%Y-%m-%d')])[0]
+            game_key = qs.get('game', [''])[0]
+
+            if not game_key or '@' not in game_key:
+                self._json_response(400, {'error': 'Missing game param (e.g. BOS@DET)'})
+                return
+
+            nc = NovigClient(novig_key, novig_pem)
+            result = get_novig_all_lines(nc, target_date, game_key)
+            self._json_response(200, result)
+        except Exception as e:
+            print(f'Novig book failed: {e}')
             import traceback; traceback.print_exc()
             self._json_response(500, {'error': str(e)})
 
