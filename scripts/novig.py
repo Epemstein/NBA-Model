@@ -592,29 +592,45 @@ def get_novig_all_lines(client, target_date, game_key):
             'under_price': under_price, 'under_fill': under_fill,
         })
 
-    # Trim to 9 lines centered on highest liquidity
-    def _trim_centered(lines, fill_key_a, fill_key_b, n=9):
+    # Trim to 9 lines centered on a target strike
+    def _trim_centered(lines, center_strike, n=9):
         if len(lines) <= n:
             return lines
-        # Find highest liquidity line
-        best_idx = 0
-        best_liq = -1
+        # Find the line closest to center_strike
+        center_idx = 0
+        best_dist = 9999
         for i, l in enumerate(lines):
-            total = (l.get(fill_key_a) or 0) + (l.get(fill_key_b) or 0)
-            if total > best_liq:
-                best_liq = total
-                best_idx = i
-        # Take 4 on each side of best
+            dist = abs(l['strike'] - center_strike)
+            if dist < best_dist:
+                best_dist = dist
+                center_idx = i
         half = n // 2
-        start = max(0, best_idx - half)
+        start = max(0, center_idx - half)
         end = start + n
         if end > len(lines):
             end = len(lines)
             start = max(0, end - n)
         return lines[start:end]
 
-    spreads_out = _trim_centered(spreads_out, 'away_fill', 'home_fill')
-    totals_out = _trim_centered(totals_out, 'over_fill', 'under_fill')
+    # Find highest liquidity spread to center on
+    best_sp_liq = -1
+    best_sp_strike = spreads_out[len(spreads_out)//2]['strike'] if spreads_out else 0
+    for s in spreads_out:
+        total = (s.get('away_fill') or 0) + (s.get('home_fill') or 0)
+        if total > best_sp_liq:
+            best_sp_liq = total
+            best_sp_strike = s['strike']
+    spreads_out = _trim_centered(spreads_out, best_sp_strike)
+
+    # Find highest liquidity total to center on
+    best_tot_liq = -1
+    best_tot_strike = totals_out[len(totals_out)//2]['strike'] if totals_out else 0
+    for t in totals_out:
+        total = (t.get('over_fill') or 0) + (t.get('under_fill') or 0)
+        if total > best_tot_liq:
+            best_tot_liq = total
+            best_tot_strike = t['strike']
+    totals_out = _trim_centered(totals_out, best_tot_strike)
 
     # Process moneyline
     money_out = None
