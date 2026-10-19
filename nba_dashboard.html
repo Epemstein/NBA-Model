@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v82</title>
+<title>NBA ALGO v83</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -2493,7 +2493,7 @@ function updateBetWin() {
   let win = 0;
   if (ml > 0) win = risk * (ml / 100);
   else if (ml < 0) win = risk * (100 / Math.abs(ml));
-  document.getElementById('bet-win-amount').textContent = '$' + win.toFixed(2);
+  document.getElementById('bet-win-amount').textContent = '$' + win.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
   inp.style.borderColor = risk > maxFill ? 'var(--red)' : 'var(--border)';
 }
 
