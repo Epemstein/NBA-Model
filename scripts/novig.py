@@ -297,52 +297,44 @@ def get_novig_nba_lines(client, target_date=None):
         else:
             home_team, away_team = teams[1], teams[0]
 
-        # Pick highest liquidity spread from 5 around median
-        from concurrent.futures import ThreadPoolExecutor
-        candidates = ev['spreads']
-        if len(candidates) > 5:
-            candidates.sort(key=lambda m: float(m['strike']))
-            mid = len(candidates) // 2
-            candidates = candidates[max(0,mid-2):mid+3]
-        spread_books = {}
-        def _fetch_sp_book(m):
-            try:
-                return m['marketId'], client.get_book(m['marketId'])
-            except:
-                return m['marketId'], None
-        with ThreadPoolExecutor(max_workers=5) as ex:
-            for mid, book in ex.map(lambda m: _fetch_sp_book(m), candidates):
-                spread_books[mid] = book
-
-        best_liq = -1
+        # Pick primary spread by lowest hold (implied prob sum closest to 100%)
+        # No order book fetching needed — just uses market prices from outcomes
         sp = ev['spreads'][len(ev['spreads']) // 2]  # fallback to median
+        best_hold = 999
         for m in ev['spreads']:
-            book = spread_books.get(m['marketId'])
-            if not book or not book.get('orders'):
-                continue
-            total_fill = 0
-            for oid, orders in book['orders'].items():
-                for o in orders:
-                    total_fill += float(o.get('price', 0)) * o.get('qty', 0) / 100
-            if total_fill > best_liq:
-                best_liq = total_fill
-                sp = m
+            outs = m.get('outcomes', [])
+            if len(outs) == 2:
+                # Each outcome has a 'price' field (probability 0-1) from Novig
+                p1 = float(outs[0].get('price', 0.5))
+                p2 = float(outs[1].get('price', 0.5))
+                hold = abs((p1 + p2) - 1.0)
+                if hold < best_hold:
+                    best_hold = hold
+                    sp = m
         outcomes = sp['outcomes']
         strike = float(sp['strike'])
 
-        # Pick primary total by median strike (fast, no API calls)
+        # Pick primary total by lowest hold
         total_data = None
         if ev['totals']:
-            ev['totals'].sort(key=lambda m: float(m['strike']))
-            total_data = ev['totals'][len(ev['totals']) // 2]
+            best_tot_hold = 999
+            total_data = ev['totals'][len(ev['totals']) // 2]  # fallback
+            for m in ev['totals']:
+                outs = m.get('outcomes', [])
+                if len(outs) == 2:
+                    p1 = float(outs[0].get('price', 0.5))
+                    p2 = float(outs[1].get('price', 0.5))
+                    hold = abs((p1 + p2) - 1.0)
+                    if hold < best_tot_hold:
+                        best_tot_hold = hold
+                        total_data = m
 
-        # Get best bid + fillable qty for each spread outcome (reuse already-fetched book)
-        sp_book = spread_books.get(sp['marketId'])
-        if not sp_book:
-            try:
-                sp_book = client.get_book(sp['marketId'])
-            except:
-                pass
+        # Get best bid + fillable qty for each spread outcome
+        sp_book = None
+        try:
+            sp_book = client.get_book(sp['marketId'])
+        except:
+            pass
 
         def _best_bid(book, outcome_id):
             """Get best bid price and fillable qty at that price."""
