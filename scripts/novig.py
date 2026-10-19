@@ -282,14 +282,9 @@ def get_novig_nba_lines(client, target_date=None):
         if not ev['spreads']:
             continue
 
-        # Pick primary spread: midpoint of all available strikes
-        # Novig posts alt lines around the primary — the midpoint of the range
-        # matches the actual market line. On ties, pick closer to zero.
-        # Pick primary spread by midpoint of all alt lines (fast, no API calls)
-        strikes = [float(m['strike']) for m in ev['spreads']]
-        primary = round((min(strikes) + max(strikes)) / 2 * 2) / 2
-        ev['spreads'].sort(key=lambda m: (abs(float(m['strike']) - primary), abs(float(m['strike']))))
-        sp = ev['spreads'][0]
+        # Pick primary spread by median strike (best proxy for market consensus)
+        ev['spreads'].sort(key=lambda m: float(m['strike']))
+        sp = ev['spreads'][len(ev['spreads']) // 2]
         outcomes = sp['outcomes']
 
         # Extract team names from outcomes (e.g. "NYK -5.5", "PHI +5.5")
