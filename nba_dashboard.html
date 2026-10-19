@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v68</title>
+<title>NBA ALGO v69</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -946,6 +946,7 @@ input[type=number] { -moz-appearance: textfield; }
       <div class="fg"><label class="fl">Home Court Advantage</label><input id="set-hca" type="number" value="1.5" step="0.5"></div>
       <div class="fg"><label class="fl">Pace Multiplier</label><input id="set-pace-mult" type="number" value="0.95" step="0.01"></div>
       <div class="fg"><label class="fl">Sigma (σ) — Spread Variance</label><input id="set-sigma" type="number" value="13" min="8" max="18" step="0.5"></div>
+      <div class="fg"><label class="fl">Total Sigma (σ) — O/U Variance</label><input id="set-total-sigma" type="number" value="17" min="10" max="25" step="0.5"></div>
       <div class="fg"><label class="fl">Min Liquidity ($)</label><input id="set-min-liq" type="number" value="500" min="0" max="10000" step="100"></div>
     </div>
     <div class="ct" style="margin-top:14px;">MODEL Blend Weights</div>
@@ -1101,7 +1102,7 @@ let STATE = {
   history: JSON.parse(localStorage.getItem('nba_history') || '[]'),
   overrides: JSON.parse(localStorage.getItem('nba_overrides') || '{}'),
   bankroll: JSON.parse(localStorage.getItem('nba_bankroll') || '{"start":10000,"kelly":0.5,"maxPct":3}'),
-  settings: JSON.parse(localStorage.getItem('nba_settings') || '{"spreadEdge":2,"totalEdge":2,"hca":1.5,"paceMult":0.95,"sigma":13,"minLiquidity":500,"blendDarko":60,"blendLebron":25,"blendEpm":15}'),
+  settings: JSON.parse(localStorage.getItem('nba_settings') || '{"spreadEdge":2,"totalEdge":2,"hca":1.5,"paceMult":0.95,"sigma":13,"totalSigma":17,"minLiquidity":500,"blendDarko":60,"blendLebron":25,"blendEpm":15}'),
   teamRatings: {},
   leagueAvgPace: 100,
   leagueAvgOrtg: 113.1,
@@ -2770,6 +2771,7 @@ function saveSettings() {
     hca: parseFloat(document.getElementById('set-hca').value) || 1.5,
     paceMult: parseFloat(document.getElementById('set-pace-mult').value) || 0.95,
     sigma: parseFloat(document.getElementById('set-sigma').value) || 13,
+    totalSigma: parseFloat(document.getElementById('set-total-sigma').value) || 17,
     minLiquidity: parseInt(document.getElementById('set-min-liq').value) || 500,
     blendDarko: parseInt(document.getElementById('set-blend-darko').value) || 60,
     blendLebron: parseInt(document.getElementById('set-blend-lebron').value) || 25,
@@ -2792,6 +2794,7 @@ function loadSettingsUI() {
   document.getElementById('set-hca').value = STATE.settings.hca;
   document.getElementById('set-pace-mult').value = STATE.settings.paceMult;
   document.getElementById('set-sigma').value = STATE.settings.sigma ?? 13;
+  document.getElementById('set-total-sigma').value = STATE.settings.totalSigma ?? 17;
   document.getElementById('set-min-liq').value = STATE.settings.minLiquidity ?? 500;
   document.getElementById('set-blend-darko').value = STATE.settings.blendDarko ?? 60;
   document.getElementById('set-blend-lebron').value = STATE.settings.blendLebron ?? 25;
