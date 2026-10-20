@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v120</title>
+<title>NBA ALGO v121</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -2703,13 +2703,19 @@ function openBetModal(data) {
     </div>
   `;
 
+  const isFav = mlNum < 0;
+  const inputLabel = isFav ? 'To Win ($)' : 'Risk Amount ($)';
   form.innerHTML = `
     <div style="margin-bottom:12px;">
-      <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);display:block;margin-bottom:4px;">Risk Amount ($)</label>
+      <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);display:block;margin-bottom:4px;">${inputLabel}</label>
       <div style="position:relative;">
-        <input type="number" id="bet-risk-input" min="0" step="1" value="${STATE.settings?.defaultStake || 100}" style="width:100%;padding:10px 60px 10px 12px;font-size:16px;font-family:var(--mono);border:2px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);box-sizing:border-box;" oninput="updateBetWin()" autofocus />
-        <button onclick="document.getElementById('bet-risk-input').value=${data.fill};updateBetWin();" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);padding:4px 10px;font-size:11px;font-weight:700;border:1px solid var(--accent);border-radius:4px;background:var(--accent);color:#fff;cursor:pointer;">MAX</button>
+        <input type="number" id="bet-size-input" min="0" step="1" value="${STATE.settings?.defaultStake || 100}" style="width:100%;padding:10px 60px 10px 12px;font-size:16px;font-family:var(--mono);border:2px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);box-sizing:border-box;" oninput="updateBetAmounts()" autofocus />
+        <button onclick="document.getElementById('bet-size-input').value=${data.fill};updateBetAmounts();" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);padding:4px 10px;font-size:11px;font-weight:700;border:1px solid var(--accent);border-radius:4px;background:var(--accent);color:#fff;cursor:pointer;">MAX</button>
       </div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <span style="font-size:12px;color:var(--muted);">Risk</span>
+      <span id="bet-risk-display" style="font-size:16px;font-weight:600;font-family:var(--mono);">$0.00</span>
     </div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
       <span style="font-size:12px;color:var(--muted);">To Win</span>
@@ -2722,21 +2728,30 @@ function openBetModal(data) {
   overlay.dataset.ml = mlNum;
   overlay.dataset.fill = data.fill || 0;
   overlay.classList.add('open');
-  setTimeout(() => { const inp = document.getElementById('bet-risk-input'); if (inp) { inp.focus(); inp.select(); } updateBetWin(); }, 100);
+  setTimeout(() => { const inp = document.getElementById('bet-size-input'); if (inp) { inp.focus(); inp.select(); } updateBetAmounts(); }, 100);
 }
 
 function closeBetModal() {
   document.getElementById('bet-overlay').classList.remove('open');
 }
 
-function updateBetWin() {
-  const inp = document.getElementById('bet-risk-input');
-  const risk = parseFloat(inp.value) || 0;
+function updateBetAmounts() {
+  const inp = document.getElementById('bet-size-input');
+  const betSize = parseFloat(inp.value) || 0;
   const ml = parseFloat(document.getElementById('bet-overlay').dataset.ml) || 0;
   const maxFill = parseFloat(document.getElementById('bet-overlay').dataset.fill) || 999999;
-  let win = 0;
-  if (ml > 0) win = risk * (ml / 100);
-  else if (ml < 0) win = risk * (100 / Math.abs(ml));
+  const isFav = ml < 0;
+  let risk, win;
+  if (isFav) {
+    // Input is "to win" amount → compute risk
+    win = betSize;
+    risk = betSize * (Math.abs(ml) / 100);
+  } else {
+    // Input is risk amount → compute win
+    risk = betSize;
+    win = betSize * (ml / 100);
+  }
+  document.getElementById('bet-risk-display').textContent = '$' + risk.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
   document.getElementById('bet-win-amount').textContent = '$' + win.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
   inp.style.borderColor = risk > maxFill ? 'var(--red)' : 'var(--border)';
 }
@@ -2744,8 +2759,12 @@ function updateBetWin() {
 function _addBetFromModal() {
   if (!_currentBetModalData) return;
   const d = _currentBetModalData;
-  const inp = document.getElementById('bet-risk-input');
-  const stake = parseFloat(inp?.value) || STATE.settings?.defaultStake || 100;
+  const inp = document.getElementById('bet-size-input');
+  const betSize = parseFloat(inp?.value) || STATE.settings?.defaultStake || 100;
+  const ml = probToML(d.price);
+  // If favorite (- odds), input is "to win" → stake = toWin * |ml|/100
+  // If underdog (+ odds), input is "risk" → stake = input directly
+  const stake = ml < 0 ? Math.round(betSize * Math.abs(ml) / 100 * 100) / 100 : betSize;
   addToQueue({
     away: d.away,
     home: d.home,
