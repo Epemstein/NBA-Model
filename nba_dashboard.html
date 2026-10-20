@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v115</title>
+<title>NBA ALGO v116</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -4723,7 +4723,7 @@ function renderQueue() {
       <td><input class="bq-stake-input" type="number" min="0" step="1" value="${b.stake || 0}" oninput="updateQueueStake('${b.id}', this.value)" /></td>
       <td id="bq-win-${b.id}" style="font-family:var(--mono);color:#4caf50;font-weight:600;">$${toWin.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
       <td><button class="bq-remove" onclick="removeFromQueue('${b.id}')">&times;</button></td>
-      <td>${b.status === 'placed' ? '<span style="color:#4caf50;font-size:16px;font-weight:700;">&#10003;</span>' : `<button onclick="confirmPlaceBet('${b.id}')" class="bq-btn" style="font-size:10px;padding:2px 8px;background:#1b5e20;color:#fff;">Place</button>`}</td>
+      <td>${b.status === 'placed' ? '<span style="color:#4caf50;font-size:16px;font-weight:700;">&#10003;</span>' : (_currentUser && _currentUser.email === 'ezrapemstein@gmail.com' ? `<button onclick="confirmPlaceBet('${b.id}')" class="bq-btn" style="font-size:10px;padding:2px 8px;background:#1b5e20;color:#fff;">Place</button>` : '')}</td>
     </tr>`;
   });
   bodyEl.innerHTML = html;
@@ -4961,6 +4961,12 @@ async function _executePlaceBet() {
 
   try {
     console.log('Placing bet item:', JSON.stringify(item));
+    if (!_currentUser || _currentUser.email !== 'ezrapemstein@gmail.com') {
+      alert('Bet placement is restricted to authorized users.');
+      btn.disabled = false;
+      btn.textContent = 'Confirm & Place';
+      return;
+    }
     if (!item.outcomeId) {
       alert('No outcome ID on this bet. Refresh odds first to get Novig outcome IDs, then re-add the bet.');
       btn.disabled = false;
@@ -5030,6 +5036,10 @@ async function _executePlaceBet() {
 }
 
 function placeAllBets() {
+  if (!_currentUser || _currentUser.email !== 'ezrapemstein@gmail.com') {
+    alert('Bet placement is restricted to authorized users.');
+    return;
+  }
   const unplaced = _betQueue.filter(b => b.status !== 'placed');
   if (!unplaced.length) {
     _showBQToast('No unplaced bets in queue');
