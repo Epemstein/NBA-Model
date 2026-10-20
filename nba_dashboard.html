@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v126</title>
+<title>NBA ALGO v127</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1779,7 +1779,20 @@ function renderGames() {
         const betsOnGame = (_placedBets || []).filter(b => b.gameKey === gameKey);
         if (!betsOnGame.length) return '';
         return '<div style="padding:4px 10px;display:flex;gap:6px;flex-wrap:wrap;">' +
-          betsOnGame.map(b => `<div style="font-size:9px;background:#1b5e20;color:#fff;padding:1px 6px;border-radius:3px;display:inline-block;">BET: ${b.description} $${b.stake||0}</div>`).join('') +
+          betsOnGame.map(b => {
+            const [aw, hm] = (b.gameKey || '@').split('@');
+            const betTeam = b.side === 'away' ? aw : (b.side === 'home' ? hm : '');
+            const logo = betTeam ? `<img src="${teamLogo(betTeam)}" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;margin-right:2px;" onerror="this.style.display='none'" />` : '';
+            const ml = b.price != null ? fmtML(probToML(b.price)) : '';
+            const risk = b.stake ? '$' + b.stake.toLocaleString() : '';
+            const win = (b.stake && b.price) ? '$' + _calcToWin(b.stake, probToML(b.price)).toFixed(0) : '';
+            return `<div style="font-size:10px;background:#1b5e20;color:#fff;padding:3px 8px;border-radius:4px;display:inline-flex;align-items:center;gap:4px;font-weight:600;">
+              ${logo}<span>${b.description}</span>
+              <span style="opacity:0.8;font-weight:400;">${ml}</span>
+              <span style="opacity:0.9;">R:${risk}</span>
+              <span style="color:#81c784;">W:${win}</span>
+            </div>`;
+          }).join('') +
           '</div>';
       })()}
       <div class="gc-expand" style="gap:6px;">
@@ -5057,12 +5070,14 @@ async function _executePlaceBet() {
     const data = await r.json();
 
     if (data.success) {
-      item.status = 'placed';
-      item.placedAt = Date.now();
+      // Remove from queue after successful placement
+      _betQueue = _betQueue.filter(b => b.id !== queueId);
       _saveBetQueue();
       renderQueue();
       _showBQToast('Placed: ' + item.description);
       loadPlacedBets();
+      // Re-render game cards to show bet badge
+      renderGames();
     } else {
       console.error('Bet placement failed:', data);
       const detail = data.novigStatus ? ` (HTTP ${data.novigStatus})` : '';
