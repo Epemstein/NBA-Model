@@ -304,7 +304,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 except Exception as e:
                     print(f'Firestore odds update failed: {e}')
 
-            self._json_response(200, {'lines': result, 'date': target_date, 'count': len(result)})
+            # Also refresh injuries from ESPN
+            inj_count = 0
+            try:
+                inj_count = self._scrape_injuries_to_slate(target_date, db if sa_json else None)
+            except Exception as e:
+                print(f'Injury refresh failed (non-fatal): {e}')
+
+            self._json_response(200, {'lines': result, 'date': target_date, 'count': len(result), 'injuries': inj_count})
         except Exception as e:
             print(f'Refresh odds failed: {e}')
             import traceback; traceback.print_exc()
@@ -382,6 +389,76 @@ class Handler(http.server.BaseHTTPRequestHandler):
             print(f'Check roster failed: {e}')
             import traceback; traceback.print_exc()
             self._json_response(502, {'error': str(e)})
+
+    def _scrape_injuries_to_slate(self, target_date, db):
+        """Scrape ESPN injuries page and update player injury fields on the slate."""
+        import re, time
+        req = urllib.request.Request(
+            'https://www.espn.com/nba/injuries',
+            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        )
+        resp = urllib.request.urlopen(req, timeout=20)
+        html = resp.read().decode('utf-8', errors='replace')
+
+        STATUS_MAP = {'Out': 'O', 'Day-To-Day': 'DTD', 'Questionable': 'Q', 'Doubtful': 'D', 'Probable': 'P'}
+        pattern = re.compile(
+            r'nba/player/_/id/(\d+)/[^\"]*\">([^<]+)</a></td>'
+            r'<td[^>]*>([^<]*)</td>'
+            r'<td[^>]*>([^<]*)</td>'
+            r'<td[^>]*><span[^>]*>([^<]+)</span></td>'
+            r'<td[^>]*>([^<]*)</td>',
+            re.DOTALL
+        )
+
+        # Build lookup: norm_name -> {status, detail}
+        injuries = {}
+        for m in pattern.finditer(html):
+            espn_id, name, position, return_date, status_raw, comment = m.groups()
+            status = STATUS_MAP.get(status_raw.strip(), status_raw.strip())
+            detail = comment.strip() if comment.strip() else return_date.strip()
+            # Normalize: strip periods, lowercase, strip suffixes
+            nn = name.strip().lower().replace('.', '')
+            for sfx in [' jr', ' sr', ' iv', ' iii', ' ii']:
+                if nn.endswith(sfx):
+                    nn = nn[:-len(sfx)].strip()
+            injuries[nn] = {'status': status, 'detail': detail, 'name': name.strip()}
+
+        print(f'ESPN injuries scraped: {len(injuries)} players')
+
+        if not db:
+            return len(injuries)
+
+        # Update slate games with fresh injury data
+        snap = db.collection('nba_slate').document(target_date).get()
+        if not snap.exists:
+            return len(injuries)
+
+        slate = snap.to_dict()
+        games = slate.get('games', [])
+        updated = 0
+        for g in games:
+            for side in ['away_players', 'home_players']:
+                for p in (g.get(side) or []):
+                    pn = p.get('name', '').lower().replace('.', '')
+                    for sfx in [' jr', ' sr', ' iv', ' iii', ' ii']:
+                        if pn.endswith(sfx):
+                            pn = pn[:-len(sfx)].strip()
+                    if pn in injuries:
+                        inj = injuries[pn]
+                        p['injury'] = inj['status']
+                        p['injury_detail'] = inj['detail']
+                        updated += 1
+                    else:
+                        # Clear injury if no longer on ESPN list
+                        if p.get('injury'):
+                            p['injury'] = ''
+                            p['injury_detail'] = ''
+
+        slate['games'] = games
+        slate['injuriesRefreshedMs'] = int(time.time() * 1000)
+        db.collection('nba_slate').document(target_date).set(slate)
+        print(f'Injuries updated on slate: {updated} players')
+        return updated
 
     def _json_response(self, code, data):
         self.send_response(code)
