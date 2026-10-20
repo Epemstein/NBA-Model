@@ -1327,9 +1327,45 @@ def _write_rosters(db, darko, player_minutes, lebron=None, epm=None, injuries=No
                     new_entry['injury'] = inj['status']; entry['injury_detail'] = inj.get('detail', '')
             all_teams[team_abr].append(new_entry)
 
-    # If official rosters failed, still write what we have from player_minutes + DARKO
+    # If official rosters failed, just update DPM ratings on existing roster doc
     if not official_rosters:
-        print('No official rosters — writing from player_minutes + DARKO only')
+        print('No official rosters — updating DPM ratings on existing roster doc only')
+        try:
+            existing = db.collection('nba_rosters').document('all').get()
+            if existing.exists:
+                teams = existing.to_dict().get('teams', {})
+                updated_count = 0
+                for team_abr, players in teams.items():
+                    for p in players:
+                        nk = norm_name(p.get('name', ''))
+                        pid = p.get('nba_id', '')
+                        dk = darko.get(f'id:{pid}') if pid else None
+                        if not dk:
+                            dk = darko.get(nk)
+                        if dk:
+                            p['dpm'] = round(dk['dpm'], 1)
+                            p['o_dpm'] = round(dk['o_dpm'], 1)
+                            p['d_dpm'] = round(dk['d_dpm'], 1)
+                            updated_count += 1
+                        if lebron:
+                            lb = lebron.get(f'id:{pid}') if pid else None
+                            if not lb: lb = lebron.get(nk)
+                            if lb:
+                                p['lb_dpm'] = round(lb['dpm'], 1)
+                                p['lb_o_dpm'] = round(lb.get('o_dpm', 0), 1)
+                                p['lb_d_dpm'] = round(lb.get('d_dpm', 0), 1)
+                        if epm:
+                            ep = epm.get(f'id:{pid}') if pid else None
+                            if not ep: ep = epm.get(nk)
+                            if ep:
+                                p['epm'] = round(ep['dpm'], 1)
+                                p['epm_o'] = round(ep['o_dpm'], 1)
+                                p['epm_d'] = round(ep['d_dpm'], 1)
+                db.collection('nba_rosters').document('all').set({'teams': teams, '_ts': firestore.SERVER_TIMESTAMP})
+                print(f'Updated DPM on {updated_count} players in existing roster')
+        except Exception as e:
+            print(f'DPM update failed: {e}')
+        return
 
     rosters_combined = {}
     for team, players in all_teams.items():
