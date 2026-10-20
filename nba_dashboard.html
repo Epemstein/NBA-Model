@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v122</title>
+<title>NBA ALGO v123</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -3714,6 +3714,9 @@ function saveTeamBaseline(silent) {
   }
   fbDb.collection('nba_baselines').doc(_selectedTeam).set({ players })
     .then(() => {
+      // Clear inline state so game cards re-read fresh baselines
+      _inlineState = {};
+      _inlineRosterCache = {};
       // Log specific changes, debounced so batch edits become one log entry
       clearTimeout(_baselineLogTimer);
       _baselineLogTimer = setTimeout(() => {
