@@ -7,6 +7,11 @@ on:
     - cron: '0 8 * * *'
     - cron: '0 17 * * *'
   workflow_dispatch:  # allow manual trigger
+    inputs:
+      no_cache:
+        description: 'Skip rating caches (force fresh DARKO/LEBRON/EPM fetch)'
+        type: boolean
+        default: false
 
 jobs:
   run-pipeline:
@@ -34,4 +39,5 @@ jobs:
           RENDER_URL: ${{ secrets.RENDER_URL }}
           NOVIG_KEY_ID: ${{ secrets.NOVIG_KEY_ID }}
           NOVIG_PRIVATE_KEY: ${{ secrets.NOVIG_PRIVATE_KEY }}
+          NO_CACHE: ${{ inputs.no_cache && '1' || '' }}
         run: python scripts/nba_pipeline.py

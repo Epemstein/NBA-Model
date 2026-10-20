@@ -150,9 +150,9 @@ def fetch_darko():
     the NBA API minutes data. We key by player name and match later.
     Returns dict: {player_name_lower: {name, dpm, o_dpm, d_dpm}}
     """
-    # Try Firestore cache first
+    # Try Firestore cache first (skip with NO_CACHE=1)
     today = today_et()
-    if db:
+    if db and not os.environ.get('NO_CACHE'):
         try:
             snap = db.collection('nba_darko').document(today).get()
             if snap.exists:
@@ -261,7 +261,7 @@ def fetch_lebron():
     LEBRON/O-LEBRON/D-LEBRON map to dpm/o_dpm/d_dpm for compatibility.
     """
     today = today_et()
-    if db:
+    if db and not os.environ.get('NO_CACHE'):
         try:
             snap = db.collection('nba_lebron').document(today).get()
             if snap.exists:
@@ -349,7 +349,7 @@ def fetch_epm():
     EPM/O-EPM/D-EPM map to dpm/o_dpm/d_dpm for compatibility.
     """
     today = today_et()
-    if db:
+    if db and not os.environ.get('NO_CACHE'):
         try:
             snap = db.collection('nba_epm').document(today).get()
             if snap.exists:
