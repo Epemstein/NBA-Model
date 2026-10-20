@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v111</title>
+<title>NBA ALGO v112</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -3082,15 +3082,25 @@ function renderBetsTab() {
       const stake = b.stake != null ? '$' + b.stake.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '--';
       const toWin = (b.stake && b.price) ? '$' + _calcToWin(b.stake, probToML(b.price)).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '--';
       const ev = b.ev != null ? b.ev.toFixed(1) + '%' : '--';
-      // CLV: compare bet price to current line
+      // CLV: compare bet price to current line (only for primary line bets)
       let clv = '--';
       const g = STATE.games.find(g => (g.away + '@' + g.home) === b.gameKey);
       if (g && b.price != null) {
         let currentPrice = null;
-        if (b.type === 'spread') currentPrice = b.side === 'away' ? g.away_spread_price : g.home_spread_price;
-        else if (b.type === 'ml') currentPrice = b.side === 'away' ? g.away_ml_price : g.home_ml_price;
-        else if (b.type === 'total') currentPrice = b.side === 'over' ? g.over_price : g.under_price;
+        // Only compare if the bet strike matches the primary book line
+        if (b.type === 'spread' && b.strike != null && g.book_spread != null && Math.abs(b.strike - g.book_spread) < 0.1) {
+          currentPrice = b.side === 'away' ? g.away_spread_price : g.home_spread_price;
+        } else if (b.type === 'ml') {
+          currentPrice = b.side === 'away' ? g.away_ml_price : g.home_ml_price;
+        } else if (b.type === 'total' && b.strike != null && g.book_total != null && Math.abs(b.strike - g.book_total) < 0.1) {
+          currentPrice = b.side === 'over' ? g.over_price : g.under_price;
+        }
         if (currentPrice != null) {
+          // CLV in cents of ML odds for intuitive display
+          const betML = probToML(b.price);
+          const curML = probToML(currentPrice);
+          // For underdogs (+odds): higher number at bet time = better (got more plus money)
+          // For favorites (-odds): lower number at bet time = better (paid less vig)
           const clvPct = Math.round((currentPrice - b.price) * 1000) / 10;
           const clvColor = clvPct > 0 ? 'var(--green)' : clvPct < 0 ? 'var(--red)' : 'var(--muted)';
           clv = `<span style="color:${clvColor};font-weight:600">${clvPct > 0 ? '+' : ''}${clvPct.toFixed(1)}%</span>`;
