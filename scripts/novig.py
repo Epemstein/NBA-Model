@@ -146,7 +146,7 @@ class NovigClient:
             return None
         return r.json()
 
-    def place_order(self, outcome_id, price, qty, tif='GTC'):
+    def place_order(self, outcome_id, price, qty, tif='IOC'):
         """Place a single order.
         price: decimal probability string (e.g. "0.550")
         qty: number of contracts
