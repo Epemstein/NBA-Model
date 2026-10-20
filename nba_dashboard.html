@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v92</title>
+<title>NBA ALGO v93</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1528,9 +1528,41 @@ function normCdf(x) {
   return 0.5 * (1.0 + sign * y);
 }
 
+// ── Position-aware empirical spread cover probability ──────────────────
+// Smoothed Unabated NBA point values: index = absolute margin, value = %
+// pv(0)=0 (no ties), pv(1)=2.2% (rare 1-pt margins), peak ~3.95% at 6
+const _PV_SMOOTH = [0,2.20,2.90,3.35,3.65,3.85,3.95,3.90,3.80,3.70,3.60,3.50,3.40,3.35,3.30,3.25,3.20,3.15,3.10,3.05,3.00];
+function _pvSmooth(x) {
+  x = Math.abs(x);
+  if (x >= 20) return 3.0;
+  const lo = Math.floor(x);
+  const hi = Math.min(lo + 1, 20);
+  const frac = x - lo;
+  return _PV_SMOOTH[lo] * (1 - frac) + _PV_SMOOTH[hi] * frac;
+}
+
+// P(margin = k | proj) ∝ φ((k - proj)/σ) × pv(|k|)
+// Reweights the normal bell curve by empirical point values, then renormalizes.
+// projMargin = projected margin for team being bet (positive = wins)
+// bookThreshold = margin threshold to cover (we cover if actual > bookThreshold)
+function empiricalSpreadCover(projMargin, bookThreshold, sigma) {
+  let totalWeight = 0;
+  let coverWeight = 0;
+  for (let k = -50; k <= 50; k++) {
+    const z = (k - projMargin) / sigma;
+    const w = Math.exp(-0.5 * z * z) * _pvSmooth(k);
+    totalWeight += w;
+    if (k > bookThreshold) coverWeight += w;
+  }
+  return totalWeight > 0 ? coverWeight / totalWeight : 0.5;
+}
+
 function spreadToWinProb(spread) {
   const sigma = STATE.settings?.sigma || 13;
-  return normCdf(-spread / sigma);
+  // spread = proj_spread (away - home). Negative = home favored.
+  // Win prob for HOME: home margin = -spread, threshold = -0.5 (must win by 1+)
+  // Use empirical model: home wins if margin > 0 → threshold = -0.5
+  return empiricalSpreadCover(-spread, -0.5, sigma);
 }
 
 function probToML(p) {
@@ -1573,9 +1605,8 @@ function computeBlendedFill(ladder, targetFill) {
 }
 
 // EV% = cover probability - price implied probability
-// cushion = book_spread - proj_spread (for the edge side)
-// coverProb = Φ(cushion / σ)  — probability the spread covers
-// Calculate EV% for a specific side of a spread bet
+// Uses position-aware empirical model: cover prob depends on which
+// absolute margin points the cushion crosses, not just cushion size.
 // side: 'away' or 'home'
 function calcSpreadEV(g, side) {
   const ps = gVal(g, "proj_spread"); // away - home (positive = away projected higher)
@@ -1585,13 +1616,12 @@ function calcSpreadEV(g, side) {
   const price = (blended && blended.blendedPrice != null) ? blended.blendedPrice : (side === 'away' ? g.away_spread_price : g.home_spread_price);
   if (ps == null || bk == null || price == null) return null;
   const sigma = STATE.settings?.sigma || 13;
-  // book_spread (bk) is home spread. Away spread = -bk.
-  // ps = proj away - proj home (positive = away wins)
-  // Away covers +(-bk) if actual margin > bk → cushion = ps - bk
-  // Home covers bk if actual margin < bk → cushion = bk - ps
-  const cushion = side === 'away' ? (ps - bk) : (bk - ps);
-  // negative cushion = wrong side of the line, no edge
-  const coverProb = normCdf(cushion / sigma);
+  // ps = proj away - proj home. bk = home spread.
+  // Away perspective: proj margin = ps, book threshold = bk (cover if away margin > bk)
+  // Home perspective: proj margin = -ps, book threshold = -bk (cover if home margin > -bk)
+  const projMargin = side === 'away' ? ps : -ps;
+  const bookThreshold = side === 'away' ? bk : -bk;
+  const coverProb = empiricalSpreadCover(projMargin, bookThreshold, sigma);
   const ev = Math.round((coverProb - price) * 1000) / 10;
   return ev;
 }
@@ -2697,14 +2727,15 @@ function _addBetFromModal() {
 }
 
 function _calcAltSpreadEV(g, strike, price, side) {
-  // EV for an alt spread line
+  // EV for an alt spread line (Novig book popup)
   // strike = home spread (positive = home is underdog)
   // side = 'home' or 'away'
   const ps = gVal(g, "proj_spread");
   if (ps == null || price == null) return null;
   const sigma = STATE.settings?.sigma || 13;
-  const cushion = side === 'away' ? (ps - strike) : (strike - ps);
-  const coverProb = normCdf(cushion / sigma);
+  const projMargin = side === 'away' ? ps : -ps;
+  const bookThreshold = side === 'away' ? strike : -strike;
+  const coverProb = empiricalSpreadCover(projMargin, bookThreshold, sigma);
   return Math.round((coverProb - price) * 1000) / 10;
 }
 
