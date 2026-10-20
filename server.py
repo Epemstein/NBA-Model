@@ -51,6 +51,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if self.path == '/place-bet':
             self._place_bet()
             return
+        if self.path == '/fund-subaccount':
+            self._fund_subaccount()
+            return
         self.send_error(404)
 
     def do_GET(self):
@@ -442,6 +445,69 @@ class Handler(http.server.BaseHTTPRequestHandler):
             print(f'Check roster failed: {e}')
             import traceback; traceback.print_exc()
             self._json_response(502, {'error': str(e)})
+
+    def _fund_subaccount(self):
+        """Transfer funds from main wallet to trading subaccount."""
+        try:
+            from scripts.novig import NovigClient
+        except ImportError:
+            import sys
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            from scripts.novig import NovigClient
+
+        mgmt_key = os.environ.get('NOVIG_MGMT_KEY_ID', '')
+        mgmt_pem = os.environ.get('NOVIG_MGMT_PRIVATE_KEY', '')
+        sub_key_id = os.environ.get('NOVIG_SUB_KEY_ID', '78debf9c-a573-482d-9807-c8bfb227fd9f')
+
+        if not mgmt_key or not mgmt_pem:
+            self._json_response(400, {'error': 'Management key not configured (NOVIG_MGMT_KEY_ID/NOVIG_MGMT_PRIVATE_KEY)'})
+            return
+
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            body = json.loads(self.rfile.read(length)) if length else {}
+            amount = body.get('amount', 0)
+
+            if not amount or amount <= 0:
+                self._json_response(400, {'error': 'Invalid amount'})
+                return
+
+            nc = NovigClient(mgmt_key, mgmt_pem)
+
+            # Transfer to subaccount
+            r = nc._request('POST', f'/v3/account/subaccounts/{sub_key_id}/transfer', body={
+                'amount': str(round(amount, 2)),
+                'direction': 'fund',
+            })
+
+            print(f'Fund subaccount: ${amount} → {r.status_code}')
+            try:
+                resp = r.json()
+            except:
+                resp = r.text
+            print(f'  Response: {resp}')
+
+            if r.status_code in (200, 201, 202):
+                # Get updated balances
+                main_bal = nc.get_balance()
+                sub_bal_r = nc._request('GET', f'/v3/account/subaccounts/{sub_key_id}/balance')
+                sub_bal = sub_bal_r.json() if sub_bal_r.ok else None
+
+                self._json_response(200, {
+                    'success': True,
+                    'transfer': resp,
+                    'mainBalance': main_bal.get('balance') if main_bal else None,
+                    'subBalance': sub_bal.get('balance') if sub_bal else None,
+                })
+            else:
+                self._json_response(200, {
+                    'success': False,
+                    'error': resp.get('message', str(resp)) if isinstance(resp, dict) else str(resp),
+                })
+        except Exception as e:
+            print(f'Fund subaccount failed: {e}')
+            import traceback; traceback.print_exc()
+            self._json_response(500, {'error': str(e)})
 
     def _place_bet(self):
         """Place a bet on Novig exchange."""

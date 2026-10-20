@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v116</title>
+<title>NBA ALGO v117</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -3148,9 +3148,30 @@ function renderBetsTab() {
 }
 
 async function fundSubaccount() {
+  if (!_currentUser || _currentUser.email !== 'ezrapemstein@gmail.com') {
+    return alert('Restricted to authorized users.');
+  }
   const amount = parseFloat(document.getElementById('bets-fund-amount').value);
   if (!amount || amount <= 0) return alert('Enter a valid amount');
-  alert('Subaccount funding not yet implemented (requires management key).');
+  if (!confirm(`Transfer $${amount.toFixed(2)} from main wallet to trading subaccount?`)) return;
+
+  try {
+    const r = await fetch(RENDER_URL + '/fund-subaccount', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ amount }),
+    });
+    const data = await r.json();
+    if (data.success) {
+      alert(`Funded! Main: $${data.mainBalance || '?'} | Sub: $${data.subBalance || '?'}`);
+      document.getElementById('bets-fund-amount').value = '';
+      if (data.subBalance) document.getElementById('bets-balance').textContent = '$' + parseFloat(data.subBalance).toFixed(2);
+    } else {
+      alert('Transfer failed: ' + (data.error || 'Unknown error'));
+    }
+  } catch(e) {
+    alert('Transfer failed: ' + e.message);
+  }
 }
 
 // ── Overrides ───────────────────────────────────────────────────────────
