@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v106</title>
+<title>NBA ALGO v107</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -4998,6 +4998,13 @@ async function _executePlaceBet() {
   btn.textContent = 'Placing...';
 
   try {
+    console.log('Placing bet item:', JSON.stringify(item));
+    if (!item.outcomeId) {
+      alert('No outcome ID on this bet. Refresh odds first to get Novig outcome IDs, then re-add the bet.');
+      btn.disabled = false;
+      btn.textContent = 'Confirm & Place';
+      return;
+    }
     const qty = Math.round(item.stake * 100 / item.price);
     const body = {
       outcomeId: item.outcomeId,
@@ -5010,6 +5017,7 @@ async function _executePlaceBet() {
       type: item.type,
       side: item.side,
     };
+    console.log('Sending to server:', JSON.stringify(body));
 
     const r = await fetch(RENDER_URL + '/place-bet', {
       method: 'POST',
