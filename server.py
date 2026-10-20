@@ -76,6 +76,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._check_roster()
             return
 
+        if self.path == '/novig-account':
+            self._novig_account()
+            return
+
         if self.path == '/rss/nba':
             self._proxy('https://www.rotowire.com/rss/news.php?sport=NBA', {'User-Agent': 'Mozilla/5.0', 'Accept': 'application/rss+xml, */*'})
             return
@@ -366,6 +370,32 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._json_response(200, result)
         except Exception as e:
             print(f'Novig book failed: {e}')
+            import traceback; traceback.print_exc()
+            self._json_response(500, {'error': str(e)})
+
+    def _novig_account(self):
+        """Get Novig positions and open orders."""
+        try:
+            from scripts.novig import NovigClient
+        except ImportError:
+            import sys
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            from scripts.novig import NovigClient
+
+        novig_key = os.environ.get('NOVIG_KEY_ID', '')
+        novig_pem = os.environ.get('NOVIG_PRIVATE_KEY', '')
+
+        if not novig_key or not novig_pem:
+            self._json_response(400, {'error': 'NOVIG keys not configured'})
+            return
+
+        try:
+            nc = NovigClient(novig_key, novig_pem)
+            positions = nc.get_positions()
+            orders = nc.get_orders()
+            self._json_response(200, {'positions': positions, 'orders': orders})
+        except Exception as e:
+            print(f'Novig account failed: {e}')
             import traceback; traceback.print_exc()
             self._json_response(500, {'error': str(e)})
 

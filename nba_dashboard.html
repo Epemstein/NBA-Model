@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v108</title>
+<title>NBA ALGO v109</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -654,6 +654,7 @@ input[type=number] { -moz-appearance: textfield; }
   box-shadow: 0 4px 12px rgba(0,0,0,.3);
 }
 #bq-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.collapsed { display: none; }
 </style>
 </head>
 <body>
@@ -694,8 +695,7 @@ input[type=number] { -moz-appearance: textfield; }
 
 <nav id="nav">
   <button class="active" data-tab="games">Games</button>
-  <button data-tab="picks">Picks</button>
-  <button data-tab="kelly">Kelly Tracker</button>
+  <button data-tab="bets">Bets</button>
   <button data-tab="teams">Teams</button>
   <button data-tab="players">Players</button>
   <button data-tab="standings">Standings</button>
@@ -816,68 +816,66 @@ input[type=number] { -moz-appearance: textfield; }
 
 </div>
 
-<!-- ═══════════ PICKS PANEL ═══════════ -->
-<div class="panel" id="panel-picks">
-
-  <div class="card">
-    <div class="ct">Log a Pick</div>
-    <div class="fr">
-      <div class="fg"><label class="fl">Game</label><select id="pick-game"><option value="">Select game...</option></select></div>
-      <div class="fg"><label class="fl">Type</label><select id="pick-type"><option value="spread">Spread</option><option value="total">Total</option></select></div>
-      <div class="fg"><label class="fl">Pick</label><input id="pick-pick" placeholder="e.g. BOS -3.5 or Over 220"></div>
-      <div class="fg"><label class="fl">Odds</label><input id="pick-odds" value="-110"></div>
-      <div class="fg"><label class="fl">Risk ($)</label><input id="pick-risk" type="number"></div>
-    </div>
-    <div style="display:flex;gap:8px;">
-      <button class="btn bp" onclick="logPick()">Log Pick</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="ct">Today's Picks</div>
-    <div class="sw">
-      <table class="dt" id="picks-table">
-        <thead><tr>
-          <th>Game</th><th>Type</th><th>Pick</th><th>Odds</th><th>Edge</th><th>Risk</th><th>Win</th><th>Result</th><th></th>
-        </tr></thead>
-        <tbody id="picks-body"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="ct">Pick History</div>
-    <div class="sw" style="max-height:600px;">
-      <table class="dt" id="history-table">
-        <thead><tr>
-          <th>Date</th><th>Game</th><th>Type</th><th>Pick</th><th>Odds</th><th>Edge</th><th>Risk</th><th>P/L</th><th>Result</th>
-        </tr></thead>
-        <tbody id="history-body"></tbody>
-      </table>
-    </div>
-  </div>
-
-</div>
-
-<!-- ═══════════ KELLY PANEL ═══════════ -->
-<div class="panel" id="panel-kelly">
+<!-- ═══════════ BETS PANEL ═══════════ -->
+<div class="panel" id="panel-bets">
 
   <div class="stat-strip">
-    <div class="stat-strip-item"><div class="sl">Bankroll</div><div class="sv a" id="k-bankroll">$10,000</div></div>
-    <div class="stat-strip-item"><div class="sl">Today P/L</div><div class="sv" id="k-today-pl">$0</div></div>
-    <div class="stat-strip-item"><div class="sl">Season P/L</div><div class="sv" id="k-season-pl">$0</div></div>
-    <div class="stat-strip-item"><div class="sl">Record</div><div class="sv" id="k-record">0-0</div></div>
-    <div class="stat-strip-item"><div class="sl">ROI</div><div class="sv" id="k-roi">0%</div></div>
+    <div class="stat-strip-item"><div class="sl">Balance</div><div class="sv a" id="bets-balance">--</div></div>
+    <div class="stat-strip-item"><div class="sl">Today's Bets</div><div class="sv" id="bets-today-count">0</div></div>
+    <div class="stat-strip-item"><div class="sl">Today's Risk</div><div class="sv" id="bets-today-risk">$0</div></div>
+    <div class="stat-strip-item"><div class="sl">Positions</div><div class="sv" id="bets-positions-count">0</div></div>
   </div>
 
   <div class="card">
-    <div class="ct">Bankroll Settings</div>
-    <div class="fr">
-      <div class="fg"><label class="fl">Starting Bankroll</label><input id="k-start" type="number" value="10000"></div>
-      <div class="fg"><label class="fl">Kelly Fraction</label><input id="k-frac" type="number" value="0.5" step="0.1"></div>
-      <div class="fg"><label class="fl">Max Bet %</label><input id="k-max" type="number" value="3.0" step="0.5"></div>
+    <div class="ct" style="display:flex;justify-content:space-between;align-items:center;">
+      Active Positions
+      <button class="btn bp" style="font-size:11px;padding:4px 12px;" onclick="refreshNovigAccount()">Refresh</button>
     </div>
-    <button class="btn bp" onclick="saveBankroll()">Save</button>
+    <div class="sw">
+      <table class="dt" id="bets-positions-table">
+        <thead><tr>
+          <th>Game</th><th>Bet</th><th>Price</th><th>Qty</th><th>Cost</th><th>Status</th>
+        </tr></thead>
+        <tbody id="bets-positions-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ct">Today's Bet History</div>
+    <div class="sw">
+      <table class="dt" id="bets-today-table">
+        <thead><tr>
+          <th>Time</th><th>Game</th><th>Bet</th><th>Price</th><th>Stake</th><th>To Win</th><th>EV%</th><th>Status</th>
+        </tr></thead>
+        <tbody id="bets-today-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ct" style="cursor:pointer;" onclick="document.getElementById('bets-past-wrap').classList.toggle('collapsed')">
+      Past Days <span style="font-size:10px;color:var(--muted);margin-left:6px;">&#9660; click to toggle</span>
+    </div>
+    <div id="bets-past-wrap" class="collapsed">
+      <div class="sw" style="max-height:400px;">
+        <table class="dt" id="bets-past-table">
+          <thead><tr>
+            <th>Date</th><th># Bets</th><th>Total Risk</th>
+          </tr></thead>
+          <tbody id="bets-past-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ct">Account</div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <div style="font-size:13px;color:var(--text2);">Balance: <strong id="bets-acct-balance">--</strong></div>
+      <input id="bets-fund-amount" type="number" placeholder="Amount" style="width:100px;">
+      <button class="btn bp" style="font-size:11px;padding:4px 12px;" onclick="fundSubaccount()">Fund Subaccount</button>
+    </div>
   </div>
 
 </div>
@@ -1258,10 +1256,7 @@ function goToday() {
 // ── State ───────────────────────────────────────────────────────────────
 let STATE = {
   games: [],
-  picks: JSON.parse(localStorage.getItem('nba_picks') || '[]'),
-  history: JSON.parse(localStorage.getItem('nba_history') || '[]'),
   overrides: JSON.parse(localStorage.getItem('nba_overrides') || '{}'),
-  bankroll: JSON.parse(localStorage.getItem('nba_bankroll') || '{"start":10000,"kelly":0.5,"maxPct":3}'),
   settings: JSON.parse(localStorage.getItem('nba_settings') || '{"spreadEdge":2,"totalEdge":2,"hca":1.5,"paceMult":0.95,"sigma":13,"totalSigma":17,"minLiquidity":500,"defaultStake":100,"minEV":2.0,"blendDarko":60,"blendLebron":25,"blendEpm":15}'),
   teamRatings: {},
   leagueAvgPace: 100,
@@ -1291,6 +1286,7 @@ document.querySelectorAll('#nav button').forEach(btn => {
     // Lazy load tabs
     if (btn.dataset.tab === 'players' && !_allPlayers.length) loadAllPlayers();
     if (btn.dataset.tab === 'standings' && !_standingsData.length) loadStandings();
+    if (btn.dataset.tab === 'bets') loadBetsTab();
   });
 });
 
@@ -1679,7 +1675,7 @@ async function loadSlate() {
     renderGames();
     renderOddsSummary();
     updateStrip();
-    populatePickDropdown();
+
     if (typeof loadPlacedBets === 'function') loadPlacedBets();
 
     // Apply baselines + game overrides from Firestore to get correct minutes
@@ -3042,151 +3038,135 @@ function updateStrip() {
   document.getElementById('ss-pace').textContent = STATE.leagueAvgPace.toFixed(1);
 }
 
-// ── Picks ───────────────────────────────────────────────────────────────
-function populatePickDropdown() {
-  const sel = document.getElementById('pick-game');
-  sel.innerHTML = '<option value="">Select game...</option>';
-  for (const g of STATE.games) {
-    sel.innerHTML += `<option value="${g.away}@${g.home}">${g.away} @ ${g.home} — ${g.game_time_et}</option>`;
-  }
+// ── Bets Tab ────────────────────────────────────────────────────────────
+let _allBets = [];
+let _novigPositions = [];
+let _novigOrders = [];
+
+async function loadBetsTab() {
+  try {
+    // Load ALL bets from Firestore (not just today)
+    const snap = await fbDb.collection('nba_bets').orderBy('placedAtMs', 'desc').get();
+    _allBets = snap.docs.map(d => d.data());
+  } catch(e) { console.warn('Failed to load bets:', e); _allBets = []; }
+
+  renderBetsTab();
+  refreshNovigAccount();
 }
 
-function logPick() {
-  const game = document.getElementById('pick-game').value;
-  const type = document.getElementById('pick-type').value;
-  const pick = document.getElementById('pick-pick').value.trim();
-  const odds = parseInt(document.getElementById('pick-odds').value) || -110;
-  const risk = parseFloat(document.getElementById('pick-risk').value) || 0;
-  if (!game || !pick) return alert('Select a game and enter a pick');
-
-  const g = STATE.games.find(g => `${g.away}@${g.home}` === game);
-  const edge = type === 'spread' ? g?.spread_edge : g?.total_edge;
-
-  const entry = {
-    id: Date.now(),
-    date: new Date().toLocaleDateString('en-CA', {timeZone: 'America/New_York'}),
-    game, type, pick, odds, risk,
-    edge: edge != null ? Math.abs(edge).toFixed(1) : '—',
-    result: null, pnl: null,
-  };
-
-  STATE.picks.push(entry);
-  localStorage.setItem('nba_picks', JSON.stringify(STATE.picks));
-  renderPicks();
-
-  // Clear form
-  document.getElementById('pick-pick').value = '';
-  document.getElementById('pick-risk').value = '';
+async function refreshNovigAccount() {
+  try {
+    const r = await fetch(`${RENDER_URL}/novig-account`);
+    if (r.ok) {
+      const data = await r.json();
+      _novigPositions = data.positions || [];
+      _novigOrders = data.orders || [];
+      renderBetsPositions();
+      const posCount = _novigPositions.length + _novigOrders.length;
+      document.getElementById('bets-positions-count').textContent = posCount;
+    }
+  } catch(e) { console.warn('Failed to refresh Novig account:', e); }
 }
 
-function renderPicks() {
-  const tbody = document.getElementById('picks-body');
-  tbody.innerHTML = STATE.picks.map(p => `
-    <tr class="pick-row ${p.result || ''}">
-      <td style="font-family:var(--sans)">${p.game}</td>
-      <td>${p.type}</td>
-      <td style="font-weight:600">${p.pick}</td>
-      <td>${p.odds > 0 ? '+' + p.odds : p.odds}</td>
-      <td>${p.edge}</td>
-      <td>$${p.risk.toLocaleString()}</td>
-      <td>${p.pnl != null ? (p.pnl >= 0 ? '+' : '') + '$' + p.pnl.toLocaleString() : '—'}</td>
-      <td>
-        <select onchange="resolvePick(${p.id}, this.value)" style="font-size:10px;padding:2px 4px;">
-          <option value="" ${!p.result ? 'selected' : ''}>Pending</option>
-          <option value="win" ${p.result === 'win' ? 'selected' : ''}>Win</option>
-          <option value="loss" ${p.result === 'loss' ? 'selected' : ''}>Loss</option>
-          <option value="push" ${p.result === 'push' ? 'selected' : ''}>Push</option>
-        </select>
-      </td>
-      <td><button class="btn bd" style="font-size:10px;padding:2px 6px;" onclick="deletePick(${p.id})">X</button></td>
-    </tr>
-  `).join('');
-}
+function renderBetsTab() {
+  const today = todayET();
+  const todayBets = _allBets.filter(b => b.date === today);
+  const pastBets = _allBets.filter(b => b.date !== today);
 
-function resolvePick(id, result) {
-  const p = STATE.picks.find(x => x.id === id);
-  if (!p) return;
-  p.result = result || null;
-  if (result === 'win') {
-    p.pnl = p.odds >= 0 ? Math.round(p.risk * p.odds / 100) : Math.round(p.risk * 100 / Math.abs(p.odds));
-  } else if (result === 'loss') {
-    p.pnl = -p.risk;
-  } else if (result === 'push') {
-    p.pnl = 0;
+  // Stat strip
+  document.getElementById('bets-today-count').textContent = todayBets.length;
+  const todayRisk = todayBets.reduce((s, b) => s + (b.stake || 0), 0);
+  document.getElementById('bets-today-risk').textContent = '$' + todayRisk.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+  // Today's bets table
+  const todayBody = document.getElementById('bets-today-body');
+  if (!todayBets.length) {
+    todayBody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--muted);font-family:var(--sans)">No bets today</td></tr>';
   } else {
-    p.pnl = null;
+    todayBody.innerHTML = todayBets.map(b => {
+      const time = b.placedAt ? new Date(b.placedAt).toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York'}) : '--';
+      const game = b.gameKey || '--';
+      const desc = b.description || '--';
+      const price = b.price != null ? fmtML(probToML(b.price)) : '--';
+      const stake = b.stake != null ? '$' + b.stake.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '--';
+      const toWin = (b.stake && b.price) ? '$' + _calcToWin(b.stake, probToML(b.price)).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '--';
+      const ev = b.ev != null ? b.ev.toFixed(1) + '%' : '--';
+      const resp = b.novigResponse || {};
+      const status = resp.status || resp.orderStatus || 'placed';
+      const statusColor = status === 'filled' || status === 'placed' ? 'var(--green)' : status === 'rejected' ? 'var(--red)' : 'var(--text2)';
+      return `<tr>
+        <td style="font-family:var(--sans);white-space:nowrap">${time}</td>
+        <td style="font-family:var(--sans)">${game}</td>
+        <td style="font-weight:600">${desc}</td>
+        <td style="font-family:var(--mono)">${price}</td>
+        <td style="font-family:var(--mono)">${stake}</td>
+        <td style="font-family:var(--mono);color:var(--green)">${toWin}</td>
+        <td style="font-family:var(--mono);color:${parseFloat(b.ev) > 0 ? 'var(--green)' : 'var(--muted)'}">${ev}</td>
+        <td style="text-transform:uppercase;font-size:10px;font-weight:600;color:${statusColor}">${status}</td>
+      </tr>`;
+    }).join('');
   }
-  localStorage.setItem('nba_picks', JSON.stringify(STATE.picks));
-  renderPicks();
-  updateKelly();
+
+  // Past days summary
+  const pastBody = document.getElementById('bets-past-body');
+  const byDate = {};
+  for (const b of pastBets) {
+    if (!byDate[b.date]) byDate[b.date] = [];
+    byDate[b.date].push(b);
+  }
+  const dates = Object.keys(byDate).sort().reverse();
+  if (!dates.length) {
+    pastBody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--muted);font-family:var(--sans)">No past bets</td></tr>';
+  } else {
+    pastBody.innerHTML = dates.map(d => {
+      const bets = byDate[d];
+      const risk = bets.reduce((s, b) => s + (b.stake || 0), 0);
+      return `<tr>
+        <td style="font-family:var(--sans)">${d}</td>
+        <td>${bets.length}</td>
+        <td style="font-family:var(--mono)">$${risk.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+      </tr>`;
+    }).join('');
+  }
 }
 
-function deletePick(id) {
-  STATE.picks = STATE.picks.filter(x => x.id !== id);
-  localStorage.setItem('nba_picks', JSON.stringify(STATE.picks));
-  renderPicks();
-  updateKelly();
+function renderBetsPositions() {
+  const tbody = document.getElementById('bets-positions-body');
+  const rows = [];
+
+  for (const p of _novigPositions) {
+    rows.push(`<tr>
+      <td style="font-family:var(--sans)">${p.eventName || p.marketName || '--'}</td>
+      <td style="font-weight:600">${p.outcomeName || p.side || '--'}</td>
+      <td style="font-family:var(--mono)">${p.averagePrice != null ? fmtML(probToML(p.averagePrice)) : '--'}</td>
+      <td style="font-family:var(--mono)">${p.quantity != null ? p.quantity : '--'}</td>
+      <td style="font-family:var(--mono)">${p.cost != null ? '$' + Math.abs(p.cost).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '--'}</td>
+      <td style="text-transform:uppercase;font-size:10px;font-weight:600;color:var(--green)">position</td>
+    </tr>`);
+  }
+
+  for (const o of _novigOrders) {
+    rows.push(`<tr>
+      <td style="font-family:var(--sans)">${o.eventName || o.marketName || '--'}</td>
+      <td style="font-weight:600">${o.outcomeName || o.side || '--'}</td>
+      <td style="font-family:var(--mono)">${o.price != null ? fmtML(probToML(o.price)) : '--'}</td>
+      <td style="font-family:var(--mono)">${o.quantity != null ? o.quantity : '--'}</td>
+      <td style="font-family:var(--mono)">--</td>
+      <td style="text-transform:uppercase;font-size:10px;font-weight:600;color:var(--yellow)">resting</td>
+    </tr>`);
+  }
+
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);font-family:var(--sans)">No active positions</td></tr>';
+  } else {
+    tbody.innerHTML = rows.join('');
+  }
 }
 
-// ── History ─────────────────────────────────────────────────────────────
-function renderHistory() {
-  const tbody = document.getElementById('history-body');
-  const all = [...STATE.history, ...STATE.picks.filter(p => p.result)].sort((a, b) => b.id - a.id);
-  tbody.innerHTML = all.map(p => `
-    <tr class="pick-row ${p.result || ''}">
-      <td style="font-family:var(--sans)">${p.date}</td>
-      <td style="font-family:var(--sans)">${p.game}</td>
-      <td>${p.type}</td>
-      <td style="font-weight:600">${p.pick}</td>
-      <td>${p.odds > 0 ? '+' + p.odds : p.odds}</td>
-      <td>${p.edge}</td>
-      <td>$${p.risk.toLocaleString()}</td>
-      <td style="color:${p.pnl > 0 ? 'var(--green)' : p.pnl < 0 ? 'var(--red)' : 'var(--text2)'};font-weight:600">
-        ${p.pnl != null ? (p.pnl >= 0 ? '+' : '') + '$' + p.pnl.toLocaleString() : '—'}
-      </td>
-      <td style="text-transform:uppercase;font-size:10px;font-weight:600;color:${
-        p.result === 'win' ? 'var(--green)' : p.result === 'loss' ? 'var(--red)' : 'var(--yellow)'
-      }">${p.result || '—'}</td>
-    </tr>
-  `).join('');
-}
-
-// ── Kelly tracker ───────────────────────────────────────────────────────
-function updateKelly() {
-  const all = [...STATE.history, ...STATE.picks.filter(p => p.result)];
-  const today = new Date().toLocaleDateString('en-CA', {timeZone: 'America/New_York'});
-  const todayPicks = all.filter(p => p.date === today);
-
-  const todayPL = todayPicks.reduce((s, p) => s + (p.pnl || 0), 0);
-  const seasonPL = all.reduce((s, p) => s + (p.pnl || 0), 0);
-  const wins = all.filter(p => p.result === 'win').length;
-  const losses = all.filter(p => p.result === 'loss').length;
-  const totalRisked = all.reduce((s, p) => s + p.risk, 0);
-
-  document.getElementById('k-bankroll').textContent = fmtMoney(STATE.bankroll.start + seasonPL);
-  document.getElementById('k-today-pl').textContent = (todayPL >= 0 ? '+' : '-') + fmtMoney(todayPL);
-  document.getElementById('k-today-pl').className = `sv ${todayPL >= 0 ? 'g' : 'r'}`;
-  document.getElementById('k-season-pl').textContent = (seasonPL >= 0 ? '+' : '-') + fmtMoney(seasonPL);
-  document.getElementById('k-season-pl').className = `sv ${seasonPL >= 0 ? 'g' : 'r'}`;
-  document.getElementById('k-record').textContent = `${wins}-${losses}`;
-  document.getElementById('k-roi').textContent = totalRisked > 0 ? (seasonPL / totalRisked * 100).toFixed(1) + '%' : '0%';
-
-  // Populate settings inputs
-  document.getElementById('k-start').value = STATE.bankroll.start;
-  document.getElementById('k-frac').value = STATE.bankroll.kelly;
-  document.getElementById('k-max').value = STATE.bankroll.maxPct;
-
-  renderHistory();
-}
-
-function saveBankroll() {
-  STATE.bankroll = {
-    start: parseFloat(document.getElementById('k-start').value) || 10000,
-    kelly: parseFloat(document.getElementById('k-frac').value) || 0.5,
-    maxPct: parseFloat(document.getElementById('k-max').value) || 3,
-  };
-  localStorage.setItem('nba_bankroll', JSON.stringify(STATE.bankroll));
-  updateKelly();
+async function fundSubaccount() {
+  const amount = parseFloat(document.getElementById('bets-fund-amount').value);
+  if (!amount || amount <= 0) return alert('Enter a valid amount');
+  alert('Subaccount funding not yet implemented (requires management key).');
 }
 
 // ── Overrides ───────────────────────────────────────────────────────────
@@ -4555,10 +4535,8 @@ async function initApp() {
   setDate(todayET());
 
   loadSettingsUI();
-  renderPicks();
   initTeamSelector();
   setupHistoryListener();
-  updateKelly();
 
   // Check Firestore connection
   const fsStatus = document.getElementById('fs-status');
@@ -4621,7 +4599,7 @@ function setupRealtimeListener() {
     renderGames();
     renderOddsSummary();
     updateStrip();
-    populatePickDropdown();
+
   });
 }
 
