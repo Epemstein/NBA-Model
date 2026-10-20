@@ -656,6 +656,7 @@ def get_novig_all_lines(client, target_date, game_key, center_spread=None, cente
             'away_price': away_price, 'away_fill': away_fill,
             'home_ladder': _bid_ladder(book, away_oid),
             'away_ladder': _bid_ladder(book, home_oid),
+            'home_oid': home_oid, 'away_oid': away_oid,
         })
 
     # Process totals
@@ -685,6 +686,7 @@ def get_novig_all_lines(client, target_date, game_key, center_spread=None, cente
             'under_price': under_price, 'under_fill': under_fill,
             'over_ladder': _bid_ladder(book, under_oid),
             'under_ladder': _bid_ladder(book, over_oid),
+            'over_oid': over_oid, 'under_oid': under_oid,
         })
 
     # Trim to 9 lines centered on a target strike
@@ -749,11 +751,13 @@ def get_novig_all_lines(client, target_date, game_key, center_spread=None, cente
             if oname == home_team:
                 money_out['home_price'] = ask
                 money_out['home_fill'] = fillable
+                money_out['home_oid'] = o['outcomeId']
                 if other_oid:
                     money_out['home_ml_ladder'] = _bid_ladder(ml_book, other_oid[0])
             else:
                 money_out['away_price'] = ask
                 money_out['away_fill'] = fillable
+                money_out['away_oid'] = o['outcomeId']
                 if other_oid:
                     money_out['away_ml_ladder'] = _bid_ladder(ml_book, other_oid[0])
 

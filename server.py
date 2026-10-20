@@ -47,6 +47,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self._cors()
         self.end_headers()
 
+    def do_POST(self):
+        if self.path == '/place-bet':
+            self._place_bet()
+            return
+        self.send_error(404)
+
     def do_GET(self):
         if self.path == '/health':
             self.send_response(200)
@@ -265,6 +271,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     'away_spread_fill': sp.get('away_fillable', 0),
                     'home_spread_ladder': sp.get('home_ladder', []),
                     'away_spread_ladder': sp.get('away_ladder', []),
+                    'home_spread_oid': sp.get('home_outcome_id', ''),
+                    'away_spread_oid': sp.get('away_outcome_id', ''),
                     'book_total': tot.get('strike') if tot else None,
                     'over_price': tot.get('over_price') if tot else None,
                     'over_fill': tot.get('over_fillable', 0) if tot else 0,
@@ -272,12 +280,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     'under_fill': tot.get('under_fillable', 0) if tot else 0,
                     'over_ladder': tot.get('over_ladder', []) if tot else [],
                     'under_ladder': tot.get('under_ladder', []) if tot else [],
+                    'over_oid': tot.get('over_outcome_id', '') if tot else '',
+                    'under_oid': tot.get('under_outcome_id', '') if tot else '',
                     'home_ml_price': ml.get('home_price') if ml else None,
                     'home_ml_fill': ml.get('home_fillable', 0) if ml else 0,
                     'away_ml_price': ml.get('away_price') if ml else None,
                     'away_ml_fill': ml.get('away_fillable', 0) if ml else 0,
                     'home_ml_ladder': ml.get('home_ml_ladder', []) if ml else [],
                     'away_ml_ladder': ml.get('away_ml_ladder', []) if ml else [],
+                    'home_ml_oid': ml.get('home_outcome_id', '') if ml else '',
+                    'away_ml_oid': ml.get('away_outcome_id', '') if ml else '',
                 }
 
             # Also write to Firestore if configured
@@ -390,6 +402,94 @@ class Handler(http.server.BaseHTTPRequestHandler):
             import traceback; traceback.print_exc()
             self._json_response(502, {'error': str(e)})
 
+    def _place_bet(self):
+        """Place a bet on Novig exchange."""
+        import time
+        try:
+            from scripts.novig import NovigClient
+        except ImportError:
+            import sys
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            from scripts.novig import NovigClient
+
+        novig_key = os.environ.get('NOVIG_KEY_ID', '')
+        novig_pem = os.environ.get('NOVIG_PRIVATE_KEY', '')
+        sa_json = os.environ.get('FIREBASE_SA_JSON', '')
+
+        if not novig_key or not novig_pem:
+            self._json_response(400, {'error': 'NOVIG keys not configured'})
+            return
+
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            body = json.loads(self.rfile.read(length)) if length else {}
+
+            outcome_id = body.get('outcomeId', '')
+            price = body.get('price')
+            stake = body.get('stake', 0)
+            description = body.get('description', '')
+            game_key = body.get('gameKey', '')
+            date = body.get('date', '')
+            bet_type = body.get('type', '')
+            side = body.get('side', '')
+
+            if not outcome_id or not price or not stake:
+                self._json_response(400, {'error': 'Missing required fields: outcomeId, price, stake'})
+                return
+
+            # Calculate qty: dollars = price * qty / 100 → qty = stake * 100 / price
+            qty = round(stake * 100 / price)
+
+            print(f'Placing bet: {description} | outcomeId={outcome_id} | price={price} | qty={qty} | stake=${stake}')
+
+            nc = NovigClient(novig_key, novig_pem)
+            status_code, response = nc.place_order(outcome_id, str(round(price, 4)), qty)
+
+            print(f'Novig response: {status_code} {response}')
+
+            if status_code in (200, 201):
+                # Record in Firestore
+                if sa_json:
+                    try:
+                        import firebase_admin
+                        from firebase_admin import credentials, firestore as fs
+                        if not firebase_admin._apps:
+                            cred = credentials.Certificate(json.loads(sa_json))
+                            firebase_admin.initialize_app(cred)
+                        db = fs.client()
+                        db.collection('nba_bets').add({
+                            'date': date,
+                            'gameKey': game_key,
+                            'type': bet_type,
+                            'description': description,
+                            'side': side,
+                            'outcomeId': outcome_id,
+                            'price': price,
+                            'qty': qty,
+                            'stake': stake,
+                            'novigResponse': response if isinstance(response, dict) else {'raw': str(response)},
+                            'placedAt': fs.SERVER_TIMESTAMP,
+                            'placedAtMs': int(time.time() * 1000),
+                        })
+                    except Exception as e:
+                        print(f'Firestore bet record failed (bet was placed!): {e}')
+
+                self._json_response(200, {
+                    'success': True,
+                    'novigStatus': status_code,
+                    'response': response if isinstance(response, dict) else str(response),
+                })
+            else:
+                self._json_response(200, {
+                    'success': False,
+                    'error': f'Novig returned {status_code}',
+                    'response': response if isinstance(response, dict) else str(response),
+                })
+        except Exception as e:
+            print(f'Place bet failed: {e}')
+            import traceback; traceback.print_exc()
+            self._json_response(500, {'error': str(e)})
+
     def _scrape_injuries_to_slate(self, target_date, db):
         """Scrape ESPN injuries page and update player injury fields on the slate."""
         import re, time
@@ -498,7 +598,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def _cors(self):
         self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', '*')
 
     def log_message(self, fmt, *args):
