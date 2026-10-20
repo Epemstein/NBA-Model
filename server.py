@@ -407,7 +407,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
             nc = NovigClient(novig_key, novig_pem)
             positions = nc.get_positions()
             orders = nc.get_orders()
-            self._json_response(200, {'positions': positions, 'orders': orders})
+
+            # Get balance via management key
+            balance = None
+            mgmt_key = os.environ.get('NOVIG_MGMT_KEY_ID', '')
+            mgmt_pem = os.environ.get('NOVIG_MGMT_PRIVATE_KEY', '')
+            sub_key_id = os.environ.get('NOVIG_SUB_KEY_ID', '78debf9c-a573-482d-9807-c8bfb227fd9f')
+            if mgmt_key and mgmt_pem:
+                try:
+                    mgmt = NovigClient(mgmt_key, mgmt_pem)
+                    r = mgmt._request('GET', f'/v3/account/subaccounts/{sub_key_id}/balance')
+                    if r.ok:
+                        balance = r.json().get('balance')
+                except:
+                    pass
+
+            self._json_response(200, {'positions': positions, 'orders': orders, 'balance': balance})
         except Exception as e:
             print(f'Novig account failed: {e}')
             import traceback; traceback.print_exc()

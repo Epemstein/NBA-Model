@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v117</title>
+<title>NBA ALGO v118</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -3051,6 +3051,12 @@ async function refreshNovigAccount() {
       _novigOrders = (data.orders && data.orders.open) || [];
       const posCount = _novigPositions.length + _novigOrders.length;
       document.getElementById('bets-positions-count').textContent = posCount;
+      if (data.balance != null) {
+        const bal = parseFloat(data.balance);
+        document.getElementById('bets-balance').textContent = '$' + bal.toFixed(2);
+        const acctBal = document.getElementById('bets-acct-balance');
+        if (acctBal) acctBal.textContent = '$' + bal.toFixed(2);
+      }
       renderBetsTab(); // re-render with updated position status
     }
   } catch(e) { console.warn('Failed to refresh Novig account:', e); }
@@ -3065,9 +3071,7 @@ function renderBetsTab() {
   document.getElementById('bets-today-count').textContent = todayBets.length;
   const todayRisk = todayBets.reduce((s, b) => s + (b.stake || 0), 0);
   document.getElementById('bets-today-risk').textContent = '$' + todayRisk.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-  // Compute approximate balance: $100 funded - sum of all bet costs
-  const totalCost = _allBets.reduce((s, b) => s + (b.stake || 0), 0);
-  document.getElementById('bets-balance').textContent = '$' + (100 - totalCost).toFixed(2);
+  // Balance is set by refreshNovigAccount() from the API
 
   // Today's bets table
   const todayBody = document.getElementById('bets-today-body');
