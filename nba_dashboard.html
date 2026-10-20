@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v110</title>
+<title>NBA ALGO v111</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -828,21 +828,9 @@ input[type=number] { -moz-appearance: textfield; }
 
   <div class="card">
     <div class="ct" style="display:flex;justify-content:space-between;align-items:center;">
-      Active Positions
+      Today's Bets
       <button class="btn bp" style="font-size:11px;padding:4px 12px;" onclick="refreshNovigAccount()">Refresh</button>
     </div>
-    <div class="sw">
-      <table class="dt" id="bets-positions-table">
-        <thead><tr>
-          <th>Game</th><th>Bet</th><th>Price</th><th>Qty</th><th>Cost</th><th>Status</th>
-        </tr></thead>
-        <tbody id="bets-positions-body"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="ct">Today's Bet History</div>
     <div class="sw">
       <table class="dt" id="bets-today-table">
         <thead><tr>
@@ -3061,9 +3049,9 @@ async function refreshNovigAccount() {
       const data = await r.json();
       _novigPositions = (data.positions && data.positions.positions) || [];
       _novigOrders = (data.orders && data.orders.open) || [];
-      renderBetsPositions();
       const posCount = _novigPositions.length + _novigOrders.length;
       document.getElementById('bets-positions-count').textContent = posCount;
+      renderBetsTab(); // re-render with updated position status
     }
   } catch(e) { console.warn('Failed to refresh Novig account:', e); }
 }
@@ -3108,9 +3096,10 @@ function renderBetsTab() {
           clv = `<span style="color:${clvColor};font-weight:600">${clvPct > 0 ? '+' : ''}${clvPct.toFixed(1)}%</span>`;
         }
       }
-      const resp = b.novigResponse || {};
-      const status = resp.status || resp.orderStatus || 'placed';
-      const statusColor = status === 'filled' || status === 'placed' ? 'var(--green)' : status === 'rejected' ? 'var(--red)' : 'var(--text2)';
+      // Check Novig position status for this bet
+      const pos = _novigPositions.find(p => p.outcomeId === b.outcomeId);
+      const status = pos ? 'filled' : 'placed';
+      const statusColor = pos ? 'var(--green)' : 'var(--yellow)';
       return `<tr>
         <td style="font-family:var(--sans);white-space:nowrap">${time}</td>
         <td style="font-family:var(--sans)">${game}</td>
@@ -3145,43 +3134,6 @@ function renderBetsTab() {
         <td style="font-family:var(--mono)">$${risk.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
       </tr>`;
     }).join('');
-  }
-}
-
-function renderBetsPositions() {
-  const tbody = document.getElementById('bets-positions-body');
-  const rows = [];
-
-  // Match positions to bets for display names
-  for (const p of _novigPositions) {
-    const match = _allBets.find(b => b.outcomeId === p.outcomeId);
-    const avgPrice = p.cost && p.qty ? parseFloat(p.cost) / p.qty : null;
-    rows.push(`<tr>
-      <td style="font-family:var(--sans)">${match ? match.gameKey : p.marketId?.slice(0,8) || '--'}</td>
-      <td style="font-weight:600">${match ? match.description : p.outcomeId?.slice(0,8) || '--'}</td>
-      <td style="font-family:var(--mono)">${avgPrice != null ? fmtML(probToML(avgPrice)) : '--'}</td>
-      <td style="font-family:var(--mono)">${p.qty}</td>
-      <td style="font-family:var(--mono)">$${parseFloat(p.cost || 0).toFixed(2)}</td>
-      <td style="text-transform:uppercase;font-size:10px;font-weight:600;color:var(--green)">filled</td>
-    </tr>`);
-  }
-
-  for (const o of _novigOrders) {
-    const match = _allBets.find(b => b.outcomeId === o.outcomeId);
-    rows.push(`<tr>
-      <td style="font-family:var(--sans)">${match ? match.gameKey : o.marketId?.slice(0,8) || '--'}</td>
-      <td style="font-weight:600">${match ? match.description : o.outcomeId?.slice(0,8) || '--'}</td>
-      <td style="font-family:var(--mono)">${o.price != null ? fmtML(probToML(parseFloat(o.price))) : '--'}</td>
-      <td style="font-family:var(--mono)">${o.qty}</td>
-      <td style="font-family:var(--mono)">--</td>
-      <td style="text-transform:uppercase;font-size:10px;font-weight:600;color:var(--yellow)">resting</td>
-    </tr>`);
-  }
-
-  if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);font-family:var(--sans)">No active positions</td></tr>';
-  } else {
-    tbody.innerHTML = rows.join('');
   }
 }
 
