@@ -66,6 +66,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._refresh_odds()
             return
 
+        if self.path.startswith('/check-roster'):
+            self._check_roster()
+            return
+
         if self.path == '/rss/nba':
             self._proxy('https://www.rotowire.com/rss/news.php?sport=NBA', {'User-Agent': 'Mozilla/5.0', 'Accept': 'application/rss+xml, */*'})
             return
@@ -345,6 +349,30 @@ class Handler(http.server.BaseHTTPRequestHandler):
             print(f'Novig book failed: {e}')
             import traceback; traceback.print_exc()
             self._json_response(500, {'error': str(e)})
+
+    def _check_roster(self):
+        """Fetch live NBA roster for a team via commonteamroster API."""
+        from urllib.parse import urlparse, parse_qs
+        qs = parse_qs(urlparse(self.path).query)
+        team_id = qs.get('teamId', [''])[0]
+        if not team_id:
+            self._json_response(400, {'error': 'Missing teamId param'})
+            return
+        try:
+            season = qs.get('season', ['2026-27'])[0]
+            url = f'https://stats.nba.com/stats/commonteamroster?TeamID={team_id}&Season={season}&LeagueID=00'
+            req = urllib.request.Request(url, headers=NBA_HEADERS)
+            resp = urllib.request.urlopen(req, timeout=30)
+            data = json.loads(resp.read())
+            hdrs = data['resultSets'][0]['headers']
+            rows = data['resultSets'][0]['rowSet']
+            name_i = hdrs.index('PLAYER')
+            pid_i = hdrs.index('PLAYER_ID')
+            players = [{'name': row[name_i], 'nba_id': str(row[pid_i])} for row in rows]
+            self._json_response(200, {'players': players})
+        except Exception as e:
+            print(f'Check roster failed: {e}')
+            self._json_response(502, {'error': str(e)})
 
     def _json_response(self, code, data):
         self.send_response(code)

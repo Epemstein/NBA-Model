@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v93</title>
+<title>NBA ALGO v94</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -895,6 +895,7 @@ input[type=number] { -moz-appearance: textfield; }
       </select>
     </div>
     <div id="team-banner-container"></div>
+    <div id="roster-warnings"></div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
       <div style="font-family:var(--mono);font-size:12px;color:var(--muted);">
         Total: <strong id="team-total-min" style="color:var(--text)">—</strong> / 240 min
@@ -3234,7 +3235,18 @@ const FULL_NAMES = {
 
 // ── Teams Baseline Editor ────────────────────────────────────────────────
 const POSITIONS = ['PG', 'SG', 'SF', 'PF', 'C'];
+const NBA_TEAM_IDS = {
+  ATL:1610612737, BOS:1610612738, BKN:1610612751, CHA:1610612766,
+  CHI:1610612741, CLE:1610612739, DAL:1610612742, DEN:1610612743,
+  DET:1610612765, GSW:1610612744, HOU:1610612745, IND:1610612754,
+  LAC:1610612746, LAL:1610612747, MEM:1610612763, MIA:1610612748,
+  MIL:1610612749, MIN:1610612750, NOP:1610612740, NYK:1610612752,
+  OKC:1610612760, ORL:1610612753, PHI:1610612755, PHX:1610612756,
+  POR:1610612757, SAC:1610612758, SAS:1610612759, TOR:1610612761,
+  UTA:1610612762, WAS:1610612764,
+};
 let _teamPlayers = []; // [{name, pos, pg, sg, sf, pf, c, dpm, o_dpm, d_dpm}]
+let _rosterWarnings = []; // [{name, minutes}] — baseline players not on active roster
 let _selectedTeam = '';
 
 function initTeamSelector() {
@@ -3292,12 +3304,65 @@ function loadTeamBaseline() {
         };
       });
 
+      // Check for baseline players NOT on the stored roster (orphaned minutes)
+      const rosterNames = new Set(roster.map(p => p.name));
+      _rosterWarnings = [];
+      for (const [name, sv] of Object.entries(saved)) {
+        if (!sv || typeof sv !== 'object') continue;
+        const mins = (sv.pg||0) + (sv.sg||0) + (sv.sf||0) + (sv.pf||0) + (sv.c||0);
+        if (mins > 0 && !rosterNames.has(name)) {
+          _rosterWarnings.push({ name, minutes: mins });
+        }
+      }
+
       // Sort by total minutes desc
       _teamPlayers.sort((a, b) => (b.pg+b.sg+b.sf+b.pf+b.c) - (a.pg+a.sg+a.sf+a.pf+a.c));
       captureBaselineSnapshot();
       renderTeamBaseline();
+
+      // Also check live NBA roster in background
+      checkLiveRoster(team, saved);
     });
   });
+}
+
+function checkLiveRoster(team, savedBaselines) {
+  const teamId = NBA_TEAM_IDS[team];
+  if (!teamId) return;
+  const base = location.hostname === 'localhost' || location.hostname === '127.0.0.1'
+    ? 'http://localhost:8080' : 'https://nba-algo-proxy.onrender.com';
+  fetch(`${base}/check-roster?teamId=${teamId}`)
+    .then(r => r.json())
+    .then(data => {
+      if (!data.players || _selectedTeam !== team) return;
+      const liveNames = new Set(data.players.map(p => p.name));
+      // Check baseline players against live roster
+      const liveWarnings = [];
+      for (const p of _teamPlayers) {
+        const mins = p.pg + p.sg + p.sf + p.pf + p.c;
+        if (mins > 0 && !liveNames.has(p.name)) {
+          liveWarnings.push({ name: p.name, minutes: mins });
+        }
+      }
+      // Also check saved baselines for players not even in stored roster
+      if (savedBaselines) {
+        for (const [name, sv] of Object.entries(savedBaselines)) {
+          if (!sv || typeof sv !== 'object') continue;
+          const mins = (sv.pg||0) + (sv.sg||0) + (sv.sf||0) + (sv.pf||0) + (sv.c||0);
+          if (mins > 0 && !liveNames.has(name) && !liveWarnings.find(w => w.name === name)) {
+            liveWarnings.push({ name, minutes: mins });
+          }
+        }
+      }
+      if (liveWarnings.length > 0) {
+        _rosterWarnings = liveWarnings;
+        renderRosterWarnings();
+      } else if (_rosterWarnings.length > 0) {
+        _rosterWarnings = [];
+        renderRosterWarnings();
+      }
+    })
+    .catch(() => {}); // silently fail — not critical
 }
 
 function hexToRgb(hex) {
@@ -3386,6 +3451,9 @@ function renderTeamBaseline() {
       </div>
     </div>`;
 
+  // Roster warnings
+  renderRosterWarnings();
+
   // Table
   const tbody = document.getElementById('team-baseline-body');
   tbody.innerHTML = _teamPlayers.map((p, i) => {
@@ -3459,6 +3527,33 @@ function updateTeamSums() {
   } else {
     warn.style.display = 'none';
   }
+}
+
+function renderRosterWarnings() {
+  const el = document.getElementById('roster-warnings');
+  if (!el) return;
+  if (!_rosterWarnings.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `
+    <div style="background:#c62828;color:#fff;border-radius:8px;padding:10px 14px;margin:8px 0;font-size:13px;">
+      <div style="font-weight:700;margin-bottom:4px;">Not on active roster</div>
+      ${_rosterWarnings.map(w => `
+        <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+          <span>${w.name} — <strong>${w.minutes.toFixed(0)} min</strong> still assigned</span>
+          <button onclick="zeroOutPlayer('${w.name.replace(/'/g, "\\'")}')" style="background:rgba(255,255,255,0.2);color:#fff;border:none;border-radius:4px;padding:2px 8px;font-size:11px;cursor:pointer;font-weight:600;">Zero Out</button>
+        </div>
+      `).join('')}
+    </div>`;
+}
+
+function zeroOutPlayer(name) {
+  const p = _teamPlayers.find(t => t.name === name);
+  if (p) {
+    p.pg = 0; p.sg = 0; p.sf = 0; p.pf = 0; p.c = 0;
+  }
+  _rosterWarnings = _rosterWarnings.filter(w => w.name !== name);
+  _teamPlayers.sort((a, b) => (b.pg+b.sg+b.sf+b.pf+b.c) - (a.pg+a.sg+a.sf+a.pf+a.c));
+  renderTeamBaseline();
+  autoSaveBaseline();
 }
 
 let _autoSaveTimer = null;
