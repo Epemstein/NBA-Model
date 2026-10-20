@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v90</title>
+<title>NBA ALGO v91</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -2326,11 +2326,14 @@ function renderOddsSummary() {
         return `<span class="edge-chip ${cls}">${ev.toFixed(1)}%</span>`;
       }
       // Blended fill for display
-      const awBlend = (g.away_spread_ladder && g.away_spread_ladder.length) ? computeBlendedFill(g.away_spread_ladder) : null;
-      const hwBlend = (g.home_spread_ladder && g.home_spread_ladder.length) ? computeBlendedFill(g.home_spread_ladder) : null;
+      const minLiqSp = STATE.settings?.minLiquidity || 500;
+      // Only blend if best-bid fill is under min liquidity
+      const awNeedsBlend = (g.away_spread_fill || 0) < minLiqSp;
+      const hwNeedsBlend = (g.home_spread_fill || 0) < minLiqSp;
+      const awBlend = (awNeedsBlend && g.away_spread_ladder && g.away_spread_ladder.length) ? computeBlendedFill(g.away_spread_ladder) : null;
+      const hwBlend = (hwNeedsBlend && g.home_spread_ladder && g.home_spread_ladder.length) ? computeBlendedFill(g.home_spread_ladder) : null;
       const awDisplayPrice = (awBlend && awBlend.blendedPrice != null) ? awBlend.blendedPrice : g.away_spread_price;
       const hwDisplayPrice = (hwBlend && hwBlend.blendedPrice != null) ? hwBlend.blendedPrice : g.home_spread_price;
-      const minLiqSp = STATE.settings?.minLiquidity || 500;
       const awDisplayFill = (awBlend && awBlend.totalFill > 0) ? awBlend.totalFill : (g.away_spread_fill || 0);
       const hwDisplayFill = (hwBlend && hwBlend.totalFill > 0) ? hwBlend.totalFill : (g.home_spread_fill || 0);
       const awFillTip = (awBlend && awBlend.splits.length > 1) ? awBlend.splits.map(s => '$' + s.fill + ' at ' + fmtML(probToML(s.price))).join(', ') : '';
