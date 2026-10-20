@@ -76,6 +76,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._check_roster()
             return
 
+        if self.path.startswith('/capture-closing'):
+            self._capture_closing_endpoint()
+            return
+
         if self.path == '/novig-account':
             self._novig_account()
             return
@@ -327,7 +331,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             except Exception as e:
                 print(f'Injury refresh failed (non-fatal): {e}')
 
-            self._json_response(200, {'lines': result, 'date': target_date, 'count': len(result), 'injuries': inj_count})
+            # Capture closing lines for games starting within 30 min
+            closing_count = 0
+            try:
+                closing_count = self._capture_closing_lines(target_date, result, db if sa_json else None)
+            except Exception as e:
+                print(f'Closing line capture failed (non-fatal): {e}')
+
+            self._json_response(200, {'lines': result, 'date': target_date, 'count': len(result), 'injuries': inj_count, 'closingCaptured': closing_count})
         except Exception as e:
             print(f'Refresh odds failed: {e}')
             import traceback; traceback.print_exc()
@@ -502,10 +513,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             'type': bet_type,
                             'description': description,
                             'side': side,
+                            'strike': body.get('strike'),
                             'outcomeId': outcome_id,
                             'price': price,
                             'qty': qty,
                             'stake': stake,
+                            'ev': body.get('ev'),
+                            'primaryPriceAtBet': body.get('primaryPrice'),
                             'novigResponse': response if isinstance(response, dict) else {'raw': str(response)},
                             'placedAt': fs.SERVER_TIMESTAMP,
                             'placedAtMs': int(time.time() * 1000),
@@ -536,6 +550,125 @@ class Handler(http.server.BaseHTTPRequestHandler):
             print(f'Place bet failed: {e}')
             import traceback; traceback.print_exc()
             self._json_response(500, {'error': str(e)})
+
+    def _capture_closing_endpoint(self):
+        """Standalone endpoint to capture closing lines — called by GitHub Actions cron."""
+        import datetime, time
+        from zoneinfo import ZoneInfo
+        try:
+            from scripts.novig import NovigClient, get_novig_nba_lines
+        except ImportError:
+            import sys
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            from scripts.novig import NovigClient, get_novig_nba_lines
+
+        novig_key = os.environ.get('NOVIG_KEY_ID', '')
+        novig_pem = os.environ.get('NOVIG_PRIVATE_KEY', '')
+        sa_json = os.environ.get('FIREBASE_SA_JSON', '')
+
+        if not sa_json:
+            self._json_response(400, {'error': 'Firebase not configured'})
+            return
+
+        try:
+            ET = ZoneInfo('America/New_York')
+            target_date = datetime.datetime.now(ET).strftime('%Y-%m-%d')
+
+            # Fetch current Novig lines
+            nc = NovigClient(novig_key, novig_pem) if novig_key and novig_pem else None
+            odds_result = {}
+            if nc:
+                lines = get_novig_nba_lines(nc, target_date=target_date)
+                for key, data in lines.items():
+                    sp = data.get('spread', {})
+                    tot = data.get('total', {})
+                    ml = data.get('money', {})
+                    odds_result[key] = {
+                        'home_spread_price': sp.get('home_price'),
+                        'away_spread_price': sp.get('away_price'),
+                        'home_ml_price': ml.get('home_price') if ml else None,
+                        'away_ml_price': ml.get('away_price') if ml else None,
+                        'over_price': tot.get('over_price') if tot else None,
+                        'under_price': tot.get('under_price') if tot else None,
+                    }
+
+            import firebase_admin
+            from firebase_admin import credentials, firestore as fs
+            if not firebase_admin._apps:
+                cred = credentials.Certificate(json.loads(sa_json))
+                firebase_admin.initialize_app(cred)
+            db = fs.client()
+
+            count = self._capture_closing_lines(target_date, odds_result, db)
+            self._json_response(200, {'captured': count, 'date': target_date, 'games': len(odds_result)})
+        except Exception as e:
+            print(f'Capture closing failed: {e}')
+            import traceback; traceback.print_exc()
+            self._json_response(500, {'error': str(e)})
+
+    def _capture_closing_lines(self, target_date, odds_result, db):
+        """Capture closing line prices for bets on games starting within 10 minutes."""
+        import datetime, time
+        from zoneinfo import ZoneInfo
+        if not db:
+            return 0
+
+        ET = ZoneInfo('America/New_York')
+        now = datetime.datetime.now(ET)
+
+        # Get slate to check game times
+        snap = db.collection('nba_slate').document(target_date).get()
+        if not snap.exists:
+            return 0
+        slate = snap.to_dict()
+        games = slate.get('games', [])
+
+        # Find games starting within 10 minutes
+        closing_games = set()
+        for g in games:
+            try:
+                from datetime import datetime as dt
+                gt = dt.fromisoformat(g.get('game_time_utc', '').replace('Z', '+00:00'))
+                gt_et = gt.astimezone(ET)
+                mins_until = (gt_et - now).total_seconds() / 60
+                if 0 < mins_until <= 10:
+                    closing_games.add(f'{g["away"]}@{g["home"]}')
+                    print(f'  Game {g["away"]}@{g["home"]} starts in {mins_until:.0f} min — capturing closing lines')
+            except:
+                pass
+
+        if not closing_games:
+            return 0
+
+        # Get all bets for today that don't have closingPrimaryPrice yet
+        bets = db.collection('nba_bets').where('date', '==', target_date).get()
+        updated = 0
+        for bet_doc in bets:
+            bet = bet_doc.to_dict()
+            if bet.get('closingPrimaryPrice') is not None:
+                continue  # already frozen
+            if bet.get('gameKey') not in closing_games:
+                continue  # game not starting soon
+
+            # Find the current primary price for this bet's side
+            gkey = bet['gameKey']
+            odds = odds_result.get(gkey, {})
+            closing_price = None
+            btype = bet.get('type', '')
+            side = bet.get('side', '')
+            if btype == 'spread':
+                closing_price = odds.get('home_spread_price' if side == 'home' else 'away_spread_price')
+            elif btype == 'ml':
+                closing_price = odds.get('home_ml_price' if side == 'home' else 'away_ml_price')
+            elif btype == 'total':
+                closing_price = odds.get('over_price' if side == 'over' else 'under_price')
+
+            if closing_price is not None:
+                bet_doc.reference.update({'closingPrimaryPrice': closing_price})
+                updated += 1
+                print(f'  Captured closing line for {bet.get("description")}: {closing_price:.4f}')
+
+        return updated
 
     def _scrape_injuries_to_slate(self, target_date, db):
         """Scrape ESPN injuries page and update player injury fields on the slate."""

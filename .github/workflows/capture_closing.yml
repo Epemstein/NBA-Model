@@ -1,0 +1,21 @@
+name: Capture Closing Lines
+
+on:
+  schedule:
+    # Every 5 minutes from 2:30 PM to 11:30 PM ET (18:30-03:30 UTC)
+    # Covers all NBA game start times with buffer
+    - cron: '*/5 18-23 * * *'
+    - cron: '*/5 0-3 * * *'
+  workflow_dispatch:  # allow manual trigger
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - name: Capture closing lines
+        run: |
+          echo "Calling capture-closing endpoint..."
+          RESPONSE=$(curl -s --max-time 60 "https://nba-model-7qcb.onrender.com/capture-closing")
+          echo "Response: $RESPONSE"
