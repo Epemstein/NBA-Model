@@ -458,7 +458,36 @@ class Handler(http.server.BaseHTTPRequestHandler):
         slate['injuriesRefreshedMs'] = int(time.time() * 1000)
         db.collection('nba_slate').document(target_date).set(slate)
         print(f'Injuries updated on slate: {updated} players')
-        return updated
+
+        # Also update nba_rosters/all (used by game card rotation editor)
+        roster_updated = 0
+        try:
+            rsnap = db.collection('nba_rosters').document('all').get()
+            if rsnap.exists:
+                rdata = rsnap.to_dict()
+                teams = rdata.get('teams', {})
+                for team_abr, players in teams.items():
+                    for p in players:
+                        pn = p.get('name', '').lower().replace('.', '')
+                        for sfx in [' jr', ' sr', ' iv', ' iii', ' ii']:
+                            if pn.endswith(sfx):
+                                pn = pn[:-len(sfx)].strip()
+                        if pn in injuries:
+                            inj = injuries[pn]
+                            p['injury'] = inj['status']
+                            p['injury_detail'] = inj['detail']
+                            roster_updated += 1
+                        else:
+                            if p.get('injury'):
+                                p['injury'] = ''
+                                p['injury_detail'] = ''
+                rdata['teams'] = teams
+                db.collection('nba_rosters').document('all').set(rdata)
+                print(f'Injuries updated on rosters: {roster_updated} players')
+        except Exception as e:
+            print(f'Roster injury update failed (non-fatal): {e}')
+
+        return updated + roster_updated
 
     def _json_response(self, code, data):
         self.send_response(code)
