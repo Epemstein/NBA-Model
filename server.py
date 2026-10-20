@@ -734,7 +734,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 gt = dt.fromisoformat(g.get('game_time_utc', '').replace('Z', '+00:00'))
                 gt_et = gt.astimezone(ET)
                 mins_until = (gt_et - now).total_seconds() / 60
-                if 0 < mins_until <= 10:
+                if -15 <= mins_until <= 10:
                     closing_games.add(f'{g["away"]}@{g["home"]}')
                     print(f'  Game {g["away"]}@{g["home"]} starts in {mins_until:.0f} min — capturing closing lines')
             except:
