@@ -351,27 +351,36 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._json_response(500, {'error': str(e)})
 
     def _check_roster(self):
-        """Fetch live NBA roster for a team via commonteamroster API."""
+        """Fetch live roster from nba.com team page (__NEXT_DATA__)."""
         from urllib.parse import urlparse, parse_qs
         qs = parse_qs(urlparse(self.path).query)
-        team_id = qs.get('teamId', [''])[0]
-        if not team_id:
-            self._json_response(400, {'error': 'Missing teamId param'})
+        team_slug = qs.get('team', [''])[0].lower()
+        if not team_slug:
+            self._json_response(400, {'error': 'Missing team param (e.g. team=bucks)'})
             return
         try:
-            season = qs.get('season', ['2026-27'])[0]
-            url = f'https://stats.nba.com/stats/commonteamroster?TeamID={team_id}&Season={season}&LeagueID=00'
-            req = urllib.request.Request(url, headers=NBA_HEADERS)
+            url = f'https://www.nba.com/{team_slug}/roster'
+            req = urllib.request.Request(url, headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept': 'text/html,application/xhtml+xml',
+            })
             resp = urllib.request.urlopen(req, timeout=30)
-            data = json.loads(resp.read())
-            hdrs = data['resultSets'][0]['headers']
-            rows = data['resultSets'][0]['rowSet']
-            name_i = hdrs.index('PLAYER')
-            pid_i = hdrs.index('PLAYER_ID')
-            players = [{'name': row[name_i], 'nba_id': str(row[pid_i])} for row in rows]
-            self._json_response(200, {'players': players})
+            html = resp.read().decode('utf-8', errors='replace')
+            # Extract __NEXT_DATA__ JSON
+            marker = '<script id="__NEXT_DATA__" type="application/json">'
+            start = html.find(marker)
+            if start < 0:
+                self._json_response(502, {'error': 'Could not find __NEXT_DATA__'})
+                return
+            start += len(marker)
+            end = html.find('</script>', start)
+            next_data = json.loads(html[start:end])
+            roster = next_data.get('props', {}).get('pageProps', {}).get('rosterData', {}).get('roster', [])
+            players = [{'name': p.get('name', ''), 'nba_id': str(p.get('id', ''))} for p in roster]
+            self._json_response(200, {'players': players, 'source': 'nba.com'})
         except Exception as e:
             print(f'Check roster failed: {e}')
+            import traceback; traceback.print_exc()
             self._json_response(502, {'error': str(e)})
 
     def _json_response(self, code, data):
