@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v89</title>
+<title>NBA ALGO v90</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -2349,7 +2349,7 @@ function renderOddsSummary() {
         <td>${evChip(awEV)}</td>
         <td>${srcEdge(dEdge, true)}</td><td>${srcEdge(lEdge, true)}</td><td>${srcEdge(eEdge, true)}</td>
         <td style="color:var(--accent);font-size:10px;">${fmtProbML(awDisplayPrice)}</td>
-        <td style="font-size:10px;color:var(--green);font-weight:600;cursor:default;" title="${awFillTip}">${awDisplayFill >= minLiqSp ? '$' + minLiqSp : fmtFill(awDisplayFill)}</td>
+        <td style="font-size:10px;color:var(--green);font-weight:600;cursor:default;" title="${awFillTip}">${fmtFill(awDisplayFill)}</td>
       </tr>`;
       html += `<tr style="border-bottom:2px solid var(--border);${incomplete ? 'opacity:0.35;' : ''}">
         <td style="font-size:10px;">${hwLogo}</td>
@@ -2358,7 +2358,7 @@ function renderOddsSummary() {
         <td>${evChip(hwEV)}</td>
         <td>${srcEdge(dEdge, false)}</td><td>${srcEdge(lEdge, false)}</td><td>${srcEdge(eEdge, false)}</td>
         <td style="color:var(--accent);font-size:10px;">${fmtProbML(hwDisplayPrice)}</td>
-        <td style="font-size:10px;color:var(--green);font-weight:600;cursor:default;" title="${hwFillTip}">${hwDisplayFill >= minLiqSp ? '$' + minLiqSp : fmtFill(hwDisplayFill)}</td>
+        <td style="font-size:10px;color:var(--green);font-weight:600;cursor:default;" title="${hwFillTip}">${fmtFill(hwDisplayFill)}</td>
       </tr>`;
     }
     tbody.innerHTML = html;
