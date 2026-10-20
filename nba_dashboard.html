@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v109</title>
+<title>NBA ALGO v110</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -846,7 +846,7 @@ input[type=number] { -moz-appearance: textfield; }
     <div class="sw">
       <table class="dt" id="bets-today-table">
         <thead><tr>
-          <th>Time</th><th>Game</th><th>Bet</th><th>Price</th><th>Stake</th><th>To Win</th><th>EV%</th><th>Status</th>
+          <th>Time</th><th>Game</th><th>Bet</th><th>Price</th><th>Stake</th><th>To Win</th><th>EV%</th><th>CLV</th><th>Status</th>
         </tr></thead>
         <tbody id="bets-today-body"></tbody>
       </table>
@@ -3059,8 +3059,8 @@ async function refreshNovigAccount() {
     const r = await fetch(`${RENDER_URL}/novig-account`);
     if (r.ok) {
       const data = await r.json();
-      _novigPositions = data.positions || [];
-      _novigOrders = data.orders || [];
+      _novigPositions = (data.positions && data.positions.positions) || [];
+      _novigOrders = (data.orders && data.orders.open) || [];
       renderBetsPositions();
       const posCount = _novigPositions.length + _novigOrders.length;
       document.getElementById('bets-positions-count').textContent = posCount;
@@ -3077,20 +3077,37 @@ function renderBetsTab() {
   document.getElementById('bets-today-count').textContent = todayBets.length;
   const todayRisk = todayBets.reduce((s, b) => s + (b.stake || 0), 0);
   document.getElementById('bets-today-risk').textContent = '$' + todayRisk.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  // Compute approximate balance: $100 funded - sum of all bet costs
+  const totalCost = _allBets.reduce((s, b) => s + (b.stake || 0), 0);
+  document.getElementById('bets-balance').textContent = '$' + (100 - totalCost).toFixed(2);
 
   // Today's bets table
   const todayBody = document.getElementById('bets-today-body');
   if (!todayBets.length) {
-    todayBody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--muted);font-family:var(--sans)">No bets today</td></tr>';
+    todayBody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--muted);font-family:var(--sans)">No bets today</td></tr>';
   } else {
     todayBody.innerHTML = todayBets.map(b => {
-      const time = b.placedAt ? new Date(b.placedAt).toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York'}) : '--';
+      const time = b.placedAtMs ? new Date(b.placedAtMs).toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York'}) : '--';
       const game = b.gameKey || '--';
       const desc = b.description || '--';
       const price = b.price != null ? fmtML(probToML(b.price)) : '--';
       const stake = b.stake != null ? '$' + b.stake.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '--';
       const toWin = (b.stake && b.price) ? '$' + _calcToWin(b.stake, probToML(b.price)).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '--';
       const ev = b.ev != null ? b.ev.toFixed(1) + '%' : '--';
+      // CLV: compare bet price to current line
+      let clv = '--';
+      const g = STATE.games.find(g => (g.away + '@' + g.home) === b.gameKey);
+      if (g && b.price != null) {
+        let currentPrice = null;
+        if (b.type === 'spread') currentPrice = b.side === 'away' ? g.away_spread_price : g.home_spread_price;
+        else if (b.type === 'ml') currentPrice = b.side === 'away' ? g.away_ml_price : g.home_ml_price;
+        else if (b.type === 'total') currentPrice = b.side === 'over' ? g.over_price : g.under_price;
+        if (currentPrice != null) {
+          const clvPct = Math.round((currentPrice - b.price) * 1000) / 10;
+          const clvColor = clvPct > 0 ? 'var(--green)' : clvPct < 0 ? 'var(--red)' : 'var(--muted)';
+          clv = `<span style="color:${clvColor};font-weight:600">${clvPct > 0 ? '+' : ''}${clvPct.toFixed(1)}%</span>`;
+        }
+      }
       const resp = b.novigResponse || {};
       const status = resp.status || resp.orderStatus || 'placed';
       const statusColor = status === 'filled' || status === 'placed' ? 'var(--green)' : status === 'rejected' ? 'var(--red)' : 'var(--text2)';
@@ -3102,6 +3119,7 @@ function renderBetsTab() {
         <td style="font-family:var(--mono)">${stake}</td>
         <td style="font-family:var(--mono);color:var(--green)">${toWin}</td>
         <td style="font-family:var(--mono);color:${parseFloat(b.ev) > 0 ? 'var(--green)' : 'var(--muted)'}">${ev}</td>
+        <td style="font-family:var(--mono)">${clv}</td>
         <td style="text-transform:uppercase;font-size:10px;font-weight:600;color:${statusColor}">${status}</td>
       </tr>`;
     }).join('');
@@ -3134,23 +3152,27 @@ function renderBetsPositions() {
   const tbody = document.getElementById('bets-positions-body');
   const rows = [];
 
+  // Match positions to bets for display names
   for (const p of _novigPositions) {
+    const match = _allBets.find(b => b.outcomeId === p.outcomeId);
+    const avgPrice = p.cost && p.qty ? parseFloat(p.cost) / p.qty : null;
     rows.push(`<tr>
-      <td style="font-family:var(--sans)">${p.eventName || p.marketName || '--'}</td>
-      <td style="font-weight:600">${p.outcomeName || p.side || '--'}</td>
-      <td style="font-family:var(--mono)">${p.averagePrice != null ? fmtML(probToML(p.averagePrice)) : '--'}</td>
-      <td style="font-family:var(--mono)">${p.quantity != null ? p.quantity : '--'}</td>
-      <td style="font-family:var(--mono)">${p.cost != null ? '$' + Math.abs(p.cost).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '--'}</td>
-      <td style="text-transform:uppercase;font-size:10px;font-weight:600;color:var(--green)">position</td>
+      <td style="font-family:var(--sans)">${match ? match.gameKey : p.marketId?.slice(0,8) || '--'}</td>
+      <td style="font-weight:600">${match ? match.description : p.outcomeId?.slice(0,8) || '--'}</td>
+      <td style="font-family:var(--mono)">${avgPrice != null ? fmtML(probToML(avgPrice)) : '--'}</td>
+      <td style="font-family:var(--mono)">${p.qty}</td>
+      <td style="font-family:var(--mono)">$${parseFloat(p.cost || 0).toFixed(2)}</td>
+      <td style="text-transform:uppercase;font-size:10px;font-weight:600;color:var(--green)">filled</td>
     </tr>`);
   }
 
   for (const o of _novigOrders) {
+    const match = _allBets.find(b => b.outcomeId === o.outcomeId);
     rows.push(`<tr>
-      <td style="font-family:var(--sans)">${o.eventName || o.marketName || '--'}</td>
-      <td style="font-weight:600">${o.outcomeName || o.side || '--'}</td>
-      <td style="font-family:var(--mono)">${o.price != null ? fmtML(probToML(o.price)) : '--'}</td>
-      <td style="font-family:var(--mono)">${o.quantity != null ? o.quantity : '--'}</td>
+      <td style="font-family:var(--sans)">${match ? match.gameKey : o.marketId?.slice(0,8) || '--'}</td>
+      <td style="font-weight:600">${match ? match.description : o.outcomeId?.slice(0,8) || '--'}</td>
+      <td style="font-family:var(--mono)">${o.price != null ? fmtML(probToML(parseFloat(o.price))) : '--'}</td>
+      <td style="font-family:var(--mono)">${o.qty}</td>
       <td style="font-family:var(--mono)">--</td>
       <td style="text-transform:uppercase;font-size:10px;font-weight:600;color:var(--yellow)">resting</td>
     </tr>`);
