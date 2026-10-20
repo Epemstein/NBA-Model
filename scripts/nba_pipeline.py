@@ -195,6 +195,9 @@ def fetch_darko():
             pos_map = {'C': 'C', 'C-F': 'C', 'F-C': 'PF', 'F': 'SF', 'F-G': 'SF', 'G-F': 'SG', 'G': 'PG'}
             pos = pos_map.get(pos_raw, pos_raw.split('-')[0] if pos_raw else '')
 
+            team_full = columns['team_name'][i] or ''
+            team_abr = NAME_TO_ABR.get(team_full, '')
+
             entry = {
                 'name': name,
                 'dpm': round(columns['dpm'][i], 2),
@@ -202,6 +205,7 @@ def fetch_darko():
                 'd_dpm': round(columns['d_dpm'][i], 2),
                 'pos': pos,
                 'nba_id': str(columns['nba_id'][i]),
+                'team': team_abr,
             }
             players[norm_name(name)] = entry
             players[f'id:{columns["nba_id"][i]}'] = entry  # Also key by NBA ID
@@ -1327,44 +1331,44 @@ def _write_rosters(db, darko, player_minutes, lebron=None, epm=None, injuries=No
                     new_entry['injury'] = inj['status']; entry['injury_detail'] = inj.get('detail', '')
             all_teams[team_abr].append(new_entry)
 
-    # If official rosters failed, just update DPM ratings on existing roster doc
+    # If official rosters failed, build rosters from DARKO team assignments
     if not official_rosters:
-        print('No official rosters — updating DPM ratings on existing roster doc only')
-        try:
-            existing = db.collection('nba_rosters').document('all').get()
-            if existing.exists:
-                teams = existing.to_dict().get('teams', {})
-                updated_count = 0
-                for team_abr, players in teams.items():
-                    for p in players:
-                        nk = norm_name(p.get('name', ''))
-                        pid = p.get('nba_id', '')
-                        dk = darko.get(f'id:{pid}') if pid else None
-                        if not dk:
-                            dk = darko.get(nk)
-                        if dk:
-                            p['dpm'] = round(dk['dpm'], 1)
-                            p['o_dpm'] = round(dk['o_dpm'], 1)
-                            p['d_dpm'] = round(dk['d_dpm'], 1)
-                            updated_count += 1
-                        if lebron:
-                            lb = lebron.get(f'id:{pid}') if pid else None
-                            if not lb: lb = lebron.get(nk)
-                            if lb:
-                                p['lb_dpm'] = round(lb['dpm'], 1)
-                                p['lb_o_dpm'] = round(lb.get('o_dpm', 0), 1)
-                                p['lb_d_dpm'] = round(lb.get('d_dpm', 0), 1)
-                        if epm:
-                            ep = epm.get(f'id:{pid}') if pid else None
-                            if not ep: ep = epm.get(nk)
-                            if ep:
-                                p['epm'] = round(ep['dpm'], 1)
-                                p['epm_o'] = round(ep['o_dpm'], 1)
-                                p['epm_d'] = round(ep['d_dpm'], 1)
-                db.collection('nba_rosters').document('all').set({'teams': teams, '_ts': firestore.SERVER_TIMESTAMP})
-                print(f'Updated DPM on {updated_count} players in existing roster')
-        except Exception as e:
-            print(f'DPM update failed: {e}')
+        print('No official rosters — building from DARKO team assignments')
+        darko_teams = {}
+        for key, dk in darko.items():
+            if key.startswith('id:') or not dk.get('team'):
+                continue
+            team = dk['team']
+            if team not in darko_teams:
+                darko_teams[team] = []
+            entry = {
+                'name': dk['name'], 'min': 0,
+                'dpm': round(dk['dpm'], 1), 'o_dpm': round(dk['o_dpm'], 1), 'd_dpm': round(dk['d_dpm'], 1),
+                'pos': dk.get('pos', ''), 'nba_id': dk.get('nba_id', ''),
+            }
+            if lebron:
+                lb = lebron.get(f'id:{dk.get("nba_id", "")}') or lebron.get(key)
+                if lb:
+                    entry['lb_dpm'] = round(lb['dpm'], 1)
+                    entry['lb_o_dpm'] = round(lb.get('o_dpm', 0), 1)
+                    entry['lb_d_dpm'] = round(lb.get('d_dpm', 0), 1)
+            if epm:
+                ep = epm.get(f'id:{dk.get("nba_id", "")}') or epm.get(key)
+                if ep:
+                    entry['epm'] = round(ep['dpm'], 1)
+                    entry['epm_o'] = round(ep['o_dpm'], 1)
+                    entry['epm_d'] = round(ep['d_dpm'], 1)
+            if injuries:
+                inj = injuries.get(dk.get('nba_id', ''))
+                if inj:
+                    entry['injury'] = inj['status']; entry['injury_detail'] = inj.get('detail', '')
+            darko_teams[team].append(entry)
+        for team in darko_teams:
+            darko_teams[team].sort(key=lambda p: -abs(p.get('dpm') or 0))
+        db.collection('nba_rosters').document('all').set({
+            'teams': darko_teams, '_ts': firestore.SERVER_TIMESTAMP,
+        })
+        print(f'Wrote DARKO-based rosters: {len(darko_teams)} teams, {sum(len(v) for v in darko_teams.values())} players')
         return
 
     rosters_combined = {}
