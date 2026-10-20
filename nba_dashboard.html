@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v107</title>
+<title>NBA ALGO v108</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -2416,7 +2416,7 @@ function renderOddsSummary() {
           ${g.away} @<br>${g.home}<br><span style="color:var(--muted);font-weight:400;font-size:9px;">${g.game_time_et || ''}</span>
         </td>
         <td style="font-size:10px;">${awLogo}</td>
-        <td style="font-family:var(--mono);cursor:pointer;text-decoration:underline;text-decoration-style:dotted;" onclick="_clickOddsBet(${_regBet({away:g.away,home:g.home,type:'spread',description:g.away+' '+fmtSpread(-bk),price:awDisplayPrice,fill:awDisplayFill,ev:awEV,strike:bk,side:'away',outcomeId:g.away_spread_oid||'',teamColor:COLORS[g.away]||'#333',teamLogo:teamLogo(g.away)})})">${bk != null ? fmtSpread(-bk) : '—'}</td>
+        <td style="font-family:var(--mono);cursor:pointer;text-decoration:underline;text-decoration-style:dotted;" onclick="_clickOddsBet(${_regBet({away:g.away,home:g.home,type:'spread',description:g.away+' '+fmtSpread(-bk),price:g.away_spread_price,fill:awDisplayFill,ev:awEV,strike:bk,side:'away',outcomeId:g.away_spread_oid||'',teamColor:COLORS[g.away]||'#333',teamLogo:teamLogo(g.away),ladder:g.away_spread_ladder})})">${bk != null ? fmtSpread(-bk) : '—'}</td>
         <td style="color:var(--accent);font-family:var(--mono);">${ps != null ? fmtSpread(-ps) : '—'}</td>
         <td>${evChip(awEV)}</td>
         <td>${srcEdge(dEdge, true)}</td><td>${srcEdge(lEdge, true)}</td><td>${srcEdge(eEdge, true)}</td>
@@ -2425,7 +2425,7 @@ function renderOddsSummary() {
       </tr>`;
       html += `<tr style="border-bottom:2px solid var(--border);${incomplete ? 'opacity:0.35;' : ''}">
         <td style="font-size:10px;">${hwLogo}</td>
-        <td style="font-family:var(--mono);font-weight:600;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;" onclick="_clickOddsBet(${_regBet({away:g.away,home:g.home,type:'spread',description:g.home+' '+fmtSpread(bk),price:hwDisplayPrice,fill:hwDisplayFill,ev:hwEV,strike:bk,side:'home',outcomeId:g.home_spread_oid||'',teamColor:COLORS[g.home]||'#333',teamLogo:teamLogo(g.home)})})">${bk != null ? fmtSpread(bk) : '—'}</td>
+        <td style="font-family:var(--mono);font-weight:600;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;" onclick="_clickOddsBet(${_regBet({away:g.away,home:g.home,type:'spread',description:g.home+' '+fmtSpread(bk),price:g.home_spread_price,fill:hwDisplayFill,ev:hwEV,strike:bk,side:'home',outcomeId:g.home_spread_oid||'',teamColor:COLORS[g.home]||'#333',teamLogo:teamLogo(g.home),ladder:g.home_spread_ladder})})">${bk != null ? fmtSpread(bk) : '—'}</td>
         <td style="color:var(--accent);font-family:var(--mono);font-weight:600;">${ps != null ? fmtSpread(ps) : '—'}</td>
         <td>${evChip(hwEV)}</td>
         <td>${srcEdge(dEdge, false)}</td><td>${srcEdge(lEdge, false)}</td><td>${srcEdge(eEdge, false)}</td>
@@ -2477,7 +2477,7 @@ function renderOddsSummary() {
         </td>
         <td>${awL}</td>
         <td style="font-family:var(--mono);">${awModelML}</td>
-        <td style="font-family:var(--mono);color:var(--accent);cursor:pointer;text-decoration:underline;text-decoration-style:dotted;" onclick="_clickOddsBet(${_regBet({away:g.away,home:g.home,type:'ml',description:g.away+' ML',price:awBookProb,fill:awMLFill,ev:awEdge,strike:null,side:'away',outcomeId:g.away_ml_oid||'',teamColor:COLORS[g.away]||'#333',teamLogo:teamLogo(g.away)})})">${awBookML}</td>
+        <td style="font-family:var(--mono);color:var(--accent);cursor:pointer;text-decoration:underline;text-decoration-style:dotted;" onclick="_clickOddsBet(${_regBet({away:g.away,home:g.home,type:'ml',description:g.away+' ML',price:g.away_ml_price,fill:awMLFill,ev:awEdge,strike:null,side:'away',outcomeId:g.away_ml_oid||'',teamColor:COLORS[g.away]||'#333',teamLogo:teamLogo(g.away),ladder:g.away_ml_ladder})})">${awBookML}</td>
         <td>${awEdge != null && awEdge > 0 ? `<span class="edge-chip ${awEdge>=5?'hi':awEdge>=2?'mid':'lo'}">${awEdge.toFixed(1)}%</span>` : ''}</td>
         <td>${mlSrcEdge('darko',true)}</td><td>${mlSrcEdge('lebron',true)}</td><td>${mlSrcEdge('epm',true)}</td>
         <td style="font-size:10px;color:var(--text2);">${awModelProb != null ? (awModelProb*100).toFixed(0)+'%' : '—'}</td>
@@ -2486,7 +2486,7 @@ function renderOddsSummary() {
       html += `<tr style="border-bottom:2px solid var(--border);${_inc ? 'opacity:0.35;' : ''}">
         <td>${hwL}</td>
         <td style="font-family:var(--mono);font-weight:600;">${hwModelML}</td>
-        <td style="font-family:var(--mono);color:var(--accent);font-weight:600;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;" onclick="_clickOddsBet(${_regBet({away:g.away,home:g.home,type:'ml',description:g.home+' ML',price:hwBookProb,fill:hwMLFill,ev:hwEdge,strike:null,side:'home',outcomeId:g.home_ml_oid||'',teamColor:COLORS[g.home]||'#333',teamLogo:teamLogo(g.home)})})">${hwBookML}</td>
+        <td style="font-family:var(--mono);color:var(--accent);font-weight:600;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;" onclick="_clickOddsBet(${_regBet({away:g.away,home:g.home,type:'ml',description:g.home+' ML',price:g.home_ml_price,fill:hwMLFill,ev:hwEdge,strike:null,side:'home',outcomeId:g.home_ml_oid||'',teamColor:COLORS[g.home]||'#333',teamLogo:teamLogo(g.home),ladder:g.home_ml_ladder})})">${hwBookML}</td>
         <td>${hwEdge != null && hwEdge > 0 ? `<span class="edge-chip ${hwEdge>=5?'hi':hwEdge>=2?'mid':'lo'}">${hwEdge.toFixed(1)}%</span>` : ''}</td>
         <td>${mlSrcEdge('darko',false)}</td><td>${mlSrcEdge('lebron',false)}</td><td>${mlSrcEdge('epm',false)}</td>
         <td style="font-size:10px;color:var(--text2);font-weight:600;">${hwModelProb != null ? (hwModelProb*100).toFixed(0)+'%' : '—'}</td>
@@ -2529,7 +2529,7 @@ function renderOddsSummary() {
         <td rowspan="2" onclick="openNovigBook(${_giTot})" style="cursor:pointer;font-family:var(--sans);font-weight:600;font-size:10px;vertical-align:middle;border-bottom:2px solid var(--border);white-space:nowrap;" title="View all Novig alt lines">
           ${g.away} @<br>${g.home}<br><span style="color:var(--muted);font-weight:400;font-size:9px;">${g.game_time_et || ''}</span>
         </td>
-        <td style="font-family:var(--sans);font-size:10px;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;" onclick="_clickOddsBet(${_regBet({away:g.away,home:g.home,type:'total',description:'O '+g.book_total,price:_ovPrice,fill:_ovFill,ev:edge>0?edge:null,strike:g.book_total,side:'over',outcomeId:g.over_oid||'',teamColor:'#2e7d32',teamLogo:''})})">Over</td>
+        <td style="font-family:var(--sans);font-size:10px;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;" onclick="_clickOddsBet(${_regBet({away:g.away,home:g.home,type:'total',description:'O '+g.book_total,price:g.over_price,fill:_ovFill,ev:edge>0?edge:null,strike:g.book_total,side:'over',outcomeId:g.over_oid||'',teamColor:'#2e7d32',teamLogo:'',ladder:g.over_ladder})})">Over</td>
         <td style="font-family:var(--mono);">${g.book_total != null ? g.book_total : '—'}</td>
         <td style="color:var(--accent);font-family:var(--mono);">${gVal(g,"proj_total") != null ? gVal(g,"proj_total").toFixed(1) : '—'}</td>
         <td>${edge != null && edge > 0 ? `<span class="edge-chip ${edgeClass(edge)}">${edge.toFixed(1)}</span>` : ''}</td>
@@ -2538,7 +2538,7 @@ function renderOddsSummary() {
         <td style="font-size:10px;color:var(--green);font-weight:600;${_ovTip ? 'cursor:help;' : ''}" ${_ovTip ? `onmouseenter="showInjTip(event,this)" onmouseleave="hideInjTip()" data-inj="${_ovTip.replace(/"/g,'&quot;')}"` : ''}>${fmtFill(_ovFill)}</td>
       </tr>`;
       html += `<tr style="border-bottom:2px solid var(--border);${__inc ? 'opacity:0.35;' : ''}">
-        <td style="font-family:var(--sans);font-size:10px;font-weight:600;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;" onclick="_clickOddsBet(${_regBet({away:g.away,home:g.home,type:'total',description:'U '+g.book_total,price:_unPrice,fill:_unFill,ev:edge<0?Math.abs(edge):null,strike:g.book_total,side:'under',outcomeId:g.under_oid||'',teamColor:'#2e7d32',teamLogo:''})})">Under</td>
+        <td style="font-family:var(--sans);font-size:10px;font-weight:600;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;" onclick="_clickOddsBet(${_regBet({away:g.away,home:g.home,type:'total',description:'U '+g.book_total,price:g.under_price,fill:_unFill,ev:edge<0?Math.abs(edge):null,strike:g.book_total,side:'under',outcomeId:g.under_oid||'',teamColor:'#2e7d32',teamLogo:'',ladder:g.under_ladder})})">Under</td>
         <td style="font-family:var(--mono);font-weight:600;">${g.book_total != null ? g.book_total : '—'}</td>
         <td style="color:var(--accent);font-family:var(--mono);font-weight:600;">${gVal(g,"proj_total") != null ? gVal(g,"proj_total").toFixed(1) : '—'}</td>
         <td>${edge != null && edge < 0 ? `<span class="edge-chip ${edgeClass(edge)}">${Math.abs(edge).toFixed(1)}</span>` : ''}</td>
