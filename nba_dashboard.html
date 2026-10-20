@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v125</title>
+<title>NBA ALGO v126</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -4966,8 +4966,20 @@ async function confirmPlaceBet(queueId) {
   const existWarn = document.getElementById('place-bet-existing-warn');
   if (existingOnGame.length > 0) {
     existWarn.style.display = 'block';
-    existWarn.innerHTML = 'WARNING: You already have ' + existingOnGame.length + ' bet(s) on this game:<br>' +
-      existingOnGame.map(b => b.description + ' $' + (b.stake||0)).join(', ');
+    existWarn.innerHTML = `<div style="font-size:11px;font-weight:700;margin-bottom:6px;">WARNING: You already have ${existingOnGame.length} bet(s) on this game:</div>` +
+      existingOnGame.map(b => {
+        const [aw, hm] = (b.gameKey || '@').split('@');
+        const betTeam = b.side === 'away' ? aw : (b.side === 'home' ? hm : '');
+        const logo = betTeam ? `<img src="${teamLogo(betTeam)}" style="width:16px;height:16px;object-fit:contain;vertical-align:middle;margin-right:4px;" onerror="this.style.display='none'" />` : '';
+        const ml = b.price != null ? fmtML(probToML(b.price)) : '';
+        const win = (b.stake && b.price) ? '$' + _calcToWin(b.stake, probToML(b.price)).toFixed(2) : '';
+        return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;">
+          ${logo}<strong>${b.description}</strong>
+          <span style="font-family:var(--mono);">${ml}</span>
+          <span style="color:#888;">Risk $${(b.stake||0).toFixed(0)}</span>
+          <span style="color:var(--green);font-family:var(--mono);">Win ${win}</span>
+        </div>`;
+      }).join('');
   } else {
     existWarn.style.display = 'none';
   }
