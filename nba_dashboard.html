@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v87</title>
+<title>NBA ALGO v88</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -4431,7 +4431,7 @@ function renderQueue() {
       <td style="font-family:var(--mono);font-weight:600;">${mlStr}</td>
       <td style="font-family:var(--mono);font-weight:600;color:${evColor};">${b.ev != null ? b.ev.toFixed(1) + '%' : '--'}</td>
       <td style="font-family:var(--mono);color:#4caf50;">${fmtFill(b.fill)}</td>
-      <td><input class="bq-stake-input" type="number" min="0" step="1" value="${b.stake || 0}" onchange="updateQueueStake('${b.id}', this.value)" /></td>
+      <td><input class="bq-stake-input" type="number" min="0" step="1" value="${b.stake || 0}" oninput="updateQueueStake('${b.id}', this.value)" /></td>
       <td id="bq-win-${b.id}" style="font-family:var(--mono);color:#4caf50;font-weight:600;">$${toWin.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
       <td><button class="bq-remove" onclick="removeFromQueue('${b.id}')">&times;</button></td>
     </tr>`;
