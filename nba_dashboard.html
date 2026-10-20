@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v96</title>
+<title>NBA ALGO v97</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -3247,7 +3247,9 @@ const NBA_TEAM_SLUGS = {
   UTA:'jazz', WAS:'wizards',
 };
 let _teamPlayers = []; // [{name, pos, pg, sg, sf, pf, c, dpm, o_dpm, d_dpm}]
+let _archivedPlayers = []; // players removed via "Zero Out" — restorable
 let _rosterWarnings = []; // [{name, minutes}] — baseline players not on active roster
+let _liveRosters = {}; // {TEAM: Set(normed names)} — cached from checkLiveRoster
 let _selectedTeam = '';
 
 function initTeamSelector() {
@@ -3262,6 +3264,7 @@ function loadTeamBaseline() {
   const team = document.getElementById('team-select').value;
   if (!team) return;
   _selectedTeam = team;
+  _archivedPlayers = [];
 
   // Load roster from nba_rosters/all (1 read for all teams)
   fbDb.collection('nba_rosters').doc('all').get().then(allSnap => {
@@ -3336,10 +3339,13 @@ function checkLiveRoster(team, savedBaselines) {
   fetch(`${base}/check-roster?team=${slug}`)
     .then(r => r.json())
     .then(data => {
-      if (!data.players || _selectedTeam !== team) return;
+      if (!data.players) return;
       // Fuzzy name set: strip periods, lowercase for comparison
       const _norm = s => s.replace(/\./g, '').replace(/\s+/g, ' ').trim().toLowerCase();
       const liveNormed = new Set(data.players.map(p => _norm(p.name)));
+      // Cache globally for game card use
+      _liveRosters[team] = liveNormed;
+      if (_selectedTeam !== team) return;
       const onRoster = name => liveNormed.has(_norm(name));
       // Check baseline players against live roster
       const liveWarnings = [];
@@ -3365,6 +3371,10 @@ function checkLiveRoster(team, savedBaselines) {
       } else if (_rosterWarnings.length > 0) {
         _rosterWarnings = [];
         renderRosterWarnings();
+      }
+      // Re-render game card rotation if open for this team (red X indicators)
+      if (_rosterState.team === team && _rosterState.players.length) {
+        renderRosterTable();
       }
     })
     .catch(() => {}); // silently fail — not critical
@@ -3461,18 +3471,27 @@ function renderTeamBaseline() {
 
   // Table
   const tbody = document.getElementById('team-baseline-body');
+  // Check off-roster status for headshot indicators
+  const _normT = s => s.replace(/\./g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const liveSetT = _liveRosters[_selectedTeam];
+
   tbody.innerHTML = _teamPlayers.map((p, i) => {
     const total = p.pg + p.sg + p.sf + p.pf + p.c;
     const opacity = Math.min(total / 36, 1) * 0.15;
     const bg = total > 0 ? `rgba(${rgb}, ${opacity})` : 'transparent';
     const hsUrl = p.nba_id ? playerHeadshot(p.nba_id) : '';
     const placeholder = `data:image/svg+xml,<%3Fxml version=%221.0%22%3F><svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2236%22 height=%2228%22><rect fill=%22%23ddd%22 width=%2236%22 height=%2228%22/><circle cx=%2218%22 cy=%2210%22 r=%225%22 fill=%22%23bbb%22/><ellipse cx=%2218%22 cy=%2228%22 rx=%229%22 ry=%228%22 fill=%22%23bbb%22/></svg>`;
+    const offRoster = liveSetT && !liveSetT.has(_normT(p.name));
+    const imgStyle = offRoster ? 'width:36px;height:28px;object-fit:cover;object-position:top;border-radius:3px;background:#e0e0e0;flex-shrink:0;filter:grayscale(1) brightness(0.4);' : 'width:36px;height:28px;object-fit:cover;object-position:top;border-radius:3px;background:#e0e0e0;flex-shrink:0;';
+    const hsHtml = offRoster
+      ? `<span style="position:relative;display:inline-block;flex-shrink:0;"><img src="${hsUrl || placeholder}" style="${imgStyle}" onerror="this.src='${placeholder}'" /><span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#e53935;font-size:22px;font-weight:900;text-shadow:0 0 3px #000;">✕</span></span>`
+      : `<img src="${hsUrl || placeholder}" style="${imgStyle}" onerror="this.src='${placeholder}'" />`;
     return `<tr style="background:${bg};height:40px;${total === 0 ? 'opacity:0.35;' : ''}">
       <td style="font-family:var(--sans);font-weight:500;white-space:nowrap;padding:6px 8px;">
         <div style="display:flex;align-items:center;gap:8px;">
-          <img src="${hsUrl || placeholder}" style="width:36px;height:28px;object-fit:cover;object-position:top;border-radius:3px;background:#e0e0e0;flex-shrink:0;" onerror="this.src='${placeholder}'" />
+          ${hsHtml}
           <div>
-            <div style="font-size:14px;font-weight:600;">${p.name}${p.injury ? `<span class="inj-badge" onmouseenter="showInjTip(event,this)" onmouseleave="hideInjTip()" data-inj="${(p.injury_detail||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}" style="background:#c62828;color:#fff;font-size:8px;font-weight:700;padding:1px 3px;border-radius:2px;margin-left:3px;cursor:help;">${p.injury}</span>` : ''}</div>
+            <div style="font-size:14px;font-weight:600;">${p.name}${offRoster ? '<span style="background:#c62828;color:#fff;font-size:8px;font-weight:700;padding:1px 3px;border-radius:2px;margin-left:3px;">OFF</span>' : ''}${p.injury ? `<span class="inj-badge" onmouseenter="showInjTip(event,this)" onmouseleave="hideInjTip()" data-inj="${(p.injury_detail||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}" style="background:#c62828;color:#fff;font-size:8px;font-weight:700;padding:1px 3px;border-radius:2px;margin-left:3px;cursor:help;">${p.injury}</span>` : ''}</div>
             <div style="font-size:11px;"><span style="color:var(--muted);">${p.pos||''}</span> <span style="font-family:var(--mono);color:${dpmColor(pDpm(p))};font-weight:600;">${fmtDpm(pDpm(p))}</span></div>
           </div>
         </div>
@@ -3489,6 +3508,40 @@ function renderTeamBaseline() {
     </tr>`;
   }).join('');
   updateTeamSums();
+  renderArchivedPlayers();
+}
+
+function renderArchivedPlayers() {
+  let el = document.getElementById('archived-players');
+  if (!el) {
+    // Create the container if it doesn't exist
+    const table = document.getElementById('team-baseline-body')?.closest('table');
+    if (!table) return;
+    el = document.createElement('div');
+    el.id = 'archived-players';
+    table.parentElement.after(el);
+  }
+  if (!_archivedPlayers.length) { el.innerHTML = ''; return; }
+  const placeholder = `data:image/svg+xml,<%3Fxml version=%221.0%22%3F><svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2236%22 height=%2228%22><rect fill=%22%23ddd%22 width=%2236%22 height=%2228%22/><circle cx=%2218%22 cy=%2210%22 r=%225%22 fill=%22%23bbb%22/><ellipse cx=%2218%22 cy=%2228%22 rx=%229%22 ry=%228%22 fill=%22%23bbb%22/></svg>`;
+  el.innerHTML = `
+    <div style="margin-top:16px;padding:12px;background:var(--surface);border-radius:8px;border:1px solid #333;">
+      <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">Archived Players</div>
+      ${_archivedPlayers.map((p, i) => {
+        const hsUrl = p.nba_id ? playerHeadshot(p.nba_id) : '';
+        const prevMin = p._archivedMin ? (p._archivedMin.pg+p._archivedMin.sg+p._archivedMin.sf+p._archivedMin.pf+p._archivedMin.c) : 0;
+        return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #222;">
+          <span style="position:relative;display:inline-block;flex-shrink:0;">
+            <img src="${hsUrl || placeholder}" style="width:36px;height:28px;object-fit:cover;object-position:top;border-radius:3px;filter:grayscale(1) brightness(0.4);" onerror="this.src='${placeholder}'" />
+            <span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#e53935;font-size:22px;font-weight:900;text-shadow:0 0 3px #000;">✕</span>
+          </span>
+          <div style="flex:1;">
+            <div style="font-size:13px;font-weight:600;">${p.name}</div>
+            <div style="font-size:11px;color:var(--muted);">${p.pos||''} · was ${prevMin} min · <span style="font-family:var(--mono);color:${dpmColor(pDpm(p))};">${fmtDpm(pDpm(p))}</span></div>
+          </div>
+          <button onclick="restoreArchivedPlayer(${i})" style="background:var(--green);color:#fff;border:none;border-radius:4px;padding:4px 10px;font-size:11px;cursor:pointer;font-weight:600;">Restore</button>
+        </div>`;
+      }).join('')}
+    </div>`;
 }
 
 function updatePosMin(idx, pos, val) {
@@ -3551,11 +3604,33 @@ function renderRosterWarnings() {
 }
 
 function zeroOutPlayer(name) {
-  const p = _teamPlayers.find(t => t.name === name);
-  if (p) {
+  const idx = _teamPlayers.findIndex(t => t.name === name);
+  if (idx >= 0) {
+    const p = _teamPlayers[idx];
+    // Save original minutes for restore
+    p._archivedMin = { pg: p.pg, sg: p.sg, sf: p.sf, pf: p.pf, c: p.c };
     p.pg = 0; p.sg = 0; p.sf = 0; p.pf = 0; p.c = 0;
+    // Move to archived
+    _archivedPlayers.push(p);
+    _teamPlayers.splice(idx, 1);
   }
   _rosterWarnings = _rosterWarnings.filter(w => w.name !== name);
+  _teamPlayers.sort((a, b) => (b.pg+b.sg+b.sf+b.pf+b.c) - (a.pg+a.sg+a.sf+a.pf+a.c));
+  renderTeamBaseline();
+  autoSaveBaseline();
+}
+
+function restoreArchivedPlayer(idx) {
+  const p = _archivedPlayers[idx];
+  if (!p) return;
+  // Restore original minutes
+  if (p._archivedMin) {
+    p.pg = p._archivedMin.pg; p.sg = p._archivedMin.sg; p.sf = p._archivedMin.sf;
+    p.pf = p._archivedMin.pf; p.c = p._archivedMin.c;
+    delete p._archivedMin;
+  }
+  _archivedPlayers.splice(idx, 1);
+  _teamPlayers.push(p);
   _teamPlayers.sort((a, b) => (b.pg+b.sg+b.sf+b.pf+b.c) - (a.pg+a.sg+a.sf+a.pf+a.c));
   renderTeamBaseline();
   autoSaveBaseline();
@@ -3778,6 +3853,10 @@ function openRoster(gameIdx, side) {
 
     captureRosterSnapshot();
     renderRosterTable();
+    // Check live roster for off-roster indicators
+    if (!_liveRosters[team]) {
+      checkLiveRoster(team);
+    }
   }).catch(e => {
     console.error('openRoster failed:', e);
     document.getElementById('roster-tbody').innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--red);padding:12px;">Error: ${e.message}</td></tr>`;
@@ -3798,7 +3877,14 @@ function renderRosterTable() {
     const total = p.pg + p.sg + p.sf + p.pf + p.c;
     const opacity = Math.min(total / 36, 1) * 0.15;
     const bg = total > 0 ? `rgba(${rgb}, ${opacity})` : 'transparent';
-    const hs = p.nba_id ? `<img src="${playerHeadshot(p.nba_id)}" class="player-headshot" onerror="this.src='data:image/svg+xml,<%3Fxml version=%221.0%22%3F><svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2224%22 height=%2218%22><rect fill=%22%23ddd%22 width=%2224%22 height=%2218%22/><circle cx=%2212%22 cy=%227%22 r=%223.5%22 fill=%22%23bbb%22/><ellipse cx=%2212%22 cy=%2218%22 rx=%226%22 ry=%225%22 fill=%22%23bbb%22/></svg>'" />` : '';
+    // Check if player is off the active roster
+    const _normR = s => s.replace(/\./g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const liveSet = _liveRosters[_rosterState.team];
+    const offRoster = liveSet && !liveSet.has(_normR(p.name));
+    const hsImg = p.nba_id ? `<img src="${playerHeadshot(p.nba_id)}" class="player-headshot" onerror="this.src='data:image/svg+xml,<%3Fxml version=%221.0%22%3F><svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2224%22 height=%2218%22><rect fill=%22%23ddd%22 width=%2224%22 height=%2218%22/><circle cx=%2212%22 cy=%227%22 r=%223.5%22 fill=%22%23bbb%22/><ellipse cx=%2212%22 cy=%2218%22 rx=%226%22 ry=%225%22 fill=%22%23bbb%22/></svg>'" style="${offRoster ? 'filter:grayscale(1) brightness(0.5);' : ''}" />` : '';
+    const hs = offRoster
+      ? `<span style="position:relative;display:inline-block;">${hsImg}<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#e53935;font-size:18px;font-weight:900;text-shadow:0 0 2px #000;">✕</span></span>`
+      : hsImg;
 
     const zeroed = total === 0 && (p.pg===0&&p.sg===0&&p.sf===0&&p.pf===0&&p.c===0);
     const bl = (_rosterState.baseline || {})[normName(p.name)] || {pg:0,sg:0,sf:0,pf:0,c:0};
