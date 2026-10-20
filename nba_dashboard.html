@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v100</title>
+<title>NBA ALGO v101</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -2428,9 +2428,11 @@ function renderOddsSummary() {
 
       const _inc = _isGameIncomplete(g, STATE.games.indexOf(g));
       const _giML = STATE.games.indexOf(g);
-      const awMLBlend = (g.away_ml_ladder && g.away_ml_ladder.length) ? computeBlendedFill(g.away_ml_ladder) : null;
-      const hwMLBlend = (g.home_ml_ladder && g.home_ml_ladder.length) ? computeBlendedFill(g.home_ml_ladder) : null;
       const minLiqML = STATE.settings?.minLiquidity || 500;
+      const awMLNeedsBlend = (g.away_ml_fill || 0) < minLiqML;
+      const hwMLNeedsBlend = (g.home_ml_fill || 0) < minLiqML;
+      const awMLBlend = (awMLNeedsBlend && g.away_ml_ladder && g.away_ml_ladder.length) ? computeBlendedFill(g.away_ml_ladder) : null;
+      const hwMLBlend = (hwMLNeedsBlend && g.home_ml_ladder && g.home_ml_ladder.length) ? computeBlendedFill(g.home_ml_ladder) : null;
       const awMLFill = (awMLBlend && awMLBlend.totalFill > 0) ? awMLBlend.totalFill : (g.away_ml_fill || 0);
       const hwMLFill = (hwMLBlend && hwMLBlend.totalFill > 0) ? hwMLBlend.totalFill : (g.home_ml_fill || 0);
       const awMLFillTip = (awMLBlend && awMLBlend.splits.length > 1) ? awMLBlend.splits.map(s => '$' + s.fill + ' at ' + fmtML(probToML(s.price))).join(', ') : '';
@@ -2476,6 +2478,19 @@ function renderOddsSummary() {
       function totSrcUnder(e) { return e != null && e < 0 ? `<span class="edge-chip lo">${Math.abs(e).toFixed(1)}</span>` : ''; }
       const __inc = _isGameIncomplete(g, STATE.games.indexOf(g));
       const _giTot = STATE.games.indexOf(g);
+      const _minLiqTot = STATE.settings?.minLiquidity || 500;
+      // Over: only blend if raw fill < minLiquidity
+      const _ovNeedBlend = (g.over_fill || 0) < _minLiqTot;
+      const _ovBlend = (_ovNeedBlend && g.over_ladder && g.over_ladder.length) ? computeBlendedFill(g.over_ladder) : null;
+      const _ovPrice = (_ovBlend && _ovBlend.blendedPrice != null) ? _ovBlend.blendedPrice : g.over_price;
+      const _ovFill = (_ovBlend && _ovBlend.totalFill > 0) ? _ovBlend.totalFill : (g.over_fill || 0);
+      const _ovTip = (_ovBlend && _ovBlend.splits.length > 1) ? _ovBlend.splits.map(s => '$' + s.fill + ' at ' + fmtML(probToML(s.price))).join(', ') : '';
+      // Under: only blend if raw fill < minLiquidity
+      const _unNeedBlend = (g.under_fill || 0) < _minLiqTot;
+      const _unBlend = (_unNeedBlend && g.under_ladder && g.under_ladder.length) ? computeBlendedFill(g.under_ladder) : null;
+      const _unPrice = (_unBlend && _unBlend.blendedPrice != null) ? _unBlend.blendedPrice : g.under_price;
+      const _unFill = (_unBlend && _unBlend.totalFill > 0) ? _unBlend.totalFill : (g.under_fill || 0);
+      const _unTip = (_unBlend && _unBlend.splits.length > 1) ? _unBlend.splits.map(s => '$' + s.fill + ' at ' + fmtML(probToML(s.price))).join(', ') : '';
       html += `<tr style="border-bottom:none;${__inc ? 'opacity:0.35;' : ''}">
         <td rowspan="2" onclick="openNovigBook(${_giTot})" style="cursor:pointer;font-family:var(--sans);font-weight:600;font-size:10px;vertical-align:middle;border-bottom:2px solid var(--border);white-space:nowrap;" title="View all Novig alt lines">
           ${g.away} @<br>${g.home}<br><span style="color:var(--muted);font-weight:400;font-size:9px;">${g.game_time_et || ''}</span>
@@ -2485,8 +2500,8 @@ function renderOddsSummary() {
         <td style="color:var(--accent);font-family:var(--mono);">${gVal(g,"proj_total") != null ? gVal(g,"proj_total").toFixed(1) : '—'}</td>
         <td>${edge != null && edge > 0 ? `<span class="edge-chip ${edgeClass(edge)}">${edge.toFixed(1)}</span>` : ''}</td>
         <td>${totSrcOver(dTotEdge)}</td><td>${totSrcOver(lTotEdge)}</td><td>${totSrcOver(eTotEdge)}</td>
-        <td style="color:var(--accent);font-size:10px;">${fmtProbML((() => { const b = (g.over_ladder && g.over_ladder.length) ? computeBlendedFill(g.over_ladder) : null; return (b && b.blendedPrice != null) ? b.blendedPrice : g.over_price; })())}</td>
-        <td style="font-size:10px;color:var(--green);font-weight:600;cursor:default;" title="${(() => { const b = (g.over_ladder && g.over_ladder.length) ? computeBlendedFill(g.over_ladder) : null; return (b && b.splits.length > 1) ? b.splits.map(s => '$' + s.fill + ' at ' + fmtML(probToML(s.price))).join(', ') : ''; })()}">${(() => { const b = (g.over_ladder && g.over_ladder.length) ? computeBlendedFill(g.over_ladder) : null; const f = (b && b.totalFill > 0) ? b.totalFill : (g.over_fill || 0); return fmtFill(f); })()}</td>
+        <td style="color:var(--accent);font-size:10px;">${fmtProbML(_ovPrice)}</td>
+        <td style="font-size:10px;color:var(--green);font-weight:600;cursor:default;" title="${_ovTip}">${fmtFill(_ovFill)}</td>
       </tr>`;
       html += `<tr style="border-bottom:2px solid var(--border);${__inc ? 'opacity:0.35;' : ''}">
         <td style="font-family:var(--sans);font-size:10px;font-weight:600;">Under</td>
@@ -2494,8 +2509,8 @@ function renderOddsSummary() {
         <td style="color:var(--accent);font-family:var(--mono);font-weight:600;">${gVal(g,"proj_total") != null ? gVal(g,"proj_total").toFixed(1) : '—'}</td>
         <td>${edge != null && edge < 0 ? `<span class="edge-chip ${edgeClass(edge)}">${Math.abs(edge).toFixed(1)}</span>` : ''}</td>
         <td>${totSrcUnder(dTotEdge)}</td><td>${totSrcUnder(lTotEdge)}</td><td>${totSrcUnder(eTotEdge)}</td>
-        <td style="color:var(--accent);font-size:10px;">${fmtProbML((() => { const b = (g.under_ladder && g.under_ladder.length) ? computeBlendedFill(g.under_ladder) : null; return (b && b.blendedPrice != null) ? b.blendedPrice : g.under_price; })())}</td>
-        <td style="font-size:10px;color:var(--green);font-weight:600;cursor:default;" title="${(() => { const b = (g.under_ladder && g.under_ladder.length) ? computeBlendedFill(g.under_ladder) : null; return (b && b.splits.length > 1) ? b.splits.map(s => '$' + s.fill + ' at ' + fmtML(probToML(s.price))).join(', ') : ''; })()}">${(() => { const b = (g.under_ladder && g.under_ladder.length) ? computeBlendedFill(g.under_ladder) : null; const f = (b && b.totalFill > 0) ? b.totalFill : (g.under_fill || 0); return fmtFill(f); })()}</td>
+        <td style="color:var(--accent);font-size:10px;">${fmtProbML(_unPrice)}</td>
+        <td style="font-size:10px;color:var(--green);font-weight:600;cursor:default;" title="${_unTip}">${fmtFill(_unFill)}</td>
       </tr>`;
     }
     tbody.innerHTML = html;
