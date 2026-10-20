@@ -1327,10 +1327,9 @@ def _write_rosters(db, darko, player_minutes, lebron=None, epm=None, injuries=No
                     new_entry['injury'] = inj['status']; entry['injury_detail'] = inj.get('detail', '')
             all_teams[team_abr].append(new_entry)
 
-    # Only write if we got official rosters — don't overwrite good data with incomplete data
+    # If official rosters failed, still write what we have from player_minutes + DARKO
     if not official_rosters:
-        print('Skipping roster write — no official roster data (NBA API blocked)')
-        return
+        print('No official rosters — writing from player_minutes + DARKO only')
 
     rosters_combined = {}
     for team, players in all_teams.items():
