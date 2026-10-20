@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v119</title>
+<title>NBA ALGO v120</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -3354,24 +3354,14 @@ function loadTeamBaseline() {
       });
 
       // Check for baseline players NOT on the stored roster (orphaned minutes)
-      const _normN = s => s.replace(/\./g, '').replace(/\s+/g, ' ').trim().toLowerCase();
-      const rosterNormed = new Set(roster.map(p => _normN(p.name)));
       _rosterWarnings = [];
-      for (const [name, sv] of Object.entries(saved)) {
-        if (!sv || typeof sv !== 'object') continue;
-        const mins = (sv.pg||0) + (sv.sg||0) + (sv.sf||0) + (sv.pf||0) + (sv.c||0);
-        if (mins > 0 && !rosterNormed.has(_normN(name))) {
-          _rosterWarnings.push({ name, minutes: mins });
-        }
-      }
 
       // Sort by total minutes desc
       _teamPlayers.sort((a, b) => (b.pg+b.sg+b.sf+b.pf+b.c) - (a.pg+a.sg+a.sf+a.pf+a.c));
       captureBaselineSnapshot();
       renderTeamBaseline();
 
-      // Also check live NBA roster in background
-      checkLiveRoster(team, saved);
+      // Live roster check disabled — nba.com name mismatches cause false positives
     });
   });
 }
@@ -3898,10 +3888,7 @@ function openRoster(gameIdx, side) {
 
     captureRosterSnapshot();
     renderRosterTable();
-    // Check live roster for off-roster indicators
-    if (!_liveRosters[team]) {
-      checkLiveRoster(team);
-    }
+    // Live roster check disabled — nba.com name mismatches cause false positives
   }).catch(e => {
     console.error('openRoster failed:', e);
     document.getElementById('roster-tbody').innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--red);padding:12px;">Error: ${e.message}</td></tr>`;
