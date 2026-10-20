@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v101</title>
+<title>NBA ALGO v102</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -2435,8 +2435,8 @@ function renderOddsSummary() {
       const hwMLBlend = (hwMLNeedsBlend && g.home_ml_ladder && g.home_ml_ladder.length) ? computeBlendedFill(g.home_ml_ladder) : null;
       const awMLFill = (awMLBlend && awMLBlend.totalFill > 0) ? awMLBlend.totalFill : (g.away_ml_fill || 0);
       const hwMLFill = (hwMLBlend && hwMLBlend.totalFill > 0) ? hwMLBlend.totalFill : (g.home_ml_fill || 0);
-      const awMLFillTip = (awMLBlend && awMLBlend.splits.length > 1) ? awMLBlend.splits.map(s => '$' + s.fill + ' at ' + fmtML(probToML(s.price))).join(', ') : '';
-      const hwMLFillTip = (hwMLBlend && hwMLBlend.splits.length > 1) ? hwMLBlend.splits.map(s => '$' + s.fill + ' at ' + fmtML(probToML(s.price))).join(', ') : '';
+      const awMLFillTip = (awMLBlend && awMLBlend.splits.length > 1) ? awMLBlend.splits.map(s => '$' + s.fill.toLocaleString() + ' at ' + fmtML(probToML(s.price))).join('\n') : '';
+      const hwMLFillTip = (hwMLBlend && hwMLBlend.splits.length > 1) ? hwMLBlend.splits.map(s => '$' + s.fill.toLocaleString() + ' at ' + fmtML(probToML(s.price))).join('\n') : '';
       html += `<tr style="border-bottom:none;${_inc ? 'opacity:0.35;' : ''}">
         <td rowspan="2" onclick="openNovigBook(${_giML})" style="cursor:pointer;font-family:var(--sans);font-weight:600;font-size:10px;vertical-align:middle;border-bottom:2px solid var(--border);white-space:nowrap;" title="View all Novig alt lines">
           ${g.away} @<br>${g.home}<br><span style="color:var(--muted);font-weight:400;font-size:9px;">${g.game_time_et || ''}</span>
@@ -2447,7 +2447,7 @@ function renderOddsSummary() {
         <td>${awEdge != null && awEdge > 0 ? `<span class="edge-chip ${awEdge>=5?'hi':awEdge>=2?'mid':'lo'}">${awEdge.toFixed(1)}%</span>` : ''}</td>
         <td>${mlSrcEdge('darko',true)}</td><td>${mlSrcEdge('lebron',true)}</td><td>${mlSrcEdge('epm',true)}</td>
         <td style="font-size:10px;color:var(--text2);">${awModelProb != null ? (awModelProb*100).toFixed(0)+'%' : '—'}</td>
-        <td style="font-size:10px;color:var(--green);font-weight:600;cursor:default;" title="${awMLFillTip}">${fmtFill(awMLFill)}</td>
+        <td style="font-size:10px;color:var(--green);font-weight:600;${awMLFillTip ? 'cursor:help;' : ''}" ${awMLFillTip ? `onmouseenter="showInjTip(event,this)" onmouseleave="hideInjTip()" data-inj="${awMLFillTip.replace(/"/g,'&quot;')}"` : ''}>${fmtFill(awMLFill)}</td>
       </tr>`;
       html += `<tr style="border-bottom:2px solid var(--border);${_inc ? 'opacity:0.35;' : ''}">
         <td>${hwL}</td>
@@ -2456,7 +2456,7 @@ function renderOddsSummary() {
         <td>${hwEdge != null && hwEdge > 0 ? `<span class="edge-chip ${hwEdge>=5?'hi':hwEdge>=2?'mid':'lo'}">${hwEdge.toFixed(1)}%</span>` : ''}</td>
         <td>${mlSrcEdge('darko',false)}</td><td>${mlSrcEdge('lebron',false)}</td><td>${mlSrcEdge('epm',false)}</td>
         <td style="font-size:10px;color:var(--text2);font-weight:600;">${hwModelProb != null ? (hwModelProb*100).toFixed(0)+'%' : '—'}</td>
-        <td style="font-size:10px;color:var(--green);font-weight:600;cursor:default;" title="${hwMLFillTip}">${fmtFill(hwMLFill)}</td>
+        <td style="font-size:10px;color:var(--green);font-weight:600;${hwMLFillTip ? 'cursor:help;' : ''}" ${hwMLFillTip ? `onmouseenter="showInjTip(event,this)" onmouseleave="hideInjTip()" data-inj="${hwMLFillTip.replace(/"/g,'&quot;')}"` : ''}>${fmtFill(hwMLFill)}</td>
       </tr>`;
     }
     tbody.innerHTML = html;
@@ -2484,13 +2484,13 @@ function renderOddsSummary() {
       const _ovBlend = (_ovNeedBlend && g.over_ladder && g.over_ladder.length) ? computeBlendedFill(g.over_ladder) : null;
       const _ovPrice = (_ovBlend && _ovBlend.blendedPrice != null) ? _ovBlend.blendedPrice : g.over_price;
       const _ovFill = (_ovBlend && _ovBlend.totalFill > 0) ? _ovBlend.totalFill : (g.over_fill || 0);
-      const _ovTip = (_ovBlend && _ovBlend.splits.length > 1) ? _ovBlend.splits.map(s => '$' + s.fill + ' at ' + fmtML(probToML(s.price))).join(', ') : '';
+      const _ovTip = (_ovBlend && _ovBlend.splits.length > 1) ? _ovBlend.splits.map(s => '$' + s.fill.toLocaleString() + ' at ' + fmtML(probToML(s.price))).join('\n') : '';
       // Under: only blend if raw fill < minLiquidity
       const _unNeedBlend = (g.under_fill || 0) < _minLiqTot;
       const _unBlend = (_unNeedBlend && g.under_ladder && g.under_ladder.length) ? computeBlendedFill(g.under_ladder) : null;
       const _unPrice = (_unBlend && _unBlend.blendedPrice != null) ? _unBlend.blendedPrice : g.under_price;
       const _unFill = (_unBlend && _unBlend.totalFill > 0) ? _unBlend.totalFill : (g.under_fill || 0);
-      const _unTip = (_unBlend && _unBlend.splits.length > 1) ? _unBlend.splits.map(s => '$' + s.fill + ' at ' + fmtML(probToML(s.price))).join(', ') : '';
+      const _unTip = (_unBlend && _unBlend.splits.length > 1) ? _unBlend.splits.map(s => '$' + s.fill.toLocaleString() + ' at ' + fmtML(probToML(s.price))).join('\n') : '';
       html += `<tr style="border-bottom:none;${__inc ? 'opacity:0.35;' : ''}">
         <td rowspan="2" onclick="openNovigBook(${_giTot})" style="cursor:pointer;font-family:var(--sans);font-weight:600;font-size:10px;vertical-align:middle;border-bottom:2px solid var(--border);white-space:nowrap;" title="View all Novig alt lines">
           ${g.away} @<br>${g.home}<br><span style="color:var(--muted);font-weight:400;font-size:9px;">${g.game_time_et || ''}</span>
@@ -2501,7 +2501,7 @@ function renderOddsSummary() {
         <td>${edge != null && edge > 0 ? `<span class="edge-chip ${edgeClass(edge)}">${edge.toFixed(1)}</span>` : ''}</td>
         <td>${totSrcOver(dTotEdge)}</td><td>${totSrcOver(lTotEdge)}</td><td>${totSrcOver(eTotEdge)}</td>
         <td style="color:var(--accent);font-size:10px;">${fmtProbML(_ovPrice)}</td>
-        <td style="font-size:10px;color:var(--green);font-weight:600;cursor:default;" title="${_ovTip}">${fmtFill(_ovFill)}</td>
+        <td style="font-size:10px;color:var(--green);font-weight:600;${_ovTip ? 'cursor:help;' : ''}" ${_ovTip ? `onmouseenter="showInjTip(event,this)" onmouseleave="hideInjTip()" data-inj="${_ovTip.replace(/"/g,'&quot;')}"` : ''}>${fmtFill(_ovFill)}</td>
       </tr>`;
       html += `<tr style="border-bottom:2px solid var(--border);${__inc ? 'opacity:0.35;' : ''}">
         <td style="font-family:var(--sans);font-size:10px;font-weight:600;">Under</td>
@@ -2510,7 +2510,7 @@ function renderOddsSummary() {
         <td>${edge != null && edge < 0 ? `<span class="edge-chip ${edgeClass(edge)}">${Math.abs(edge).toFixed(1)}</span>` : ''}</td>
         <td>${totSrcUnder(dTotEdge)}</td><td>${totSrcUnder(lTotEdge)}</td><td>${totSrcUnder(eTotEdge)}</td>
         <td style="color:var(--accent);font-size:10px;">${fmtProbML(_unPrice)}</td>
-        <td style="font-size:10px;color:var(--green);font-weight:600;cursor:default;" title="${_unTip}">${fmtFill(_unFill)}</td>
+        <td style="font-size:10px;color:var(--green);font-weight:600;${_unTip ? 'cursor:help;' : ''}" ${_unTip ? `onmouseenter="showInjTip(event,this)" onmouseleave="hideInjTip()" data-inj="${_unTip.replace(/"/g,'&quot;')}"` : ''}>${fmtFill(_unFill)}</td>
       </tr>`;
     }
     tbody.innerHTML = html;
