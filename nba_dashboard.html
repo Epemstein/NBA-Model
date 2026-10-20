@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v88</title>
+<title>NBA ALGO v89</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1549,6 +1549,29 @@ function spreadToML(spread) {
   return probToML(spreadToWinProb(spread));
 }
 
+// Compute blended fill price walking down the bid ladder
+// ladder = other side's bids [{price, qty}, ...] sorted desc (best first)
+// Returns {blendedPrice, totalFill, splits: [{price, fill}, ...]}
+function computeBlendedFill(ladder, targetFill) {
+  if (!ladder || !ladder.length) return { blendedPrice: null, totalFill: 0, splits: [] };
+  const minFill = targetFill || STATE.settings?.minLiquidity || 500;
+  let accumulated = 0;
+  let weightedSum = 0;
+  const splits = [];
+  for (const level of ladder) {
+    const askPrice = 1 - level.price;  // what you pay (crossing other side's bid)
+    const fillAtLevel = Math.round(askPrice * level.qty / 100);
+    const take = Math.min(fillAtLevel, minFill - accumulated);
+    if (take <= 0) break;
+    splits.push({ price: askPrice, fill: take });
+    weightedSum += askPrice * take;
+    accumulated += take;
+    if (accumulated >= minFill) break;
+  }
+  const blendedPrice = accumulated > 0 ? weightedSum / accumulated : null;
+  return { blendedPrice, totalFill: accumulated, splits };
+}
+
 // EV% = cover probability - price implied probability
 // cushion = book_spread - proj_spread (for the edge side)
 // coverProb = Φ(cushion / σ)  — probability the spread covers
@@ -1557,7 +1580,9 @@ function spreadToML(spread) {
 function calcSpreadEV(g, side) {
   const ps = gVal(g, "proj_spread"); // away - home (positive = away projected higher)
   const bk = g.book_spread; // home spread (positive = home is underdog)
-  const price = side === 'away' ? g.away_spread_price : g.home_spread_price;
+  const ladder = side === 'away' ? g.away_spread_ladder : g.home_spread_ladder;
+  const blended = (ladder && ladder.length) ? computeBlendedFill(ladder) : null;
+  const price = (blended && blended.blendedPrice != null) ? blended.blendedPrice : (side === 'away' ? g.away_spread_price : g.home_spread_price);
   if (ps == null || bk == null || price == null) return null;
   const sigma = STATE.settings?.sigma || 13;
   // book_spread (bk) is home spread. Away spread = -bk.
@@ -2178,7 +2203,9 @@ async function loadDateGames() {
 
 const _oddsFields = ['book_spread','book_total','home_spread_price','home_spread_fill',
   'away_spread_price','away_spread_fill','over_price','over_fill','under_price','under_fill',
-  'home_ml_price','home_ml_fill','away_ml_price','away_ml_fill'];
+  'home_ml_price','home_ml_fill','away_ml_price','away_ml_fill',
+  'home_spread_ladder','away_spread_ladder','over_ladder','under_ladder',
+  'home_ml_ladder','away_ml_ladder'];
 
 function _applyCachedOdds(cached) {
   if (!cached || !STATE.games.length) return;
@@ -2290,7 +2317,7 @@ function renderOddsSummary() {
       const lEdge = bk != null ? Math.round((lSprd - bk) * 10) / 10 : null;
       const eEdge = bk != null ? Math.round((eSprd - bk) * 10) / 10 : null;
       function srcEdge(e, isAway) { const v = isAway ? e : -e; return (e != null && v > 0) ? `<span class="edge-chip lo">${v.toFixed(1)}</span>` : ''; }
-      // EV% for each side
+      // EV% for each side (uses blended price internally via calcSpreadEV)
       const awEV = calcSpreadEV(g, 'away');
       const hwEV = calcSpreadEV(g, 'home');
       function evChip(ev) {
@@ -2298,6 +2325,16 @@ function renderOddsSummary() {
         const cls = ev >= 8 ? 'hi' : ev >= 4 ? 'mid' : 'lo';
         return `<span class="edge-chip ${cls}">${ev.toFixed(1)}%</span>`;
       }
+      // Blended fill for display
+      const awBlend = (g.away_spread_ladder && g.away_spread_ladder.length) ? computeBlendedFill(g.away_spread_ladder) : null;
+      const hwBlend = (g.home_spread_ladder && g.home_spread_ladder.length) ? computeBlendedFill(g.home_spread_ladder) : null;
+      const awDisplayPrice = (awBlend && awBlend.blendedPrice != null) ? awBlend.blendedPrice : g.away_spread_price;
+      const hwDisplayPrice = (hwBlend && hwBlend.blendedPrice != null) ? hwBlend.blendedPrice : g.home_spread_price;
+      const minLiqSp = STATE.settings?.minLiquidity || 500;
+      const awDisplayFill = (awBlend && awBlend.totalFill > 0) ? awBlend.totalFill : (g.away_spread_fill || 0);
+      const hwDisplayFill = (hwBlend && hwBlend.totalFill > 0) ? hwBlend.totalFill : (g.home_spread_fill || 0);
+      const awFillTip = (awBlend && awBlend.splits.length > 1) ? awBlend.splits.map(s => '$' + s.fill + ' at ' + fmtML(probToML(s.price))).join(', ') : '';
+      const hwFillTip = (hwBlend && hwBlend.splits.length > 1) ? hwBlend.splits.map(s => '$' + s.fill + ' at ' + fmtML(probToML(s.price))).join(', ') : '';
       const incomplete = _isGameIncomplete(g, STATE.games.indexOf(g));
       const awLogo = `<img src="${teamLogo(g.away)}" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;" onerror="this.style.display='none'" />`;
       const hwLogo = `<img src="${teamLogo(g.home)}" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;" onerror="this.style.display='none'" />`;
@@ -2311,8 +2348,8 @@ function renderOddsSummary() {
         <td style="color:var(--accent);font-family:var(--mono);">${ps != null ? fmtSpread(-ps) : '—'}</td>
         <td>${evChip(awEV)}</td>
         <td>${srcEdge(dEdge, true)}</td><td>${srcEdge(lEdge, true)}</td><td>${srcEdge(eEdge, true)}</td>
-        <td style="color:var(--accent);font-size:10px;">${fmtProbML(g.away_spread_price)}</td>
-        <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.away_spread_fill)}</td>
+        <td style="color:var(--accent);font-size:10px;">${fmtProbML(awDisplayPrice)}</td>
+        <td style="font-size:10px;color:var(--green);font-weight:600;cursor:default;" title="${awFillTip}">${awDisplayFill >= minLiqSp ? '$' + minLiqSp : fmtFill(awDisplayFill)}</td>
       </tr>`;
       html += `<tr style="border-bottom:2px solid var(--border);${incomplete ? 'opacity:0.35;' : ''}">
         <td style="font-size:10px;">${hwLogo}</td>
@@ -2320,8 +2357,8 @@ function renderOddsSummary() {
         <td style="color:var(--accent);font-family:var(--mono);font-weight:600;">${ps != null ? fmtSpread(ps) : '—'}</td>
         <td>${evChip(hwEV)}</td>
         <td>${srcEdge(dEdge, false)}</td><td>${srcEdge(lEdge, false)}</td><td>${srcEdge(eEdge, false)}</td>
-        <td style="color:var(--accent);font-size:10px;">${fmtProbML(g.home_spread_price)}</td>
-        <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.home_spread_fill)}</td>
+        <td style="color:var(--accent);font-size:10px;">${fmtProbML(hwDisplayPrice)}</td>
+        <td style="font-size:10px;color:var(--green);font-weight:600;cursor:default;" title="${hwFillTip}">${hwDisplayFill >= minLiqSp ? '$' + minLiqSp : fmtFill(hwDisplayFill)}</td>
       </tr>`;
     }
     tbody.innerHTML = html;
@@ -2353,6 +2390,13 @@ function renderOddsSummary() {
 
       const _inc = _isGameIncomplete(g, STATE.games.indexOf(g));
       const _giML = STATE.games.indexOf(g);
+      const awMLBlend = (g.away_ml_ladder && g.away_ml_ladder.length) ? computeBlendedFill(g.away_ml_ladder) : null;
+      const hwMLBlend = (g.home_ml_ladder && g.home_ml_ladder.length) ? computeBlendedFill(g.home_ml_ladder) : null;
+      const minLiqML = STATE.settings?.minLiquidity || 500;
+      const awMLFill = (awMLBlend && awMLBlend.totalFill > 0) ? awMLBlend.totalFill : (g.away_ml_fill || 0);
+      const hwMLFill = (hwMLBlend && hwMLBlend.totalFill > 0) ? hwMLBlend.totalFill : (g.home_ml_fill || 0);
+      const awMLFillTip = (awMLBlend && awMLBlend.splits.length > 1) ? awMLBlend.splits.map(s => '$' + s.fill + ' at ' + fmtML(probToML(s.price))).join(', ') : '';
+      const hwMLFillTip = (hwMLBlend && hwMLBlend.splits.length > 1) ? hwMLBlend.splits.map(s => '$' + s.fill + ' at ' + fmtML(probToML(s.price))).join(', ') : '';
       html += `<tr style="border-bottom:none;${_inc ? 'opacity:0.35;' : ''}">
         <td rowspan="2" onclick="openNovigBook(${_giML})" style="cursor:pointer;font-family:var(--sans);font-weight:600;font-size:10px;vertical-align:middle;border-bottom:2px solid var(--border);white-space:nowrap;" title="View all Novig alt lines">
           ${g.away} @<br>${g.home}<br><span style="color:var(--muted);font-weight:400;font-size:9px;">${g.game_time_et || ''}</span>
@@ -2363,7 +2407,7 @@ function renderOddsSummary() {
         <td>${awEdge != null && awEdge > 0 ? `<span class="edge-chip ${awEdge>=5?'hi':awEdge>=2?'mid':'lo'}">${awEdge.toFixed(1)}%</span>` : ''}</td>
         <td>${mlSrcEdge('darko',true)}</td><td>${mlSrcEdge('lebron',true)}</td><td>${mlSrcEdge('epm',true)}</td>
         <td style="font-size:10px;color:var(--text2);">${awModelProb != null ? (awModelProb*100).toFixed(0)+'%' : '—'}</td>
-        <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.away_ml_fill)}</td>
+        <td style="font-size:10px;color:var(--green);font-weight:600;cursor:default;" title="${awMLFillTip}">${awMLFill >= minLiqML ? '$' + minLiqML : fmtFill(awMLFill)}</td>
       </tr>`;
       html += `<tr style="border-bottom:2px solid var(--border);${_inc ? 'opacity:0.35;' : ''}">
         <td>${hwL}</td>
@@ -2372,7 +2416,7 @@ function renderOddsSummary() {
         <td>${hwEdge != null && hwEdge > 0 ? `<span class="edge-chip ${hwEdge>=5?'hi':hwEdge>=2?'mid':'lo'}">${hwEdge.toFixed(1)}%</span>` : ''}</td>
         <td>${mlSrcEdge('darko',false)}</td><td>${mlSrcEdge('lebron',false)}</td><td>${mlSrcEdge('epm',false)}</td>
         <td style="font-size:10px;color:var(--text2);font-weight:600;">${hwModelProb != null ? (hwModelProb*100).toFixed(0)+'%' : '—'}</td>
-        <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.home_ml_fill)}</td>
+        <td style="font-size:10px;color:var(--green);font-weight:600;cursor:default;" title="${hwMLFillTip}">${hwMLFill >= minLiqML ? '$' + minLiqML : fmtFill(hwMLFill)}</td>
       </tr>`;
     }
     tbody.innerHTML = html;
@@ -2403,8 +2447,8 @@ function renderOddsSummary() {
         <td style="color:var(--accent);font-family:var(--mono);">${gVal(g,"proj_total") != null ? gVal(g,"proj_total").toFixed(1) : '—'}</td>
         <td>${edge != null && edge > 0 ? `<span class="edge-chip ${edgeClass(edge)}">${edge.toFixed(1)}</span>` : ''}</td>
         <td>${totSrcOver(dTotEdge)}</td><td>${totSrcOver(lTotEdge)}</td><td>${totSrcOver(eTotEdge)}</td>
-        <td style="color:var(--accent);font-size:10px;">${fmtProbML(g.over_price)}</td>
-        <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.over_fill)}</td>
+        <td style="color:var(--accent);font-size:10px;">${fmtProbML((() => { const b = (g.over_ladder && g.over_ladder.length) ? computeBlendedFill(g.over_ladder) : null; return (b && b.blendedPrice != null) ? b.blendedPrice : g.over_price; })())}</td>
+        <td style="font-size:10px;color:var(--green);font-weight:600;cursor:default;" title="${(() => { const b = (g.over_ladder && g.over_ladder.length) ? computeBlendedFill(g.over_ladder) : null; return (b && b.splits.length > 1) ? b.splits.map(s => '$' + s.fill + ' at ' + fmtML(probToML(s.price))).join(', ') : ''; })()}">${(() => { const b = (g.over_ladder && g.over_ladder.length) ? computeBlendedFill(g.over_ladder) : null; const f = (b && b.totalFill > 0) ? b.totalFill : (g.over_fill || 0); const ml = STATE.settings?.minLiquidity || 500; return f >= ml ? '$' + ml : fmtFill(f); })()}</td>
       </tr>`;
       html += `<tr style="border-bottom:2px solid var(--border);${__inc ? 'opacity:0.35;' : ''}">
         <td style="font-family:var(--sans);font-size:10px;font-weight:600;">Under</td>
@@ -2412,8 +2456,8 @@ function renderOddsSummary() {
         <td style="color:var(--accent);font-family:var(--mono);font-weight:600;">${gVal(g,"proj_total") != null ? gVal(g,"proj_total").toFixed(1) : '—'}</td>
         <td>${edge != null && edge < 0 ? `<span class="edge-chip ${edgeClass(edge)}">${Math.abs(edge).toFixed(1)}</span>` : ''}</td>
         <td>${totSrcUnder(dTotEdge)}</td><td>${totSrcUnder(lTotEdge)}</td><td>${totSrcUnder(eTotEdge)}</td>
-        <td style="color:var(--accent);font-size:10px;">${fmtProbML(g.under_price)}</td>
-        <td style="font-size:10px;color:var(--green);font-weight:600;">${fmtFill(g.under_fill)}</td>
+        <td style="color:var(--accent);font-size:10px;">${fmtProbML((() => { const b = (g.under_ladder && g.under_ladder.length) ? computeBlendedFill(g.under_ladder) : null; return (b && b.blendedPrice != null) ? b.blendedPrice : g.under_price; })())}</td>
+        <td style="font-size:10px;color:var(--green);font-weight:600;cursor:default;" title="${(() => { const b = (g.under_ladder && g.under_ladder.length) ? computeBlendedFill(g.under_ladder) : null; return (b && b.splits.length > 1) ? b.splits.map(s => '$' + s.fill + ' at ' + fmtML(probToML(s.price))).join(', ') : ''; })()}">${(() => { const b = (g.under_ladder && g.under_ladder.length) ? computeBlendedFill(g.under_ladder) : null; const f = (b && b.totalFill > 0) ? b.totalFill : (g.under_fill || 0); const ml = STATE.settings?.minLiquidity || 500; return f >= ml ? '$' + ml : fmtFill(f); })()}</td>
       </tr>`;
     }
     tbody.innerHTML = html;
@@ -4272,6 +4316,8 @@ function setupRealtimeListener() {
       const oddsFields = ['book_spread','book_total','home_spread_price','home_spread_fill',
         'away_spread_price','away_spread_fill','over_price','over_fill','under_price','under_fill',
         'home_ml_price','home_ml_fill','away_ml_price','away_ml_fill',
+        'home_spread_ladder','away_spread_ladder','over_ladder','under_ladder',
+        'home_ml_ladder','away_ml_ladder',
         'novig_spread_home_oid','novig_spread_away_oid','novig_total_over_oid','novig_total_under_oid'];
       const lineupFields = ['away_starters','home_starters','lineup_status'];
       for (let i = 0; i < incoming.length; i++) {

@@ -404,6 +404,20 @@ def get_novig_nba_lines(client, target_date=None):
             qty_at_best = sum(o['qty'] for o in orders if float(o['price']) == best_price)
             return best_price, qty_at_best
 
+        def _bid_ladder(book, outcome_id, max_levels=5):
+            """Returns list of {price, qty} dicts sorted by price desc (best first)."""
+            if not book or not book.get('orders'):
+                return []
+            orders = book['orders'].get(outcome_id, [])
+            if not orders:
+                return []
+            levels = {}
+            for o in orders:
+                p = float(o['price'])
+                levels[p] = levels.get(p, 0) + o.get('qty', 0)
+            ladder = [{'price': p, 'qty': q} for p, q in sorted(levels.items(), reverse=True)]
+            return ladder[:max_levels]
+
         key = f'{away_team}@{home_team}'
         entry = {
             'event_id': eid,
@@ -440,6 +454,9 @@ def get_novig_nba_lines(client, target_date=None):
         away_fillable = round(away_ask * home_bid_qty / 100) if away_ask and home_bid_qty else 0
         entry['spread']['away_price'] = away_ask
         entry['spread']['away_fillable'] = away_fillable
+        # Bid ladders for blended fill computation (top 5 levels)
+        entry['spread']['home_ladder'] = _bid_ladder(sp_book, away_oid)  # bids on away = cross to buy home
+        entry['spread']['away_ladder'] = _bid_ladder(sp_book, home_oid)  # bids on home = cross to buy away
 
         if total_data:
             tot_book = None
@@ -474,6 +491,9 @@ def get_novig_nba_lines(client, target_date=None):
             under_fillable = round(under_ask * over_bid_qty / 100) if under_ask and over_bid_qty else 0
             entry['total']['under_price'] = under_ask
             entry['total']['under_fillable'] = under_fillable
+            # Bid ladders for blended fill (top 5 levels)
+            entry['total']['over_ladder'] = _bid_ladder(tot_book, under_oid)  # bids on under = cross to buy over
+            entry['total']['under_ladder'] = _bid_ladder(tot_book, over_oid)  # bids on over = cross to buy under
 
         # Moneyline
         ml_market = ev.get('money')
@@ -502,10 +522,14 @@ def get_novig_nba_lines(client, target_date=None):
                     entry['money']['home_price'] = ask
                     entry['money']['home_fillable'] = fillable
                     entry['money']['home_outcome_id'] = o['outcomeId']
+                    if other_oid:
+                        entry['money']['home_ml_ladder'] = _bid_ladder(ml_book, other_oid[0])
                 else:
                     entry['money']['away_price'] = ask
                     entry['money']['away_fillable'] = fillable
                     entry['money']['away_outcome_id'] = o['outcomeId']
+                    if other_oid:
+                        entry['money']['away_ml_ladder'] = _bid_ladder(ml_book, other_oid[0])
 
         lines[key] = entry
 
@@ -538,6 +562,20 @@ def get_novig_all_lines(client, target_date, game_key, center_spread=None, cente
         best_price = max(float(o['price']) for o in orders)
         qty_at_best = sum(o['qty'] for o in orders if float(o['price']) == best_price)
         return best_price, qty_at_best
+
+    def _bid_ladder(book, outcome_id, max_levels=5):
+        """Returns list of {price, qty} dicts sorted by price desc (best first)."""
+        if not book or not book.get('orders'):
+            return []
+        orders = book['orders'].get(outcome_id, [])
+        if not orders:
+            return []
+        levels = {}
+        for o in orders:
+            p = float(o['price'])
+            levels[p] = levels.get(p, 0) + o.get('qty', 0)
+        ladder = [{'price': p, 'qty': q} for p, q in sorted(levels.items(), reverse=True)]
+        return ladder[:max_levels]
 
     # Find the event ID for this game by matching teams
     target_eid = None
@@ -616,6 +654,8 @@ def get_novig_all_lines(client, target_date, game_key, center_spread=None, cente
             'strike': strike,
             'home_price': home_price, 'home_fill': home_fill,
             'away_price': away_price, 'away_fill': away_fill,
+            'home_ladder': _bid_ladder(book, away_oid),
+            'away_ladder': _bid_ladder(book, home_oid),
         })
 
     # Process totals
@@ -643,6 +683,8 @@ def get_novig_all_lines(client, target_date, game_key, center_spread=None, cente
             'strike': strike,
             'over_price': over_price, 'over_fill': over_fill,
             'under_price': under_price, 'under_fill': under_fill,
+            'over_ladder': _bid_ladder(book, under_oid),
+            'under_ladder': _bid_ladder(book, over_oid),
         })
 
     # Trim to 9 lines centered on a target strike
@@ -707,9 +749,13 @@ def get_novig_all_lines(client, target_date, game_key, center_spread=None, cente
             if oname == home_team:
                 money_out['home_price'] = ask
                 money_out['home_fill'] = fillable
+                if other_oid:
+                    money_out['home_ml_ladder'] = _bid_ladder(ml_book, other_oid[0])
             else:
                 money_out['away_price'] = ask
                 money_out['away_fill'] = fillable
+                if other_oid:
+                    money_out['away_ml_ladder'] = _bid_ladder(ml_book, other_oid[0])
 
     return {'spreads': spreads_out, 'totals': totals_out, 'money': money_out}
 

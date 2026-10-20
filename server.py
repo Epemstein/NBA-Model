@@ -259,15 +259,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     'home_spread_fill': sp.get('home_fillable', 0),
                     'away_spread_price': sp.get('away_price'),
                     'away_spread_fill': sp.get('away_fillable', 0),
+                    'home_spread_ladder': sp.get('home_ladder', []),
+                    'away_spread_ladder': sp.get('away_ladder', []),
                     'book_total': tot.get('strike') if tot else None,
                     'over_price': tot.get('over_price') if tot else None,
                     'over_fill': tot.get('over_fillable', 0) if tot else 0,
                     'under_price': tot.get('under_price') if tot else None,
                     'under_fill': tot.get('under_fillable', 0) if tot else 0,
+                    'over_ladder': tot.get('over_ladder', []) if tot else [],
+                    'under_ladder': tot.get('under_ladder', []) if tot else [],
                     'home_ml_price': ml.get('home_price') if ml else None,
                     'home_ml_fill': ml.get('home_fillable', 0) if ml else 0,
                     'away_ml_price': ml.get('away_price') if ml else None,
                     'away_ml_fill': ml.get('away_fillable', 0) if ml else 0,
+                    'home_ml_ladder': ml.get('home_ml_ladder', []) if ml else [],
+                    'away_ml_ladder': ml.get('away_ml_ladder', []) if ml else [],
                 }
 
             # Also write to Firestore if configured
