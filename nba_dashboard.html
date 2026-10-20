@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v98</title>
+<title>NBA ALGO v99</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -565,6 +565,7 @@ input[type=number] { -moz-appearance: textfield; }
 }
 #bet-queue-body table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   font-size: 13px;
 }
@@ -4614,10 +4615,14 @@ function addToQueue(data) {
     stake: data.stake || STATE.settings.defaultStake || 100,
     addedAt: Date.now(),
   };
-  // Prevent exact duplicate (same game + description)
-  const dup = _betQueue.find(b => b.away === item.away && b.home === item.home && b.description === item.description);
-  if (dup) {
-    _showBQToast(item.description + ' already in queue');
+  // Replace existing bet for same game + type (e.g. new line from order book)
+  const dupIdx = _betQueue.findIndex(b => b.away === item.away && b.home === item.home && b.type === item.type);
+  if (dupIdx >= 0) {
+    const old = _betQueue[dupIdx];
+    _betQueue[dupIdx] = item;
+    _saveBetQueue();
+    renderQueue();
+    _showBQToast('Replaced ' + old.description + ' → ' + item.description);
     return;
   }
   _betQueue.push(item);
@@ -4859,7 +4864,7 @@ document.addEventListener('DOMContentLoaded', () => { renderQueue(); });
     <table>
       <thead>
         <tr>
-          <th>Game</th><th>Bet</th><th>Price</th><th>EV%</th><th>Liquidity</th><th>Stake</th><th>To Win</th><th></th>
+          <th style="width:18%">Game</th><th style="width:16%">Bet</th><th style="width:10%">Price</th><th style="width:10%">EV%</th><th style="width:12%">Liquidity</th><th style="width:14%">Stake</th><th style="width:14%">To Win</th><th style="width:6%"></th>
         </tr>
       </thead>
       <tbody id="bet-queue-tbody"></tbody>
