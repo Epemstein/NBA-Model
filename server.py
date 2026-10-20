@@ -507,7 +507,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             cred = credentials.Certificate(json.loads(sa_json))
                             firebase_admin.initialize_app(cred)
                         db = fs.client()
-                        db.collection('nba_bets').add({
+                        # Check if game starts within 10 min → freeze CLV immediately
+                        primary_price = body.get('primaryPrice')
+                        closing_price = None
+                        try:
+                            import datetime as _dt
+                            from zoneinfo import ZoneInfo as _ZI
+                            _ET = _ZI('America/New_York')
+                            _now = _dt.datetime.now(_ET)
+                            _slate = db.collection('nba_slate').document(date).get()
+                            if _slate.exists:
+                                for _g in _slate.to_dict().get('games', []):
+                                    if f'{_g["away"]}@{_g["home"]}' == game_key:
+                                        _gt = _dt.datetime.fromisoformat(_g.get('game_time_utc','').replace('Z','+00:00'))
+                                        if (_gt.astimezone(_ET) - _now).total_seconds() / 60 <= 10:
+                                            closing_price = primary_price  # game imminent → CLV = 0
+                                        break
+                        except:
+                            pass
+
+                        bet_record = {
                             'date': date,
                             'gameKey': game_key,
                             'type': bet_type,
@@ -519,11 +538,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             'qty': qty,
                             'stake': stake,
                             'ev': body.get('ev'),
-                            'primaryPriceAtBet': body.get('primaryPrice'),
+                            'primaryPriceAtBet': primary_price,
                             'novigResponse': response if isinstance(response, dict) else {'raw': str(response)},
                             'placedAt': fs.SERVER_TIMESTAMP,
                             'placedAtMs': int(time.time() * 1000),
-                        })
+                        }
+                        if closing_price is not None:
+                            bet_record['closingPrimaryPrice'] = closing_price
+                        db.collection('nba_bets').add(bet_record)
                     except Exception as e:
                         print(f'Firestore bet record failed (bet was placed!): {e}')
 
