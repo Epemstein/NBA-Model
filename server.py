@@ -794,17 +794,24 @@ class Handler(http.server.BaseHTTPRequestHandler):
         )
 
         # Build lookup: norm_name -> {status, detail}
+        # Also build last_name+first_letter index for fuzzy matching (Nic/Nicolas, Mike/Michael)
         injuries = {}
+        _inj_by_last_fl = {}
         for m in pattern.finditer(html):
             espn_id, name, position, return_date, status_raw, comment = m.groups()
             status = STATUS_MAP.get(status_raw.strip(), status_raw.strip())
             detail = comment.strip() if comment.strip() else return_date.strip()
-            # Normalize: strip periods, lowercase, strip suffixes
             nn = name.strip().lower().replace('.', '')
             for sfx in [' jr', ' sr', ' iv', ' iii', ' ii']:
                 if nn.endswith(sfx):
                     nn = nn[:-len(sfx)].strip()
-            injuries[nn] = {'status': status, 'detail': detail, 'name': name.strip()}
+            inj_entry = {'status': status, 'detail': detail, 'name': name.strip()}
+            injuries[nn] = inj_entry
+            # Index by first_letter + last_name for fuzzy match
+            parts = nn.split()
+            if parts and len(parts) >= 2:
+                fuzzy_key = parts[0][0] + '|' + parts[-1]
+                _inj_by_last_fl[fuzzy_key] = inj_entry
 
         print(f'ESPN injuries scraped: {len(injuries)} players')
 
@@ -826,13 +833,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     for sfx in [' jr', ' sr', ' iv', ' iii', ' ii']:
                         if pn.endswith(sfx):
                             pn = pn[:-len(sfx)].strip()
-                    if pn in injuries:
-                        inj = injuries[pn]
+                    inj = injuries.get(pn)
+                    if not inj and pn.split() and len(pn.split()) >= 2:
+                        fuzzy_key = pn.split()[0][0] + '|' + pn.split()[-1]
+                        inj = _inj_by_last_fl.get(fuzzy_key)
+                    if inj:
                         p['injury'] = inj['status']
                         p['injury_detail'] = inj['detail']
                         updated += 1
                     else:
-                        # Clear injury if no longer on ESPN list
                         if p.get('injury'):
                             p['injury'] = ''
                             p['injury_detail'] = ''
@@ -855,8 +864,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         for sfx in [' jr', ' sr', ' iv', ' iii', ' ii']:
                             if pn.endswith(sfx):
                                 pn = pn[:-len(sfx)].strip()
-                        if pn in injuries:
-                            inj = injuries[pn]
+                        inj = injuries.get(pn)
+                        if not inj and pn.split() and len(pn.split()) >= 2:
+                            fuzzy_key = pn.split()[0][0] + '|' + pn.split()[-1]
+                            inj = _inj_by_last_fl.get(fuzzy_key)
+                        if inj:
                             p['injury'] = inj['status']
                             p['injury_detail'] = inj['detail']
                             roster_updated += 1
