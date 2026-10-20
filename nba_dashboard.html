@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v123</title>
+<title>NBA ALGO v124</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1711,9 +1711,8 @@ function renderGames() {
                        : (g.away_players||[]).reduce((s,p) => s+(p.min||0), 0);
     const hwMin = hwSt ? hwSt.players.reduce((s,p) => s+p.pg+p.sg+p.sf+p.pf+p.c, 0)
                        : (g.home_players||[]).reduce((s,p) => s+(p.min||0), 0);
-    // If no inline state and no player mins but has ratings, baselines are applied — don't flag
-    const awBad = Math.abs(awMin - 240) > 0.5 && (awSt || Math.abs(g.away_off||0) < 0.01);
-    const hwBad = Math.abs(hwMin - 240) > 0.5 && (hwSt || Math.abs(g.home_off||0) < 0.01);
+    const awBad = Math.abs(awMin - 240) > 0.5;
+    const hwBad = Math.abs(hwMin - 240) > 0.5;
     const anyBad = awBad || hwBad;
 
     const awColor = anyBad ? (awBad ? '#999' : COLORS[g.away] || '#333') : COLORS[g.away] || '#333';
