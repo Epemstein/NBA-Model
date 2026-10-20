@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v124</title>
+<title>NBA ALGO v125</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -2360,6 +2360,7 @@ function renderOddsSummary() {
     thead.innerHTML = '<tr><th>Game</th><th></th><th>Line</th><th>Model</th><th>EV%</th><th style="font-size:9px;">DARKO</th><th style="font-size:9px;">LEBRON</th><th style="font-size:9px;">EPM</th><th>Price</th><th>Avail</th></tr>';
     let html = '';
     for (const g of STATE.games) {
+      if (g.book_spread == null && g.away_spread_price == null) continue; // game finished, no odds
       const bk = g.book_spread;
       const ps = gVal(g,"proj_spread");
       const dSprd = _gameSpreadForSource(g, 'darko');
@@ -2421,6 +2422,7 @@ function renderOddsSummary() {
     thead.innerHTML = '<tr><th>Game</th><th></th><th>Model</th><th>Book</th><th>Edge</th><th style="font-size:9px;">DARKO</th><th style="font-size:9px;">LEBRON</th><th style="font-size:9px;">EPM</th><th>Win%</th><th>Avail</th></tr>';
     let html = '';
     for (const g of STATE.games) {
+      if (g.away_ml_price == null && g.home_ml_price == null) continue; // no ML odds
       const awBookProb = g.away_ml_price;
       const hwBookProb = g.home_ml_price;
       const awBookML = awBookProb != null ? fmtML(probToML(awBookProb)) : '—';
@@ -2481,6 +2483,7 @@ function renderOddsSummary() {
     thead.innerHTML = '<tr><th>Game</th><th>Side</th><th>Line</th><th>Model</th><th>Edge</th><th style="font-size:9px;">DARKO</th><th style="font-size:9px;">LEBRON</th><th style="font-size:9px;">EPM</th><th>Price</th><th>Avail</th></tr>';
     let html = '';
     for (const g of STATE.games) {
+      if (g.book_total == null && g.over_price == null) continue; // no total odds
       const edge = gVal(g,"total_edge");
       const awL = `<img src="${teamLogo(g.away)}" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;" onerror="this.style.display='none'" />`;
       const hwL = `<img src="${teamLogo(g.home)}" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;" onerror="this.style.display='none'" />`;
