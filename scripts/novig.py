@@ -147,18 +147,16 @@ class NovigClient:
         return r.json()
 
     def place_order(self, outcome_id, price, qty, tif='GTC'):
-        """Place a single order via the batch endpoint.
+        """Place a single order.
         price: decimal probability string (e.g. "0.550")
         qty: number of contracts
         tif: time-in-force — 'GTC' (good till cancelled), 'IOC' (immediate or cancel), 'FOK' (fill or kill)
         """
         body = {
-            'orders': [{
-                'outcomeId': outcome_id,
-                'price': str(price),
-                'qty': qty,
-                'tif': tif,
-            }]
+            'outcomeId': outcome_id,
+            'price': str(price),
+            'qty': qty,
+            'tif': tif,
         }
         r = self._request('POST', '/v3/orders', body=body)
         try:
