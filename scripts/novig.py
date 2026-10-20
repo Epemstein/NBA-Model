@@ -157,7 +157,11 @@ class NovigClient:
             'qty': qty,
         }
         r = self._request('POST', '/v3/orders', body=body)
-        return r.status_code, r.json() if r.ok else r.text
+        try:
+            resp_body = r.json()
+        except:
+            resp_body = r.text
+        return r.status_code, resp_body
 
     def cancel_order(self, order_id):
         """Cancel a specific order."""

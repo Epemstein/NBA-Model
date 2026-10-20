@@ -440,12 +440,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
             # Calculate qty: dollars = price * qty / 100 → qty = stake * 100 / price
             qty = round(stake * 100 / price)
 
-            print(f'Placing bet: {description} | outcomeId={outcome_id} | price={price} | qty={qty} | stake=${stake}')
+            price_str = str(round(price, 4))
+            print(f'=== PLACE BET ===')
+            print(f'  Description: {description}')
+            print(f'  Game: {game_key} ({date})')
+            print(f'  outcomeId: {outcome_id}')
+            print(f'  price: {price_str} (decimal prob)')
+            print(f'  qty: {qty} (from stake=${stake})')
+            print(f'  side: {side}, type: {bet_type}')
 
             nc = NovigClient(novig_key, novig_pem)
-            status_code, response = nc.place_order(outcome_id, str(round(price, 4)), qty)
+            status_code, response = nc.place_order(outcome_id, price_str, qty)
 
-            print(f'Novig response: {status_code} {response}')
+            print(f'  Novig HTTP: {status_code}')
+            print(f'  Novig body: {response}')
+            print(f'=================')
 
             if status_code in (200, 201):
                 # Record in Firestore
@@ -480,10 +489,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     'response': response if isinstance(response, dict) else str(response),
                 })
             else:
+                # Extract meaningful error message from Novig response
+                err_msg = f'Novig returned {status_code}'
+                if isinstance(response, dict):
+                    err_msg = response.get('message', response.get('error', err_msg))
+                elif isinstance(response, str) and response:
+                    err_msg = response[:200]
                 self._json_response(200, {
                     'success': False,
-                    'error': f'Novig returned {status_code}',
+                    'error': err_msg,
+                    'novigStatus': status_code,
                     'response': response if isinstance(response, dict) else str(response),
+                    'request': {'outcomeId': outcome_id, 'price': price_str, 'qty': qty},
                 })
         except Exception as e:
             print(f'Place bet failed: {e}')
