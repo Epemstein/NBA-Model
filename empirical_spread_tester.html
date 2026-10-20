@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Empirical Spread Cover Probability Tester</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, system-ui, sans-serif; background: #111; color: #eee; padding: 20px; }
+h1 { font-size: 20px; margin-bottom: 4px; }
+.subtitle { color: #888; font-size: 13px; margin-bottom: 20px; }
+
+.controls { display: flex; gap: 32px; margin-bottom: 20px; align-items: flex-start; }
+.control-group { flex: 1; }
+.control-group label { display: block; font-size: 12px; color: #aaa; margin-bottom: 4px; }
+.control-group .val { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.control-group .val.proj { color: #5b9cf5; }
+.control-group .val.book { color: #f5a623; }
+.control-group input[type=range] { width: 100%; margin: 6px 0; accent-color: #5b9cf5; }
+.control-group:nth-child(2) input[type=range] { accent-color: #f5a623; }
+.control-group .spread-label { font-size: 13px; color: #ccc; }
+
+.presets { margin-bottom: 20px; }
+.presets button {
+  background: #222; border: 1px solid #444; color: #ccc; padding: 6px 12px;
+  border-radius: 6px; cursor: pointer; font-size: 12px; margin-right: 8px; margin-bottom: 6px;
+}
+.presets button:hover { background: #333; border-color: #666; }
+
+.chart-container { background: #1a1a1a; border-radius: 12px; padding: 16px; margin-bottom: 20px; }
+canvas { width: 100%; height: auto; display: block; }
+
+.results { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px; }
+.result-card {
+  background: #1a1a1a; border-radius: 12px; padding: 16px; text-align: center;
+}
+.result-card .label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+.result-card .value { font-size: 32px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.result-card .detail { font-size: 12px; color: #888; margin-top: 4px; }
+.result-card.highlight { border: 1px solid #5b9cf5; }
+
+.ev-section { background: #1a1a1a; border-radius: 12px; padding: 16px; margin-bottom: 20px; }
+.ev-section h3 { font-size: 14px; margin-bottom: 12px; color: #aaa; }
+.ev-row { display: flex; gap: 16px; align-items: center; margin-bottom: 8px; }
+.ev-row label { font-size: 12px; color: #888; width: 80px; }
+.ev-row input { background: #222; border: 1px solid #444; color: #eee; padding: 4px 8px; width: 80px; border-radius: 4px; font-size: 14px; }
+.ev-row .ev-result { font-size: 18px; font-weight: 700; margin-left: 16px; }
+.ev-pos { color: #4ecdc4; }
+.ev-neg { color: #ff6b6b; }
+
+.formula-box { background: #1a1a1a; border-radius: 12px; padding: 16px; font-size: 13px; color: #aaa; line-height: 1.6; }
+.formula-box code { color: #eee; background: #222; padding: 2px 6px; border-radius: 3px; font-size: 12px; }
+
+.table-section { background: #1a1a1a; border-radius: 12px; padding: 16px; margin-bottom: 20px; }
+.table-section h3 { font-size: 14px; margin-bottom: 12px; color: #aaa; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; padding: 6px 8px; border-bottom: 1px solid #333; color: #888; font-weight: 500; }
+td { padding: 6px 8px; border-bottom: 1px solid #222; font-variant-numeric: tabular-nums; }
+td.better { color: #4ecdc4; }
+td.worse { color: #ff6b6b; }
+</style>
+</head>
+<body>
+
+<h1>Empirical Spread Cover Probability</h1>
+<div class="subtitle">Position-aware model: cover probability depends on WHICH points the cushion crosses, not just cushion size</div>
+
+<div class="controls">
+  <div class="control-group">
+    <label>Model Spread (your team)</label>
+    <div class="val proj" id="proj-val">-1.3</div>
+    <input type="range" id="proj-slider" min="-15" max="15" step="0.1" value="-1.3">
+    <div class="spread-label" id="proj-label">Favored by 1.3</div>
+  </div>
+  <div class="control-group">
+    <label>Book Spread (your team)</label>
+    <div class="val book" id="book-val">+1.5</div>
+    <input type="range" id="book-slider" min="-15" max="15" step="0.5" value="1.5">
+    <div class="spread-label" id="book-label">Getting 1.5 pts</div>
+  </div>
+  <div class="control-group" style="flex:0.5">
+    <label>Cushion</label>
+    <div class="val" id="cushion-val" style="color:#ccc">2.8</div>
+    <div class="spread-label" id="cushion-label" style="margin-top:10px">pts</div>
+  </div>
+</div>
+
+<div class="presets">
+  <button onclick="setPreset(-1.3, 1.5)">OKC -1.3 → +1.5 (straddles 0)</button>
+  <button onclick="setPreset(5.8, 3.0)">+5.8 → +3.0 (same cushion, high pos)</button>
+  <button onclick="setPreset(-3, 2.5)">-3 → +2.5 (5.5 pts, crosses 0)</button>
+  <button onclick="setPreset(-8, -2.5)">-8 → -2.5 (5.5 pts, same side)</button>
+  <button onclick="setPreset(-10, -5)">-10 → -5 (big fav, 5 pts)</button>
+  <button onclick="setPreset(0, 5)">PK → +5 (dog, 5 pts)</button>
+  <button onclick="setPreset(-2, 3.5)">-2 → +3.5 (5.5 pts, straddles 0)</button>
+</div>
+
+<div class="chart-container">
+  <canvas id="chart" width="1520" height="500"></canvas>
+</div>
+
+<div class="results">
+  <div class="result-card highlight">
+    <div class="label">Position-Aware Empirical</div>
+    <div class="value" id="res-empirical">54.1%</div>
+    <div class="detail" id="res-emp-detail">accounts for which points crossed</div>
+  </div>
+  <div class="result-card">
+    <div class="label">Cushion-Only Empirical</div>
+    <div class="value" id="res-cushion">56.1%</div>
+    <div class="detail" id="res-cush-detail">treats all cushion equally</div>
+  </div>
+  <div class="result-card">
+    <div class="label">Normal CDF (σ=13)</div>
+    <div class="value" id="res-normal">58.5%</div>
+    <div class="detail" id="res-norm-detail">current dashboard model</div>
+  </div>
+</div>
+
+<div class="ev-section">
+  <h3>EV% at given price</h3>
+  <div class="ev-row">
+    <label>Vig price:</label>
+    <input type="number" id="ev-price" value="0.524" step="0.001" min="0.4" max="0.65">
+    <span style="font-size:12px;color:#888;margin-left:4px">(-110 = 0.524)</span>
+  </div>
+  <div class="ev-row" style="margin-top:12px">
+    <label style="color:#5b9cf5">Empirical:</label>
+    <div class="ev-result" id="ev-empirical">+1.7%</div>
+    <label style="color:#888;margin-left:24px">Normal:</label>
+    <div class="ev-result" id="ev-normal">+6.1%</div>
+    <label style="color:#888;margin-left:24px">Diff:</label>
+    <div class="ev-result" id="ev-diff">-4.4%</div>
+  </div>
+</div>
+
+<div class="table-section">
+  <h3>Same cushion, different positions — how cover probability changes</h3>
+  <table id="comparison-table">
+    <thead>
+      <tr><th>Scenario</th><th>Model</th><th>Book</th><th>Cushion</th><th>Position-Aware</th><th>Normal</th><th>Diff</th></tr>
+    </thead>
+    <tbody id="comp-body"></tbody>
+  </table>
+</div>
+
+<div class="formula-box">
+  <strong>Formula:</strong> <code>P(margin = k | proj) ∝ φ((k - proj) / σ) × pv(|k|)</code><br><br>
+  The normal bell curve (σ=13) is <strong>reweighted</strong> by the empirical point values at each integer margin. This ensures:<br>
+  &bull; Valid probabilities (always 0-100%)<br>
+  &bull; Distribution centered on the model projection<br>
+  &bull; Near margin 0: pv(0)≈0 (no ties), pv(1)=2.2% → distribution has a <strong>dip</strong>, reducing cover probability when cushion crosses there<br>
+  &bull; Near margin 4-8: pv peaks at ~3.95% → distribution is <strong>fatter</strong> here than the normal predicts<br>
+  &bull; Same cushion at different positions → different cover probabilities<br><br>
+  <code>pv(x)</code> = smoothed Unabated NBA point values. The chart shows the reweighted distribution (colored bars) vs the pure normal (faint white line).
+</div>
+
+<script>
+// Smoothed empirical point values (index = absolute margin)
+const PV = [0, 2.20, 2.90, 3.35, 3.65, 3.85, 3.95, 3.90, 3.80, 3.70, 3.60, 3.50, 3.40, 3.35, 3.30, 3.25, 3.20, 3.15, 3.10, 3.05, 3.00];
+
+function pvSmooth(x) {
+  x = Math.abs(x);
+  if (x >= 20) return 3.0;
+  const lo = Math.floor(x);
+  const hi = Math.min(lo + 1, 20);
+  const frac = x - lo;
+  return PV[lo] * (1 - frac) + PV[hi] * frac;
+}
+
+// Numerical integration of pv(|x|) from a to b
+function integratePV(a, b) {
+  if (a >= b) return 0;
+  const step = 0.01;
+  let sum = 0;
+  for (let x = a + step / 2; x < b; x += step) {
+    sum += pvSmooth(Math.abs(x)) * step;
+  }
+  return sum; // in percentage points
+}
+
+// Cumulative from 0 to x
+function D(x) {
+  return integratePV(0, Math.abs(x));
+}
+
+// Normal CDF
+function normCdf(z) {
+  const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741, a4 = -1.453152027, a5 = 1.061405429, p = 0.3275911;
+  const sign = z < 0 ? -1 : 1;
+  z = Math.abs(z) / Math.sqrt(2);
+  const t = 1.0 / (1.0 + p * z);
+  const y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-z * z);
+  return 0.5 * (1.0 + sign * y);
+}
+
+// Three cover probability methods
+// Convention: spread is from perspective of team being bet
+// Negative spread = favored (e.g., -1.3 means team favored by 1.3)
+// Positive spread = underdog (e.g., +1.5 means getting 1.5 pts)
+// proj_margin = -model_spread (model says -1.3 → team margin is +1.3)
+// book_threshold = -book_spread (book says +1.5 → threshold is -1.5)
+
+// Position-aware: normal bell curve × empirical point values, renormalized
+// P(margin = k | proj) ∝ φ((k - proj) / σ) × pv(|k|)
+// This ensures: valid probabilities, centered on projection, reshaped by empirical
+function positionAwareCover(modelSpread, bookSpread) {
+  const projMargin = -modelSpread;
+  const bookThreshold = -bookSpread;
+  const sigma = 13;
+
+  let totalWeight = 0;
+  let coverWeight = 0;
+  // Sum over all integer margins from -50 to +50
+  for (let k = -50; k <= 50; k++) {
+    const z = (k - projMargin) / sigma;
+    const normalPdf = Math.exp(-0.5 * z * z);
+    const pv = pvSmooth(Math.abs(k));
+    const w = normalPdf * pv;
+    totalWeight += w;
+    // We cover if margin > bookThreshold (half-point spreads → no pushes)
+    if (k > bookThreshold) {
+      coverWeight += w;
+    }
+  }
+  if (totalWeight === 0) return 0.5;
+  return coverWeight / totalWeight;
+}
+
+// For the chart: compute the reweighted distribution at each integer
+function getReweightedDist(projMargin, sigma) {
+  const dist = [];
+  let totalWeight = 0;
+  for (let k = -30; k <= 30; k++) {
+    const z = (k - projMargin) / sigma;
+    const normalPdf = Math.exp(-0.5 * z * z);
+    const pv = pvSmooth(Math.abs(k));
+    const w = normalPdf * pv;
+    dist.push({ k, w });
+    totalWeight += w;
+  }
+  // Normalize so they sum to 1
+  for (const d of dist) d.p = totalWeight > 0 ? d.w / totalWeight : 0;
+  return dist;
+}
+
+function cushionOnlyCover(modelSpread, bookSpread) {
+  const cushion = bookSpread - modelSpread;
+  if (cushion <= 0) return 0.5;
+  // Use the same reweighted approach but centered at 0 (position-unaware)
+  const sigma = 13;
+  let totalWeight = 0;
+  let coverWeight = 0;
+  for (let k = -50; k <= 50; k++) {
+    const z = k / sigma;
+    const normalPdf = Math.exp(-0.5 * z * z);
+    const pv = pvSmooth(Math.abs(k));
+    const w = normalPdf * pv;
+    totalWeight += w;
+    if (k > -cushion) coverWeight += w;
+  }
+  if (totalWeight === 0) return 0.5;
+  return coverWeight / totalWeight;
+}
+
+function normalCover(modelSpread, bookSpread) {
+  const sigma = 13;
+  const cushion = bookSpread - modelSpread;
+  return normCdf(cushion / sigma);
+}
+
+// --- UI ---
+const projSlider = document.getElementById('proj-slider');
+const bookSlider = document.getElementById('book-slider');
+const canvas = document.getElementById('chart');
+const ctx = canvas.getContext('2d');
+
+function setPreset(model, book) {
+  projSlider.value = model;
+  bookSlider.value = book;
+  update();
+}
+
+function formatSpread(v) {
+  return (v >= 0 ? '+' : '') + v.toFixed(1);
+}
+
+function update() {
+  const modelSpread = parseFloat(projSlider.value);
+  const bookSpread = parseFloat(bookSlider.value);
+  const cushion = bookSpread - modelSpread;
+  const projMargin = -modelSpread;
+  const bookThreshold = -bookSpread;
+
+  // Update displays
+  document.getElementById('proj-val').textContent = formatSpread(modelSpread);
+  document.getElementById('book-val').textContent = formatSpread(bookSpread);
+  document.getElementById('cushion-val').textContent = cushion.toFixed(1);
+  document.getElementById('proj-label').textContent = modelSpread < 0 ? `Favored by ${(-modelSpread).toFixed(1)}` : modelSpread > 0 ? `Underdog by ${modelSpread.toFixed(1)}` : 'Pick\'em';
+  document.getElementById('book-label').textContent = bookSpread > 0 ? `Getting ${bookSpread.toFixed(1)} pts` : bookSpread < 0 ? `Giving ${(-bookSpread).toFixed(1)} pts` : 'Pick\'em';
+
+  // Compute probabilities
+  const empProb = positionAwareCover(modelSpread, bookSpread);
+  const cushProb = cushionOnlyCover(modelSpread, bookSpread);
+  const normProb = normalCover(modelSpread, bookSpread);
+
+  document.getElementById('res-empirical').textContent = (empProb * 100).toFixed(1) + '%';
+  document.getElementById('res-cushion').textContent = (cushProb * 100).toFixed(1) + '%';
+  document.getElementById('res-normal').textContent = (normProb * 100).toFixed(1) + '%';
+
+  const empVsNorm = ((empProb - normProb) * 100).toFixed(1);
+  document.getElementById('res-emp-detail').textContent = `${empVsNorm >= 0 ? '+' : ''}${empVsNorm}% vs normal`;
+  const empVsCush = ((empProb - cushProb) * 100).toFixed(1);
+  document.getElementById('res-cush-detail').textContent = `${empVsCush >= 0 ? '+' : ''}${empVsCush}% vs position-aware`;
+
+  // EV
+  const price = parseFloat(document.getElementById('ev-price').value) || 0.524;
+  const empEV = ((empProb - price) * 100).toFixed(1);
+  const normEV = ((normProb - price) * 100).toFixed(1);
+  const diffEV = ((empProb - normProb) * 100).toFixed(1);
+  document.getElementById('ev-empirical').textContent = `${empEV >= 0 ? '+' : ''}${empEV}%`;
+  document.getElementById('ev-empirical').className = 'ev-result ' + (empEV >= 0 ? 'ev-pos' : 'ev-neg');
+  document.getElementById('ev-normal').textContent = `${normEV >= 0 ? '+' : ''}${normEV}%`;
+  document.getElementById('ev-normal').className = 'ev-result ' + (normEV >= 0 ? 'ev-pos' : 'ev-neg');
+  document.getElementById('ev-diff').textContent = `${diffEV >= 0 ? '+' : ''}${diffEV}%`;
+  document.getElementById('ev-diff').className = 'ev-result ' + (diffEV >= 0 ? 'ev-pos' : 'ev-neg');
+
+  // Draw chart
+  drawChart(modelSpread, bookSpread, projMargin, bookThreshold);
+
+  // Update comparison table
+  updateTable(cushion);
+}
+
+function drawChart(modelSpread, bookSpread, projMargin, bookThreshold) {
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = canvas.offsetWidth * dpr;
+  canvas.height = 280 * dpr;
+  ctx.scale(dpr, dpr);
+  const w = canvas.offsetWidth, h = 280;
+
+  ctx.clearRect(0, 0, w, h);
+
+  const pad = { l: 50, r: 20, t: 30, b: 45 };
+  const plotW = w - pad.l - pad.r;
+  const plotH = h - pad.t - pad.b;
+
+  const xMin = -25, xMax = 25;
+  const sigma = 13;
+
+  // Get the reweighted distribution
+  const dist = getReweightedDist(projMargin, sigma);
+  const maxP = Math.max(...dist.map(d => d.p));
+  const yMax = Math.max(maxP * 1.15, 0.05);
+
+  const sx = x => pad.l + (x - xMin) / (xMax - xMin) * plotW;
+  const sy = y => pad.t + plotH - (y / yMax) * plotH;
+  const barW = plotW / (xMax - xMin) * 0.8;
+
+  // Grid
+  ctx.strokeStyle = '#333';
+  ctx.lineWidth = 0.5;
+  for (let x = -25; x <= 25; x += 5) {
+    ctx.beginPath();
+    ctx.moveTo(sx(x), sy(0));
+    ctx.lineTo(sx(x), pad.t);
+    ctx.stroke();
+  }
+
+  // Zero line
+  ctx.strokeStyle = '#555';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(sx(0), sy(0));
+  ctx.lineTo(sx(0), pad.t);
+  ctx.stroke();
+
+  // Draw bars — cover region vs non-cover
+  for (const d of dist) {
+    if (d.p < 0.0001) continue;
+    const covers = d.k > bookThreshold;
+    const inCushion = d.k > bookThreshold && d.k <= projMargin;
+    ctx.fillStyle = inCushion ? 'rgba(91, 156, 245, 0.6)' :
+                    covers ? 'rgba(91, 156, 245, 0.25)' :
+                    'rgba(255, 107, 107, 0.3)';
+    const bx = sx(d.k) - barW / 2;
+    const by = sy(d.p);
+    const bh = sy(0) - by;
+    ctx.fillRect(bx, by, barW, bh);
+
+    // Bar outline
+    ctx.strokeStyle = inCushion ? 'rgba(91, 156, 245, 0.8)' :
+                      covers ? 'rgba(91, 156, 245, 0.4)' :
+                      'rgba(255, 107, 107, 0.4)';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(bx, by, barW, bh);
+  }
+
+  // Also draw the pure normal (unweighted) as a faint line for comparison
+  const normalDist = [];
+  let normTotal = 0;
+  for (let k = -30; k <= 30; k++) {
+    const z = (k - projMargin) / sigma;
+    const nw = Math.exp(-0.5 * z * z);
+    normalDist.push({ k, w: nw });
+    normTotal += nw;
+  }
+  ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  let first = true;
+  for (const d of normalDist) {
+    const normP = d.w / normTotal;
+    if (first) { ctx.moveTo(sx(d.k), sy(normP)); first = false; }
+    else ctx.lineTo(sx(d.k), sy(normP));
+  }
+  ctx.stroke();
+
+  // Dead zone highlight at 0
+  ctx.fillStyle = 'rgba(255, 107, 107, 0.08)';
+  ctx.fillRect(sx(-0.5), pad.t, sx(0.5) - sx(-0.5), plotH);
+
+  // Book threshold line
+  ctx.strokeStyle = '#f5a623';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 4]);
+  ctx.beginPath();
+  const bookX = sx(bookThreshold + 0.5); // between integers
+  ctx.moveTo(bookX, sy(0));
+  ctx.lineTo(bookX, pad.t);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Projection line
+  ctx.strokeStyle = '#5b9cf5';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 4]);
+  ctx.beginPath();
+  ctx.moveTo(sx(projMargin), sy(0));
+  ctx.lineTo(sx(projMargin), pad.t);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Labels
+  ctx.font = '11px -apple-system, system-ui, sans-serif';
+  ctx.fillStyle = '#5b9cf5';
+  ctx.textAlign = 'center';
+  ctx.fillText(`Model margin: ${projMargin > 0 ? '+' : ''}${projMargin.toFixed(1)}`, sx(projMargin), pad.t - 4);
+
+  ctx.fillStyle = '#f5a623';
+  ctx.fillText(`Book threshold: ${bookThreshold > 0 ? '+' : ''}${bookThreshold.toFixed(1)}`, bookX, h - pad.b + 14);
+
+  // X axis labels
+  ctx.fillStyle = '#888';
+  ctx.textAlign = 'center';
+  ctx.font = '10px -apple-system, system-ui, sans-serif';
+  for (let x = -25; x <= 25; x += 5) {
+    ctx.fillText(x, sx(x), h - pad.b + 28);
+  }
+  ctx.fillText('Game margin (your team)', sx(0), h - pad.b + 40);
+
+  // Legend
+  ctx.font = '10px -apple-system, system-ui, sans-serif';
+  const lx = pad.l + 8;
+  ctx.fillStyle = 'rgba(91, 156, 245, 0.6)';
+  ctx.fillRect(lx, pad.t + 4, 12, 10);
+  ctx.fillStyle = '#aaa';
+  ctx.textAlign = 'left';
+  ctx.fillText('Cushion zone (edge)', lx + 16, pad.t + 13);
+
+  ctx.fillStyle = 'rgba(91, 156, 245, 0.25)';
+  ctx.fillRect(lx, pad.t + 20, 12, 10);
+  ctx.fillStyle = '#aaa';
+  ctx.fillText('Covers (beyond proj)', lx + 16, pad.t + 29);
+
+  ctx.fillStyle = 'rgba(255, 107, 107, 0.3)';
+  ctx.fillRect(lx, pad.t + 36, 12, 10);
+  ctx.fillStyle = '#aaa';
+  ctx.fillText('Doesn\'t cover', lx + 16, pad.t + 45);
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(lx, pad.t + 57);
+  ctx.lineTo(lx + 12, pad.t + 57);
+  ctx.stroke();
+  ctx.fillStyle = '#666';
+  ctx.fillText('Normal (no reweighting)', lx + 16, pad.t + 61);
+
+  // Dead zone label
+  ctx.fillStyle = '#ff6b6b';
+  ctx.font = '9px -apple-system, system-ui, sans-serif';
+  ctx.globalAlpha = 0.6;
+  ctx.textAlign = 'center';
+  ctx.fillText('0', sx(0), sy(0) + 10);
+  ctx.globalAlpha = 1;
+}
+
+function updateTable(currentCushion) {
+  const c = Math.round(currentCushion * 10) / 10;
+  const scenarios = [];
+
+  // Generate scenarios with same cushion at different positions
+  if (c > 0) {
+    // Straddling 0 (model favored, book underdog — cushion crosses 0)
+    const halfC = c / 2;
+    scenarios.push({ name: `Straddles 0 (−${halfC.toFixed(1)} → +${halfC.toFixed(1)})`, model: -halfC, book: halfC });
+    // Same side, near 0 (both underdog)
+    scenarios.push({ name: `Near 0 (PK → +${c.toFixed(1)})`, model: 0, book: c });
+    // Same side, mid (favored range)
+    scenarios.push({ name: `Mid range (−${(3 + c).toFixed(1)} → −3)`, model: -(3 + c), book: -3 });
+    // Same side, high (big favorite range)
+    scenarios.push({ name: `High range (−${(6 + c).toFixed(1)} → −6)`, model: -(6 + c), book: -6 });
+    // Same side, very high
+    scenarios.push({ name: `Very high (−${(10 + c).toFixed(1)} → −10)`, model: -(10 + c), book: -10 });
+  }
+
+  const tbody = document.getElementById('comp-body');
+  tbody.innerHTML = '';
+  for (const s of scenarios) {
+    const emp = positionAwareCover(s.model, s.book);
+    const norm = normalCover(s.model, s.book);
+    const diff = ((emp - norm) * 100).toFixed(1);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${s.name}</td>
+      <td>${formatSpread(s.model)}</td>
+      <td>${formatSpread(s.book)}</td>
+      <td>${c.toFixed(1)}</td>
+      <td><strong>${(emp * 100).toFixed(1)}%</strong></td>
+      <td>${(norm * 100).toFixed(1)}%</td>
+      <td class="${diff >= 0 ? 'better' : 'worse'}">${diff >= 0 ? '+' : ''}${diff}%</td>
+    `;
+    tbody.appendChild(tr);
+  }
+}
+
+// Event listeners
+projSlider.addEventListener('input', update);
+bookSlider.addEventListener('input', update);
+document.getElementById('ev-price').addEventListener('input', update);
+
+// Handle canvas resize
+window.addEventListener('resize', update);
+
+// Initial render
+update();
+</script>
+</body>
+</html>
