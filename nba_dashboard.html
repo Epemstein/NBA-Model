@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v127</title>
+<title>NBA ALGO v128</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1774,30 +1774,37 @@ function renderGames() {
       })()}
 
 
-      ${(() => {
-        const gameKey = g.away + '@' + g.home;
-        const betsOnGame = (_placedBets || []).filter(b => b.gameKey === gameKey);
-        if (!betsOnGame.length) return '';
-        return '<div style="padding:4px 10px;display:flex;gap:6px;flex-wrap:wrap;">' +
-          betsOnGame.map(b => {
+      <div class="gc-expand" style="gap:6px;">
+        <button onclick="togglePlayers(${i})">Players</button>
+        <button onclick="toggleDrawer(${i})">Show Math</button>
+        ${(() => {
+          const gameKey = g.away + '@' + g.home;
+          const betsOnGame = (_placedBets || []).filter(b => b.gameKey === gameKey);
+          if (!betsOnGame.length) return '<button disabled style="opacity:0.3;cursor:default;">No Bets</button>';
+          const totalRisk = betsOnGame.reduce((s, b) => s + (b.stake || 0), 0);
+          return `<button onclick="toggleBets(${i})" style="background:#1b5e20;color:#fff;font-weight:700;">Risk: $${totalRisk.toLocaleString()}</button>`;
+        })()}
+      </div>
+      <div id="bets-panel-${i}" style="display:none;padding:6px 10px;">
+        ${(() => {
+          const gameKey = g.away + '@' + g.home;
+          const betsOnGame = (_placedBets || []).filter(b => b.gameKey === gameKey);
+          if (!betsOnGame.length) return '';
+          return betsOnGame.map(b => {
             const [aw, hm] = (b.gameKey || '@').split('@');
             const betTeam = b.side === 'away' ? aw : (b.side === 'home' ? hm : '');
             const logo = betTeam ? `<img src="${teamLogo(betTeam)}" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;margin-right:2px;" onerror="this.style.display='none'" />` : '';
             const ml = b.price != null ? fmtML(probToML(b.price)) : '';
             const risk = b.stake ? '$' + b.stake.toLocaleString() : '';
             const win = (b.stake && b.price) ? '$' + _calcToWin(b.stake, probToML(b.price)).toFixed(0) : '';
-            return `<div style="font-size:10px;background:#1b5e20;color:#fff;padding:3px 8px;border-radius:4px;display:inline-flex;align-items:center;gap:4px;font-weight:600;">
+            return `<div style="font-size:10px;background:#1b5e20;color:#fff;padding:3px 8px;border-radius:4px;display:inline-flex;align-items:center;gap:4px;font-weight:600;margin:2px 4px 2px 0;">
               ${logo}<span>${b.description}</span>
               <span style="opacity:0.8;font-weight:400;">${ml}</span>
               <span style="opacity:0.9;">R:${risk}</span>
               <span style="color:#81c784;">W:${win}</span>
             </div>`;
-          }).join('') +
-          '</div>';
-      })()}
-      <div class="gc-expand" style="gap:6px;">
-        <button onclick="togglePlayers(${i})">Players</button>
-        <button onclick="toggleDrawer(${i})">Show Math</button>
+          }).join('');
+        })()}
       </div>
 
       <div class="gc-drawer" id="players-${i}">
@@ -1837,6 +1844,11 @@ function renderGames() {
 function toggleDrawer(i) {
   const d = document.getElementById('drawer-' + i);
   d.classList.toggle('open');
+}
+
+function toggleBets(i) {
+  const d = document.getElementById('bets-panel-' + i);
+  if (d) d.style.display = d.style.display === 'none' ? 'flex' : 'none';
 }
 
 function togglePlayers(i) {
