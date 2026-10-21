@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v129</title>
+<title>NBA ALGO v130</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1076,6 +1076,16 @@ input[type=number] { -moz-appearance: textfield; }
   </div>
 
   <div class="card">
+    <div class="ct">Pipeline</div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <button class="btn bp" onclick="runPipeline(false)" id="run-pipeline-btn">Run Pipeline</button>
+      <button class="btn bp" onclick="runPipeline(true)" style="background:#555;">Run (No Cache)</button>
+      <span id="pipeline-status" style="font-size:11px;color:var(--muted);"></span>
+    </div>
+    <div style="font-size:11px;color:var(--text2);margin-top:6px;">Triggers the GitHub Actions pipeline to refresh DARKO/LEBRON/EPM ratings, rosters, and game data.</div>
+  </div>
+
+  <div class="card">
     <div class="ct">Firestore Connection</div>
     <div class="fr">
       <div class="fg"><label class="fl">Status</label><div id="fs-status" style="font-family:var(--mono);font-size:12px;padding:6px 0;">Checking...</div></div>
@@ -2066,6 +2076,29 @@ function _renderInlinePlayersPanel(gameIdx) {
   }
 
   container.innerHTML = `<div class="math-cols">${renderSide('away')}${renderSide('home')}</div>`;
+
+  // Update game card warning if inline state shows minutes != 240
+  const awSt = _inlineState[`${gameIdx}_away`];
+  const hwSt = _inlineState[`${gameIdx}_home`];
+  if (awSt || hwSt) {
+    const awMin = awSt ? awSt.players.reduce((s,p) => s+p.pg+p.sg+p.sf+p.pf+p.c, 0) : 240;
+    const hwMin = hwSt ? hwSt.players.reduce((s,p) => s+p.pg+p.sg+p.sf+p.pf+p.c, 0) : 240;
+    const gcEl = container.closest('.gc');
+    if (gcEl) {
+      const awBad = Math.abs(awMin - 240) > 0.5;
+      const hwBad = Math.abs(hwMin - 240) > 0.5;
+      const warnEl = gcEl.querySelector('.gc-min-warn');
+      if (awBad || hwBad) {
+        const msgs = [];
+        if (awBad) msgs.push(`${g.away} DOES NOT HAVE 240 MINUTES (${awMin.toFixed(0)})`);
+        if (hwBad) msgs.push(`${g.home} DOES NOT HAVE 240 MINUTES (${hwMin.toFixed(0)})`);
+        const warnHtml = `<div class="gc-min-warn" style="background:#c62828;color:#fff;padding:6px 12px;text-align:center;font-size:11px;font-weight:700;letter-spacing:.02em;">${msgs.join(' &nbsp;|&nbsp; ')}</div>`;
+        if (warnEl) warnEl.outerHTML = warnHtml;
+        else gcEl.insertAdjacentHTML('afterbegin', warnHtml);
+        gcEl.style.opacity = '0.6';
+      }
+    }
+  }
 }
 
 function inlineUpdatePos(gameIdx, side, playerIdx, pos, val) {
@@ -3260,6 +3293,33 @@ function renderOverrides() {
 }
 
 // ── Settings ────────────────────────────────────────────────────────────
+async function runPipeline(noCache) {
+  if (!_currentUser || _currentUser.email !== 'ezrapemstein@gmail.com') {
+    return alert('Restricted to authorized users.');
+  }
+  const btn = document.getElementById('run-pipeline-btn');
+  const status = document.getElementById('pipeline-status');
+  btn.disabled = true;
+  status.textContent = 'Triggering...';
+  status.style.color = 'var(--yellow)';
+  try {
+    const r = await fetch(`${RENDER_URL}/trigger-pipeline?noCache=${noCache ? '1' : ''}`)
+    const data = await r.json();
+    if (data.success) {
+      status.textContent = 'Pipeline triggered! Runs in ~2 min.';
+      status.style.color = 'var(--green)';
+    } else {
+      status.textContent = data.error || 'Failed';
+      status.style.color = 'var(--red)';
+    }
+  } catch(e) {
+    status.textContent = 'Error: ' + e.message;
+    status.style.color = 'var(--red)';
+  }
+  btn.disabled = false;
+  setTimeout(() => { status.textContent = ''; }, 10000);
+}
+
 function saveSettings() {
   STATE.settings = {
     spreadEdge: parseFloat(document.getElementById('set-spread-edge').value) || 2,

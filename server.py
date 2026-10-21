@@ -87,6 +87,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._novig_account()
             return
 
+        if self.path.startswith('/trigger-pipeline'):
+            self._trigger_pipeline()
+            return
+
         if self.path == '/rss/nba':
             self._proxy('https://www.rotowire.com/rss/news.php?sport=NBA', {'User-Agent': 'Mozilla/5.0', 'Accept': 'application/rss+xml, */*'})
             return
@@ -426,6 +430,37 @@ class Handler(http.server.BaseHTTPRequestHandler):
         except Exception as e:
             print(f'Novig account failed: {e}')
             import traceback; traceback.print_exc()
+            self._json_response(500, {'error': str(e)})
+
+    def _trigger_pipeline(self):
+        """Trigger GitHub Actions pipeline via API."""
+        from urllib.parse import urlparse, parse_qs
+        qs = parse_qs(urlparse(self.path).query)
+        no_cache = qs.get('noCache', [''])[0] == '1'
+        gh_token = os.environ.get('GH_TOKEN', '')
+        if not gh_token:
+            self._json_response(400, {'error': 'GH_TOKEN not configured'})
+            return
+        try:
+            body = json.dumps({
+                'ref': 'main',
+                'inputs': {'no_cache': 'true'} if no_cache else {}
+            }).encode()
+            req = urllib.request.Request(
+                'https://api.github.com/repos/Epemstein/NBA-Model/actions/workflows/nba_pipeline.yml/dispatches',
+                data=body,
+                headers={
+                    'Authorization': f'Bearer {gh_token}',
+                    'Accept': 'application/vnd.github+json',
+                    'Content-Type': 'application/json',
+                    'X-GitHub-Api-Version': '2022-11-28',
+                },
+                method='POST'
+            )
+            resp = urllib.request.urlopen(req, timeout=15)
+            self._json_response(200, {'success': True, 'status': resp.status})
+        except Exception as e:
+            print(f'Trigger pipeline failed: {e}')
             self._json_response(500, {'error': str(e)})
 
     def _check_roster(self):
