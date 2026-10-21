@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v143</title>
+<title>NBA ALGO v144</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -3248,7 +3248,7 @@ function renderBetsTab() {
       }
       // Check Novig position status — history (settled) > active > placed
       const hist = _novigHistory && Array.isArray(_novigHistory) ? _novigHistory.find(h => h.outcomeId === b.outcomeId) : null;
-      const pos = _novigPositions.find(p => p.outcomeId === b.outcomeId);
+      const activePos = _novigPositions.find(p => p.outcomeId === b.outcomeId);
       let status, statusColor, pnl = null;
       if (hist) {
         // Settled — Novig provides result and pnl directly
@@ -3257,7 +3257,7 @@ function renderBetsTab() {
         if (result === 'WIN') { status = 'WON'; statusColor = 'var(--green)'; }
         else if (result === 'LOSS') { status = 'LOST'; statusColor = 'var(--red)'; }
         else { status = result || 'SETTLED'; statusColor = 'var(--muted)'; }
-      } else if (pos) {
+      } else if (activePos) {
         status = 'ACTIVE'; statusColor = 'var(--green)';
       } else {
         status = 'PLACED'; statusColor = 'var(--yellow)';
