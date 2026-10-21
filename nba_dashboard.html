@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v142</title>
+<title>NBA ALGO v143</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -3187,7 +3187,11 @@ function renderBetsTab() {
   // Stat strip — all-time stats (exclude voided)
   const activeBetsAll = _allBets.filter(b => !b.voided);
   document.getElementById('bets-all-count').textContent = activeBetsAll.length;
-  const totalRisked = activeBetsAll.reduce((s, b) => s + (b.stake || 0), 0);
+  // Use actual position costs when available
+  const totalRisked = activeBetsAll.reduce((s, b) => {
+    const pos = _novigPositions.find(p => p.outcomeId === b.outcomeId);
+    return s + (pos ? parseFloat(pos.cost) : (b.stake || 0));
+  }, 0);
   document.getElementById('bets-all-risk').textContent = '$' + totalRisked.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0});
   const evBets = activeBetsAll.filter(b => b.ev != null && b.ev > 0);
   const avgEV = evBets.length ? (evBets.reduce((s, b) => s + b.ev, 0) / evBets.length) : 0;
@@ -3212,8 +3216,11 @@ function renderBetsTab() {
       const game = b.gameKey ? `${awTeam} @ ${hmTeam}` : '--';
       const desc = b.description || '--';
       const price = b.price != null ? fmtML(probToML(b.price)) : '--';
-      const stake = b.stake != null ? '$' + b.stake.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '--';
-      const toWin = (b.stake && b.price) ? '$' + _calcToWin(b.stake, probToML(b.price)).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '--';
+      // Use actual cost from Novig position if available (handles partial fills)
+      const pos = _novigPositions.find(p => p.outcomeId === b.outcomeId);
+      const actualStake = pos ? parseFloat(pos.cost) : b.stake;
+      const stake = actualStake != null ? '$' + actualStake.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '--';
+      const toWin = (actualStake && b.price) ? '$' + _calcToWin(actualStake, probToML(b.price)).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '--';
       const ev = b.ev != null ? b.ev.toFixed(1) + '%' : '--';
       // CLV: closing line value
       // If closingPrimaryPrice is frozen (captured before game), use that.
@@ -3285,7 +3292,10 @@ function renderBetsTab() {
   } else {
     histContainer.innerHTML = dates.map(d => {
       const bets = byDate[d];
-      const dayRisk = bets.reduce((s, b) => s + (b.stake || 0), 0);
+      const dayRisk = bets.reduce((s, b) => {
+        const pos = _novigPositions.find(p => p.outcomeId === b.outcomeId);
+        return s + (pos ? parseFloat(pos.cost) : (b.stake || 0));
+      }, 0);
       const dayWin = bets.reduce((s, b) => s + (b.stake && b.price ? _calcToWin(b.stake, probToML(b.price)) : 0), 0);
       // Day P/L from Novig history
       let dayPnl = 0, daySettled = 0;
@@ -3341,7 +3351,7 @@ function renderBetsTab() {
                 <td style="white-space:nowrap;font-size:11px;">${aw} @ ${hm}</td>
                 <td style="font-weight:700;font-size:13px;white-space:nowrap;">${logo}${b.description || '--'}</td>
                 <td style="font-family:var(--mono);font-weight:600;">${ml}</td>
-                <td style="font-family:var(--mono);">$${(b.stake||0).toLocaleString()}</td>
+                <td style="font-family:var(--mono);">$${(() => { const p = _novigPositions.find(p => p.outcomeId === b.outcomeId); return p ? parseFloat(p.cost).toFixed(2) : (b.stake||0).toLocaleString(); })()}</td>
                 <td style="font-family:var(--mono);color:var(--green);font-weight:600;">${ev}</td>
                 <td style="font-family:var(--mono);font-weight:700;color:${pnlColor};">${pnlStr}</td>
                 <td style="text-align:center;font-weight:700;font-size:12px;color:${statusColor};">${statusStr}</td>
@@ -5367,13 +5377,27 @@ async function _executePlaceBet() {
     const data = await r.json();
 
     if (data.success) {
+      // Check fill amount from Novig response
+      const resp = data.response || {};
+      const filledQty = resp.filledQty || resp.filled || resp.qty || 0;
+      const requestedQty = qty;
+      const filledPct = requestedQty > 0 ? Math.round(filledQty / requestedQty * 100) : 100;
+      const filledDollars = filledQty > 0 ? (filledQty * item.price / 100).toFixed(2) : item.stake.toFixed(2);
+
       // Remove from queue after successful placement
       _betQueue = _betQueue.filter(b => b.id !== queueId);
       _saveBetQueue();
       renderQueue();
-      _showBQToast('Placed: ' + item.description);
+
+      if (filledPct < 100 && filledPct > 0) {
+        alert(`Partial fill: ${item.description}\n\nRequested: $${item.stake.toFixed(2)}\nFilled: $${filledDollars} (${filledPct}%)\n\nThe remaining $${(item.stake - parseFloat(filledDollars)).toFixed(2)} was cancelled (IOC).`);
+      } else if (filledPct === 0 || filledQty === 0) {
+        // Could be fully filled (response doesn't always include qty) or zero fill
+        // Log for debugging
+        console.log('Novig response:', resp);
+      }
+      _showBQToast(`Placed: ${item.description}${filledPct < 100 ? ` (${filledPct}% filled)` : ''}`);
       loadPlacedBets();
-      // Re-render game cards to show bet badge
       renderGames();
     } else {
       console.error('Bet placement failed:', data);
