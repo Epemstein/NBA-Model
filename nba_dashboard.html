@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v134</title>
+<title>NBA ALGO v135</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -3145,19 +3145,18 @@ async function refreshNovigAccount() {
       const data = await r.json();
       _novigPositions = (data.positions && data.positions.positions) || [];
       _novigOrders = (data.orders && data.orders.open) || [];
-      _novigHistory = data.history || [];
+      _novigHistory = (data.history && data.history.items) || data.history || [];
       const posCount = _novigPositions.length + _novigOrders.length;
       document.getElementById('bets-positions-count').textContent = posCount;
       // Compute W/L record and P/L from settled history
       if (Array.isArray(_novigHistory) && _novigHistory.length) {
         let wins = 0, losses = 0, pushes = 0, totalPnl = 0;
         for (const h of _novigHistory) {
-          const cost = parseFloat(h.cost || 0);
-          const payout = parseFloat(h.payout || h.settlement || 0);
-          const pl = payout - Math.abs(cost);
+          const pl = parseFloat(h.pnl || 0);
+          const result = (h.result || '').toUpperCase();
           totalPnl += pl;
-          if (pl > 0) wins++;
-          else if (pl < 0) losses++;
+          if (result === 'WIN') wins++;
+          else if (result === 'LOSS') losses++;
           else pushes++;
         }
         document.getElementById('bets-record').textContent = `${wins}-${losses}${pushes ? '-' + pushes : ''}`;
@@ -3240,13 +3239,12 @@ function renderBetsTab() {
       const pos = _novigPositions.find(p => p.outcomeId === b.outcomeId);
       let status, statusColor, pnl = null;
       if (hist) {
-        // Settled — check payout vs cost
-        const cost = parseFloat(hist.cost || 0);
-        const payout = parseFloat(hist.payout || hist.settlement || 0);
-        pnl = payout - Math.abs(cost);
-        if (pnl > 0) { status = 'WON'; statusColor = 'var(--green)'; }
-        else if (pnl < 0) { status = 'LOST'; statusColor = 'var(--red)'; }
-        else { status = 'PUSH'; statusColor = 'var(--muted)'; }
+        // Settled — Novig provides result and pnl directly
+        pnl = parseFloat(hist.pnl || 0);
+        const result = (hist.result || '').toUpperCase();
+        if (result === 'WIN') { status = 'WON'; statusColor = 'var(--green)'; }
+        else if (result === 'LOSS') { status = 'LOST'; statusColor = 'var(--red)'; }
+        else { status = result || 'SETTLED'; statusColor = 'var(--muted)'; }
       } else if (pos) {
         status = 'ACTIVE'; statusColor = 'var(--green)';
       } else {
