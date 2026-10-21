@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v138</title>
+<title>NBA ALGO v139</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -5075,141 +5075,77 @@ function toggleQueuePanel() {
   document.getElementById('bet-queue-panel').classList.toggle('expanded');
 }
 
-function autoPopulateQueue() {
+async function autoPopulateQueue() {
   const minEV = STATE.settings?.minEV || 2.0;
   const minLiq = STATE.settings?.minLiquidity || 500;
   const defaultStake = STATE.settings?.defaultStake || 100;
-  const tab = _oddsTab; // 'spread', 'ml', or 'total'
-  let added = 0;
+  const tab = _oddsTab;
 
-  for (const g of STATE.games) {
-    const gameKey = g.away + '@' + g.home;
-
-    // ML auto-fill
-    if (tab === 'ml') {
-      const alreadyQueued = _betQueue.some(b => b.away === g.away && b.home === g.home && b.type === 'ml');
-      if (alreadyQueued) continue;
-      const ps = gVal(g, 'proj_spread');
-      if (ps == null) continue;
-      const awProb = spreadToWinProb(-ps);
-      const hwProb = spreadToWinProb(ps);
-      const awMLEV = g.away_ml_price != null ? Math.round((awProb - g.away_ml_price) * 1000) / 10 : null;
-      const hwMLEV = g.home_ml_price != null ? Math.round((hwProb - g.home_ml_price) * 1000) / 10 : null;
-      let bestSide = null, bestEV = -999;
-      if (awMLEV != null && awMLEV >= minEV && (g.away_ml_fill || 0) >= minLiq && awMLEV > bestEV) { bestSide = 'away'; bestEV = awMLEV; }
-      if (hwMLEV != null && hwMLEV >= minEV && (g.home_ml_fill || 0) >= minLiq && hwMLEV > bestEV) { bestSide = 'home'; bestEV = hwMLEV; }
-      if (bestSide) {
-        const team = bestSide === 'away' ? g.away : g.home;
-        const price = bestSide === 'away' ? g.away_ml_price : g.home_ml_price;
-        const fill = bestSide === 'away' ? g.away_ml_fill : g.home_ml_fill;
-        addToQueue({
-          away: g.away, home: g.home, type: 'ml',
-          description: team + ' ML', price: price, priceML: fmtML(probToML(price)),
-          fill: fill || 0, ev: bestEV, strike: 0, side: bestSide,
-          teamColor: COLORS[team] || '#333', teamLogo: teamLogo(team), stake: defaultStake,
-          outcomeId: '', // ML oids not stored on game object yet
-        });
-        added++;
+  // For ML and totals, use primary lines (no alt lines to check)
+  if (tab === 'ml' || tab === 'total') {
+    let added = 0;
+    for (const g of STATE.games) {
+      if (tab === 'ml') {
+        const alreadyQueued = _betQueue.some(b => b.away === g.away && b.home === g.home && b.type === 'ml');
+        if (alreadyQueued) continue;
+        const ps = gVal(g, 'proj_spread');
+        if (ps == null) continue;
+        const awProb = spreadToWinProb(-ps);
+        const hwProb = spreadToWinProb(ps);
+        const awMLEV = g.away_ml_price != null ? Math.round((awProb - g.away_ml_price) * 1000) / 10 : null;
+        const hwMLEV = g.home_ml_price != null ? Math.round((hwProb - g.home_ml_price) * 1000) / 10 : null;
+        let bestSide = null, bestEV = -999;
+        if (awMLEV != null && awMLEV >= minEV && (g.away_ml_fill||0) >= minLiq && awMLEV > bestEV) { bestSide='away'; bestEV=awMLEV; }
+        if (hwMLEV != null && hwMLEV >= minEV && (g.home_ml_fill||0) >= minLiq && hwMLEV > bestEV) { bestSide='home'; bestEV=hwMLEV; }
+        if (bestSide) {
+          const team = bestSide === 'away' ? g.away : g.home;
+          addToQueue({ away:g.away, home:g.home, type:'ml', description:team+' ML', price:bestSide==='away'?g.away_ml_price:g.home_ml_price, fill:(bestSide==='away'?g.away_ml_fill:g.home_ml_fill)||0, ev:bestEV, strike:0, side:bestSide, teamColor:COLORS[team]||'#333', teamLogo:teamLogo(team), stake:defaultStake, outcomeId:bestSide==='away'?(g.away_ml_oid||''):(g.home_ml_oid||'') });
+          added++;
+        }
+      } else {
+        const totalAlready = _betQueue.some(b => b.away === g.away && b.home === g.home && b.type === 'total');
+        if (totalAlready) continue;
+        if (g.book_total == null || gVal(g,'proj_total') == null) continue;
+        const sigma = STATE.settings?.totalSigma || 17;
+        const pt = gVal(g,'proj_total');
+        const coverO = normCdf((pt-g.book_total)/sigma);
+        const coverU = normCdf((g.book_total-pt)/sigma);
+        const ovEV = g.over_price != null ? Math.round((coverO-g.over_price)*1000)/10 : null;
+        const unEV = g.under_price != null ? Math.round((coverU-g.under_price)*1000)/10 : null;
+        let totSide = null, totBestEV = -999;
+        if (ovEV != null && ovEV >= minEV && (g.over_fill||0) >= minLiq && ovEV > totBestEV) { totSide='over'; totBestEV=ovEV; }
+        if (unEV != null && unEV >= minEV && (g.under_fill||0) >= minLiq && unEV > totBestEV) { totSide='under'; totBestEV=unEV; }
+        if (totSide) {
+          addToQueue({ away:g.away, home:g.home, type:'total', description:(totSide==='over'?'O':'U')+' '+g.book_total, price:totSide==='over'?g.over_price:g.under_price, fill:(totSide==='over'?g.over_fill:g.under_fill)||0, ev:totBestEV, strike:g.book_total, side:totSide, teamColor:'#2e7d32', teamLogo:'', stake:defaultStake, outcomeId:totSide==='over'?(g.over_oid||''):(g.under_oid||'') });
+          added++;
+        }
       }
-      continue;
     }
+    if (!added) _showBQToast('No qualifying bets found');
+    else _showBQToast('Added ' + added + ' bet' + (added>1?'s':''));
+    return;
+  }
 
-    // Total auto-fill
-    if (tab === 'total') {
-      const totalAlready = _betQueue.some(b => b.away === g.away && b.home === g.home && b.type === 'total');
-      if (totalAlready) continue;
-      if (g.book_total == null || gVal(g, 'proj_total') == null) continue;
-      const sigma = STATE.settings?.totalSigma || 17;
-      const pt = gVal(g, 'proj_total');
-      const coverO = normCdf((pt - g.book_total) / sigma);
-      const coverU = normCdf((g.book_total - pt) / sigma);
-      const ovEV = g.over_price != null ? Math.round((coverO - g.over_price) * 1000) / 10 : null;
-      const unEV = g.under_price != null ? Math.round((coverU - g.under_price) * 1000) / 10 : null;
-      let totSide = null, totBestEV = -999;
-      if (ovEV != null && ovEV >= minEV && (g.over_fill || 0) >= minLiq && ovEV > totBestEV) { totSide = 'over'; totBestEV = ovEV; }
-      if (unEV != null && unEV >= minEV && (g.under_fill || 0) >= minLiq && unEV > totBestEV) { totSide = 'under'; totBestEV = unEV; }
-      if (totSide) {
-        const desc = (totSide === 'over' ? 'O' : 'U') + ' ' + g.book_total;
-        const tPrice = totSide === 'over' ? g.over_price : g.under_price;
-        const tFill = totSide === 'over' ? g.over_fill : g.under_fill;
-        addToQueue({
-          away: g.away, home: g.home, type: 'total',
-          description: desc, price: tPrice, priceML: fmtML(probToML(tPrice)),
-          fill: tFill || 0, ev: totBestEV, strike: g.book_total, side: totSide,
-          teamColor: '#2e7d32', teamLogo: '', stake: defaultStake,
-          outcomeId: totSide === 'over' ? (g.novig_total_over_oid || '') : (g.novig_total_under_oid || ''),
-        });
-        added++;
-      }
-      continue;
-    }
+  // Spreads: fetch order books to find best EV alt lines
+  _showBQToast('Finding best spread lines...');
 
-    // Spread auto-fill (default)
-    const alreadyQueued = _betQueue.some(b => b.away === g.away && b.home === g.home && b.type === 'spread');
-    if (alreadyQueued) continue;
+  // Pre-filter: only fetch order books for games with ANY model edge
+  const candidates = STATE.games.filter(g => {
+    if (_betQueue.some(b => b.away === g.away && b.home === g.home && b.type === 'spread')) return false;
+    if (g.book_spread == null || gVal(g,'proj_spread') == null) return false;
     const awEV = calcSpreadEV(g, 'away');
     const hwEV = calcSpreadEV(g, 'home');
+    return (awEV != null && awEV > 0) || (hwEV != null && hwEV > 0);
+  });
 
-    // Find best side meeting thresholds
-    let bestSide = null, bestEV = -999;
-    if (awEV != null && awEV >= minEV && (g.away_spread_fill || 0) >= minLiq && awEV > bestEV) {
-      bestSide = 'away'; bestEV = awEV;
-    }
-    if (hwEV != null && hwEV >= minEV && (g.home_spread_fill || 0) >= minLiq && hwEV > bestEV) {
-      bestSide = 'home'; bestEV = hwEV;
-    }
-
-    if (bestSide) {
-      const team = bestSide === 'away' ? g.away : g.home;
-      const spread = bestSide === 'away' ? -g.book_spread : g.book_spread;
-      const price = bestSide === 'away' ? g.away_spread_price : g.home_spread_price;
-      const fill = bestSide === 'away' ? g.away_spread_fill : g.home_spread_fill;
-      addToQueue({
-        away: g.away,
-        home: g.home,
-        type: 'spread',
-        description: team + ' ' + fmtSpread(spread),
-        price: price,
-        priceML: fmtML(probToML(price)),
-        fill: fill || 0,
-        ev: bestEV,
-        strike: g.book_spread,
-        side: bestSide,
-        teamColor: COLORS[team] || '#333',
-        teamLogo: teamLogo(team),
-        stake: defaultStake,
-        outcomeId: bestSide === 'away' ? (g.novig_spread_away_oid || '') : (g.novig_spread_home_oid || ''),
-      });
-      added++;
-    }
-
+  if (!candidates.length) {
+    _showBQToast('No games with spread edge found');
+    return;
   }
 
-  if (added === 0) {
-    _showBQToast('No qualifying bets found (min ' + minEV + '% EV, $' + minLiq + ' liq)');
-  } else {
-    _showBQToast('Added ' + added + ' bet' + (added > 1 ? 's' : '') + ' — finding best lines...');
-    // Background: fetch order books and upgrade to best EV alt lines
-    _upgradeToBestLines(tab);
-  }
-}
-
-async function _upgradeToBestLines(tab) {
-  if (tab !== 'spread') return; // only spreads have alt lines worth checking
-  const minLiq = STATE.settings?.minLiquidity || 500;
-  const sigma = STATE.settings?.sigma || 13;
-  // Find queued spread bets that need upgrading
-  const spreadBets = _betQueue.filter(b => b.type === 'spread' && b.status !== 'placed');
-  if (!spreadBets.length) return;
-
-  // Fetch order books in parallel
-  const fetches = spreadBets.map(async (bet) => {
-    const gameKey = bet.away + '@' + bet.home;
-    const g = STATE.games.find(g => g.away === bet.away && g.home === bet.home);
-    if (!g) return;
-    const ps = gVal(g, 'proj_spread');
-    if (ps == null) return;
-
+  let added = 0;
+  const fetches = candidates.map(async (g) => {
+    const gameKey = g.away + '@' + g.home;
     try {
       const sp = g.book_spread != null ? `&spread=${g.book_spread}` : '';
       const tot = g.book_total != null ? `&total=${g.book_total}` : '';
@@ -5217,45 +5153,41 @@ async function _upgradeToBestLines(tab) {
       const data = await r.json();
       if (!data.spreads || !data.spreads.length) return;
 
-      // Find best EV line from all alt spreads
+      // Find best EV line with sufficient liquidity
       let bestEV = -999, bestLine = null, bestSide = null;
       for (const s of data.spreads) {
         const awEV = _calcAltSpreadEV(g, s.strike, s.away_price, 'away');
         const hwEV = _calcAltSpreadEV(g, s.strike, s.home_price, 'home');
-        if (awEV != null && awEV > bestEV && (s.away_fill || 0) >= minLiq) {
+        if (awEV != null && awEV > bestEV && awEV >= minEV && (s.away_fill||0) >= minLiq) {
           bestEV = awEV; bestLine = s; bestSide = 'away';
         }
-        if (hwEV != null && hwEV > bestEV && (s.home_fill || 0) >= minLiq) {
+        if (hwEV != null && hwEV > bestEV && hwEV >= minEV && (s.home_fill||0) >= minLiq) {
           bestEV = hwEV; bestLine = s; bestSide = 'home';
         }
       }
 
-      if (bestLine && bestEV > (bet.ev || 0)) {
-        // Upgrade the queue item
-        const team = bestSide === 'away' ? bet.away : bet.home;
+      if (bestLine && bestEV >= minEV) {
+        const team = bestSide === 'away' ? g.away : g.home;
         const spread = bestSide === 'away' ? -bestLine.strike : bestLine.strike;
         const price = bestSide === 'away' ? bestLine.away_price : bestLine.home_price;
         const fill = bestSide === 'away' ? bestLine.away_fill : bestLine.home_fill;
         const oid = bestSide === 'away' ? (bestLine.away_oid || '') : (bestLine.home_oid || '');
-        bet.description = team + ' ' + fmtSpread(spread);
-        bet.price = price;
-        bet.priceML = fmtML(probToML(price));
-        bet.fill = fill || 0;
-        bet.ev = bestEV;
-        bet.strike = bestLine.strike;
-        bet.side = bestSide;
-        bet.outcomeId = oid;
-        bet.teamColor = COLORS[team] || '#333';
-        bet.teamLogo = teamLogo(team);
-        _saveBetQueue();
+        addToQueue({
+          away: g.away, home: g.home, type: 'spread',
+          description: team + ' ' + fmtSpread(spread),
+          price, fill: fill||0, ev: bestEV, strike: bestLine.strike, side: bestSide,
+          teamColor: COLORS[team]||'#333', teamLogo: teamLogo(team),
+          stake: defaultStake, outcomeId: oid,
+        });
+        added++;
         renderQueue();
       }
-    } catch(e) { console.warn('Order book fetch failed for', gameKey, e); }
+    } catch(e) { console.warn('Order book failed:', gameKey, e); }
   });
 
   await Promise.all(fetches);
-  _showBQToast('Best lines found');
-  renderQueue();
+  if (!added) _showBQToast('No qualifying spread bets found');
+  else _showBQToast(added + ' best-line bet' + (added>1?'s':'') + ' added');
 }
 
 function _showBQToast(msg) {
