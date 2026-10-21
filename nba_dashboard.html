@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v140</title>
+<title>NBA ALGO v141</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -544,7 +544,7 @@ input[type=number] { -moz-appearance: textfield; }
   max-height: 40px;
   overflow: hidden;
 }
-#bet-queue-panel.expanded { max-height: 40vh; }
+#bet-queue-panel.expanded { max-height: 50vh; display: flex; flex-direction: column; }
 #bet-queue-bar {
   height: 40px;
   display: flex;
@@ -559,9 +559,10 @@ input[type=number] { -moz-appearance: textfield; }
 #bet-queue-bar .bq-chevron { font-size: 16px; transition: transform .3s; }
 #bet-queue-panel.expanded #bet-queue-bar .bq-chevron { transform: rotate(180deg); }
 #bet-queue-body {
-  max-height: calc(40vh - 40px);
+  flex: 1;
   overflow-y: auto;
   padding: 0 12px 8px;
+  min-height: 0;
 }
 #bet-queue-body table {
   width: 100%;
