@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v144</title>
+<title>NBA ALGO v145</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -3209,7 +3209,8 @@ function renderBetsTab() {
     todayBody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--muted);font-family:var(--sans)">No bets today</td></tr>';
   } else {
     todayBody.innerHTML = todayBets.map(b => {
-      const time = b.placedAtMs ? new Date(b.placedAtMs).toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York'}) : '--';
+      const _betGame = STATE.games.find(g => (g.away + '@' + g.home) === b.gameKey);
+      const time = _betGame && _betGame.game_time_et ? _betGame.game_time_et.replace(' ET','') : (b.placedAtMs ? new Date(b.placedAtMs).toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit',timeZone:'America/New_York'}) : '--');
       const [awTeam, hmTeam] = (b.gameKey || '@').split('@');
       const betTeam = b.side === 'away' ? awTeam : (b.side === 'home' ? hmTeam : '');
       const logoHtml = betTeam ? `<img src="${teamLogo(betTeam)}" style="width:20px;height:20px;object-fit:contain;vertical-align:middle;margin-right:4px;" onerror="this.style.display='none'" />` : '';
@@ -3334,7 +3335,8 @@ function renderBetsTab() {
               const logo = betTeam ? `<img src="${teamLogo(betTeam)}" style="width:16px;height:16px;object-fit:contain;vertical-align:middle;margin-right:4px;" onerror="this.style.display='none'" />` : '';
               const ml = b.price != null ? fmtML(probToML(b.price)) : '--';
               const ev = b.ev != null ? '+' + b.ev.toFixed(1) + '%' : '--';
-              const time = b.placedAtMs ? new Date(b.placedAtMs).toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit',timeZone:'America/New_York'}) : '';
+              const _hGame = STATE.games.find(g => (g.away + '@' + g.home) === b.gameKey);
+              const time = _hGame && _hGame.game_time_et ? _hGame.game_time_et.replace(' ET','') : (b.placedAtMs ? new Date(b.placedAtMs).toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit',timeZone:'America/New_York'}) : '');
               const hist = Array.isArray(_novigHistory) ? _novigHistory.find(h => h.outcomeId === b.outcomeId) : null;
               let pnlStr = '--', pnlColor = 'var(--muted)', statusStr = 'TBD', statusColor = 'var(--muted)';
               if (hist) {
