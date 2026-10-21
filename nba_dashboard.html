@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v130</title>
+<title>NBA ALGO v131</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1952,6 +1952,19 @@ function _buildInlineSide(gameIdx, side, roster, baselines, overrides) {
       injury: p.injury||"", injury_detail: p.injury_detail||"",
     };
   });
+  // Add baseline players not in roster (DARKO may have stale team assignments)
+  const rosterNormed = new Set(roster.map(p => normName(p.name)));
+  for (const [name, bl] of Object.entries(baselines)) {
+    if (rosterNormed.has(normName(name))) continue;
+    let pg=0, sg=0, sf=0, pf=0, c=0;
+    if (bl && typeof bl === 'object') { pg=bl.pg||0; sg=bl.sg||0; sf=bl.sf||0; pf=bl.pf||0; c=bl.c||0; }
+    const mins = pg+sg+sf+pf+c;
+    if (mins <= 0) continue;
+    const ov = overrides[name];
+    if (ov != null && typeof ov === 'object') { pg=ov.pg||0; sg=ov.sg||0; sf=ov.sf||0; pf=ov.pf||0; c=ov.c||0; }
+    else if (ov === 0) { pg=0; sg=0; sf=0; pf=0; c=0; }
+    players.push({ name, pos:'', nba_id:'', pg, sg, sf, pf, c, dpm:0, o_dpm:0, d_dpm:0, injury:'', injury_detail:'' });
+  }
   // Sort: players with minutes first (desc by total), then 0-min alphabetically
   players.sort((a, b) => {
     const aT = a.pg+a.sg+a.sf+a.pf+a.c;
