@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v137</title>
+<title>NBA ALGO v138</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -5188,8 +5188,74 @@ function autoPopulateQueue() {
   if (added === 0) {
     _showBQToast('No qualifying bets found (min ' + minEV + '% EV, $' + minLiq + ' liq)');
   } else {
-    _showBQToast('Added ' + added + ' bet' + (added > 1 ? 's' : '') + ' to queue');
+    _showBQToast('Added ' + added + ' bet' + (added > 1 ? 's' : '') + ' — finding best lines...');
+    // Background: fetch order books and upgrade to best EV alt lines
+    _upgradeToBestLines(tab);
   }
+}
+
+async function _upgradeToBestLines(tab) {
+  if (tab !== 'spread') return; // only spreads have alt lines worth checking
+  const minLiq = STATE.settings?.minLiquidity || 500;
+  const sigma = STATE.settings?.sigma || 13;
+  // Find queued spread bets that need upgrading
+  const spreadBets = _betQueue.filter(b => b.type === 'spread' && b.status !== 'placed');
+  if (!spreadBets.length) return;
+
+  // Fetch order books in parallel
+  const fetches = spreadBets.map(async (bet) => {
+    const gameKey = bet.away + '@' + bet.home;
+    const g = STATE.games.find(g => g.away === bet.away && g.home === bet.home);
+    if (!g) return;
+    const ps = gVal(g, 'proj_spread');
+    if (ps == null) return;
+
+    try {
+      const sp = g.book_spread != null ? `&spread=${g.book_spread}` : '';
+      const tot = g.book_total != null ? `&total=${g.book_total}` : '';
+      const r = await fetch(`${RENDER_URL}/novig-book?date=${selectedDate}&game=${gameKey}${sp}${tot}`);
+      const data = await r.json();
+      if (!data.spreads || !data.spreads.length) return;
+
+      // Find best EV line from all alt spreads
+      let bestEV = -999, bestLine = null, bestSide = null;
+      for (const s of data.spreads) {
+        const awEV = _calcAltSpreadEV(g, s.strike, s.away_price, 'away');
+        const hwEV = _calcAltSpreadEV(g, s.strike, s.home_price, 'home');
+        if (awEV != null && awEV > bestEV && (s.away_fill || 0) >= minLiq) {
+          bestEV = awEV; bestLine = s; bestSide = 'away';
+        }
+        if (hwEV != null && hwEV > bestEV && (s.home_fill || 0) >= minLiq) {
+          bestEV = hwEV; bestLine = s; bestSide = 'home';
+        }
+      }
+
+      if (bestLine && bestEV > (bet.ev || 0)) {
+        // Upgrade the queue item
+        const team = bestSide === 'away' ? bet.away : bet.home;
+        const spread = bestSide === 'away' ? -bestLine.strike : bestLine.strike;
+        const price = bestSide === 'away' ? bestLine.away_price : bestLine.home_price;
+        const fill = bestSide === 'away' ? bestLine.away_fill : bestLine.home_fill;
+        const oid = bestSide === 'away' ? (bestLine.away_oid || '') : (bestLine.home_oid || '');
+        bet.description = team + ' ' + fmtSpread(spread);
+        bet.price = price;
+        bet.priceML = fmtML(probToML(price));
+        bet.fill = fill || 0;
+        bet.ev = bestEV;
+        bet.strike = bestLine.strike;
+        bet.side = bestSide;
+        bet.outcomeId = oid;
+        bet.teamColor = COLORS[team] || '#333';
+        bet.teamLogo = teamLogo(team);
+        _saveBetQueue();
+        renderQueue();
+      }
+    } catch(e) { console.warn('Order book fetch failed for', gameKey, e); }
+  });
+
+  await Promise.all(fetches);
+  _showBQToast('Best lines found');
+  renderQueue();
 }
 
 function _showBQToast(msg) {
