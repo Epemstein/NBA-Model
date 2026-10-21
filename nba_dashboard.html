@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v136</title>
+<title>NBA ALGO v137</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -2103,15 +2103,16 @@ function _renderInlinePlayersPanel(gameIdx) {
     if (gcEl) {
       const awBad = Math.abs(awMin - 240) > 0.5;
       const hwBad = Math.abs(hwMin - 240) > 0.5;
-      const warnEl = gcEl.querySelector('.gc-min-warn');
+      // Remove ALL existing warnings first
+      gcEl.querySelectorAll('.gc-min-warn').forEach(el => el.remove());
       if (awBad || hwBad) {
         const msgs = [];
         if (awBad) msgs.push(`${g.away} DOES NOT HAVE 240 MINUTES (${awMin.toFixed(0)})`);
         if (hwBad) msgs.push(`${g.home} DOES NOT HAVE 240 MINUTES (${hwMin.toFixed(0)})`);
-        const warnHtml = `<div class="gc-min-warn" style="background:#c62828;color:#fff;padding:6px 12px;text-align:center;font-size:11px;font-weight:700;letter-spacing:.02em;">${msgs.join(' &nbsp;|&nbsp; ')}</div>`;
-        if (warnEl) warnEl.outerHTML = warnHtml;
-        else gcEl.insertAdjacentHTML('afterbegin', warnHtml);
+        gcEl.insertAdjacentHTML('afterbegin', `<div class="gc-min-warn" style="background:#c62828;color:#fff;padding:6px 12px;text-align:center;font-size:11px;font-weight:700;letter-spacing:.02em;">${msgs.join(' &nbsp;|&nbsp; ')}</div>`);
         gcEl.style.opacity = '0.6';
+      } else {
+        gcEl.style.opacity = '';
       }
     }
   }
