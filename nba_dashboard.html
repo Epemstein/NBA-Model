@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v128</title>
+<title>NBA ALGO v129</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -3852,15 +3852,24 @@ async function applyBaselines() {
         // Use roster players (they have DPM/nba_id/lb_dpm), apply baseline minutes
         const existing = g[`${side}_players`] || [];
         const source = roster.length ? roster : existing;
+        const sourceNormed = new Set(source.map(p => normName(p.name)));
         const newList = source.map(p => ({
           name: p.name, dpm: p.dpm||0, o_dpm: p.o_dpm||0, d_dpm: p.d_dpm||0,
           lb_dpm: p.lb_dpm, lb_o_dpm: p.lb_o_dpm, lb_d_dpm: p.lb_d_dpm,
           epm: p.epm, epm_o: p.epm_o, epm_d: p.epm_d,
           injury: p.injury||"", injury_detail: p.injury_detail||"",
           nba_id: p.nba_id||'', min: _resolveMin(blNorm, goNorm, p.name),
-        })).filter(p => p.min > 0).sort((a,b) => b.min - a.min);
+        }));
+        // Add baseline players not in roster (e.g. DARKO missing recent trades)
+        for (const [name, sv] of Object.entries(bl)) {
+          if (sourceNormed.has(normName(name))) continue;
+          const mins = typeof sv === 'object' ? (sv.pg||0)+(sv.sg||0)+(sv.sf||0)+(sv.pf||0)+(sv.c||0) : (sv||0);
+          if (mins <= 0) continue;
+          newList.push({ name, dpm:0, o_dpm:0, d_dpm:0, nba_id:'', min: _resolveMin(blNorm, goNorm, name), injury:'', injury_detail:'' });
+        }
+        const filtered = newList.filter(p => p.min > 0).sort((a,b) => b.min - a.min);
 
-        g[`${side}_players`] = newList;
+        g[`${side}_players`] = filtered;
       }
     }
 
