@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v141</title>
+<title>NBA ALGO v142</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -3306,6 +3306,18 @@ function renderBetsTab() {
             </div>
           </div>
           <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead><tr style="border-bottom:1px solid var(--border);">
+              <th style="text-align:left;font-size:10px;color:var(--muted);padding:4px 0;font-weight:500;width:60px;">Time</th>
+              <th style="text-align:left;font-size:10px;color:var(--muted);padding:4px 0;font-weight:500;">Game</th>
+              <th style="text-align:left;font-size:10px;color:var(--muted);padding:4px 0;font-weight:500;">Bet</th>
+              <th style="text-align:left;font-size:10px;color:var(--muted);padding:4px 0;font-weight:500;">Price</th>
+              <th style="text-align:left;font-size:10px;color:var(--muted);padding:4px 0;font-weight:500;">Stake</th>
+              <th style="text-align:left;font-size:10px;color:var(--muted);padding:4px 0;font-weight:500;">EV%</th>
+              <th style="text-align:left;font-size:10px;color:var(--muted);padding:4px 0;font-weight:500;">P/L</th>
+              <th style="text-align:center;font-size:10px;color:var(--muted);padding:4px 0;font-weight:500;">W/L</th>
+              <th style="width:36px;"></th>
+            </tr></thead>
+            <tbody>
             ${bets.map(b => {
               const [aw, hm] = (b.gameKey || '@').split('@');
               const betTeam = b.side === 'away' ? aw : (b.side === 'home' ? hm : '');
@@ -3313,9 +3325,8 @@ function renderBetsTab() {
               const ml = b.price != null ? fmtML(probToML(b.price)) : '--';
               const ev = b.ev != null ? '+' + b.ev.toFixed(1) + '%' : '--';
               const time = b.placedAtMs ? new Date(b.placedAtMs).toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit',timeZone:'America/New_York'}) : '';
-              // P/L and status from Novig history
               const hist = Array.isArray(_novigHistory) ? _novigHistory.find(h => h.outcomeId === b.outcomeId) : null;
-              let pnlStr = '--', pnlColor = 'var(--muted)', statusStr = '', statusColor = '';
+              let pnlStr = '--', pnlColor = 'var(--muted)', statusStr = 'TBD', statusColor = 'var(--muted)';
               if (hist) {
                 const pl = parseFloat(hist.pnl || 0);
                 pnlStr = (pl >= 0 ? '+' : '') + '$' + pl.toFixed(2);
@@ -3325,18 +3336,19 @@ function renderBetsTab() {
                 statusColor = r === 'WIN' ? 'var(--green)' : r === 'LOSS' ? 'var(--red)' : 'var(--muted)';
               }
               const voidBtn = b._docId ? `<button onclick="voidBet('${b._docId}')" style="font-size:9px;color:var(--muted);background:none;border:1px solid #ddd;border-radius:3px;padding:1px 5px;cursor:pointer;" title="Void this bet">void</button>` : '';
-              return `<tr style="border-bottom:1px solid #f0f0f0;height:36px;">
-                <td style="color:var(--muted);font-size:11px;width:60px;">${time}</td>
+              return `<tr style="border-bottom:1px solid #f0f0f0;height:38px;">
+                <td style="color:var(--muted);font-size:11px;">${time}</td>
                 <td style="white-space:nowrap;font-size:11px;">${aw} @ ${hm}</td>
                 <td style="font-weight:700;font-size:13px;white-space:nowrap;">${logo}${b.description || '--'}</td>
                 <td style="font-family:var(--mono);font-weight:600;">${ml}</td>
                 <td style="font-family:var(--mono);">$${(b.stake||0).toLocaleString()}</td>
-                <td style="font-family:var(--mono);color:var(--green);">${ev}</td>
+                <td style="font-family:var(--mono);color:var(--green);font-weight:600;">${ev}</td>
                 <td style="font-family:var(--mono);font-weight:700;color:${pnlColor};">${pnlStr}</td>
-                <td style="font-weight:700;font-size:11px;color:${statusColor};">${statusStr}</td>
-                <td style="width:40px;">${voidBtn}</td>
+                <td style="text-align:center;font-weight:700;font-size:12px;color:${statusColor};">${statusStr}</td>
+                <td>${voidBtn}</td>
               </tr>`;
             }).join('')}
+            </tbody>
           </table>
         </div>`;
     }).join('');
