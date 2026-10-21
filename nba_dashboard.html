@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v131</title>
+<title>NBA ALGO v132</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1064,6 +1064,14 @@ input[type=number] { -moz-appearance: textfield; }
       <div class="fg"><label class="fl">Min Liquidity ($)</label><input id="set-min-liq" type="number" value="500" min="0" max="10000" step="100"></div>
       <div class="fg"><label class="fl">Default Stake ($)</label><input id="set-default-stake" type="number" value="100" min="1" max="100000" step="1"></div>
       <div class="fg"><label class="fl">Min EV% (Auto-fill)</label><input id="set-min-ev" type="number" value="2.0" min="0" max="20" step="0.5"></div>
+    </div>
+    <div class="ct" style="margin-top:14px;">DARKO Source</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
+        <input type="checkbox" id="set-preseason-darko" onchange="togglePreseasonDarko(this.checked)" />
+        Use Preseason DARKO (snapshot from opening day)
+      </label>
+      <button class="btn" style="font-size:10px;padding:2px 8px;" onclick="savePreseasonDarko()">Save Current as Preseason</button>
     </div>
     <div class="ct" style="margin-top:14px;">MODEL Blend Weights</div>
     <div style="display:flex;gap:12px;align-items:center;margin-bottom:10px;">
@@ -3306,6 +3314,84 @@ function renderOverrides() {
 }
 
 // ── Settings ────────────────────────────────────────────────────────────
+let _preseasonDarko = null; // {norm_name: {dpm, o_dpm, d_dpm}}
+
+async function togglePreseasonDarko(enabled) {
+  STATE.settings.usePreseasonDarko = enabled;
+  localStorage.setItem('nba_settings', JSON.stringify(STATE.settings));
+
+  if (enabled && !_preseasonDarko) {
+    // Load preseason DARKO from Firestore
+    try {
+      const snap = await fbDb.collection('nba_darko').doc('preseason').get();
+      if (snap.exists) {
+        const players = snap.data().players || [];
+        _preseasonDarko = {};
+        for (const p of players) {
+          _preseasonDarko[normName(p.name)] = p;
+          if (p.nba_id) _preseasonDarko['id:' + p.nba_id] = p;
+        }
+        console.log('Preseason DARKO loaded:', players.length, 'players');
+      } else {
+        alert('No preseason DARKO snapshot found. Save one first.');
+        document.getElementById('set-preseason-darko').checked = false;
+        STATE.settings.usePreseasonDarko = false;
+        localStorage.setItem('nba_settings', JSON.stringify(STATE.settings));
+        return;
+      }
+    } catch(e) {
+      console.error('Failed to load preseason DARKO:', e);
+      return;
+    }
+  }
+
+  // Re-apply to override DPM values on current roster
+  if (enabled && _preseasonDarko) {
+    _applyPreseasonDarko();
+  }
+  buildRatingLookups();
+  recomputeProjections();
+  renderGames();
+  renderOddsSummary();
+}
+
+function _applyPreseasonDarko() {
+  if (!_preseasonDarko) return;
+  // Override DPM on all game player lists
+  for (const g of STATE.games) {
+    for (const side of ['away_players', 'home_players']) {
+      for (const p of (g[side] || [])) {
+        const dk = _preseasonDarko['id:' + p.nba_id] || _preseasonDarko[normName(p.name)];
+        if (dk) {
+          p.dpm = dk.dpm; p.o_dpm = dk.o_dpm; p.d_dpm = dk.d_dpm;
+        }
+      }
+    }
+  }
+  // Also update inline rotation state
+  for (const [key, st] of Object.entries(_inlineState)) {
+    for (const p of (st.players || [])) {
+      const dk = _preseasonDarko['id:' + p.nba_id] || _preseasonDarko[normName(p.name)];
+      if (dk) {
+        p.dpm = dk.dpm; p.o_dpm = dk.o_dpm; p.d_dpm = dk.d_dpm;
+      }
+    }
+  }
+}
+
+async function savePreseasonDarko() {
+  if (!confirm('Save current DARKO data as the preseason snapshot? This overwrites any existing preseason data.')) return;
+  try {
+    const r = await fetch(`${RENDER_URL}/save-preseason-darko?date=${todayET()}`);
+    const data = await r.json();
+    if (data.success) {
+      alert(`Saved preseason DARKO: ${data.players} players from ${data.sourceDate}`);
+    } else {
+      alert('Failed: ' + (data.error || 'Unknown'));
+    }
+  } catch(e) { alert('Failed: ' + e.message); }
+}
+
 async function runPipeline(noCache) {
   if (!_currentUser || _currentUser.email !== 'ezrapemstein@gmail.com') {
     return alert('Restricted to authorized users.');
@@ -3372,6 +3458,9 @@ function loadSettingsUI() {
   document.getElementById('set-blend-darko').value = STATE.settings.blendDarko ?? 60;
   document.getElementById('set-blend-lebron').value = STATE.settings.blendLebron ?? 25;
   document.getElementById('set-blend-epm').value = STATE.settings.blendEpm ?? 15;
+  document.getElementById('set-preseason-darko').checked = !!STATE.settings.usePreseasonDarko;
+  // Auto-load preseason DARKO if enabled
+  if (STATE.settings.usePreseasonDarko) togglePreseasonDarko(true);
   const blendSum = (STATE.settings.blendDarko ?? 60) + (STATE.settings.blendLebron ?? 25) + (STATE.settings.blendEpm ?? 15);
   const sumLabel = document.getElementById('blend-sum-label');
   if (sumLabel) sumLabel.textContent = `Sum: ${blendSum}`;
@@ -3945,6 +4034,9 @@ async function applyBaselines() {
         g[`${side}_players`] = filtered;
       }
     }
+
+    // Override DPM with preseason DARKO if enabled
+    if (STATE.settings.usePreseasonDarko && _preseasonDarko) _applyPreseasonDarko();
 
     buildRatingLookups();
     recomputeProjections();

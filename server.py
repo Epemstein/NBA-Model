@@ -87,6 +87,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._novig_account()
             return
 
+        if self.path.startswith('/save-preseason-darko'):
+            self._save_preseason_darko()
+            return
+
         if self.path.startswith('/trigger-pipeline'):
             self._trigger_pipeline()
             return
@@ -430,6 +434,37 @@ class Handler(http.server.BaseHTTPRequestHandler):
         except Exception as e:
             print(f'Novig account failed: {e}')
             import traceback; traceback.print_exc()
+            self._json_response(500, {'error': str(e)})
+
+    def _save_preseason_darko(self):
+        """Copy a DARKO cache doc to nba_darko/preseason as permanent snapshot."""
+        from urllib.parse import urlparse, parse_qs
+        qs = parse_qs(urlparse(self.path).query)
+        source_date = qs.get('date', ['2026-10-20'])[0]
+        sa_json = os.environ.get('FIREBASE_SA_JSON', '')
+        if not sa_json:
+            self._json_response(400, {'error': 'Firebase not configured'})
+            return
+        try:
+            import firebase_admin
+            from firebase_admin import credentials, firestore as fs
+            if not firebase_admin._apps:
+                cred = credentials.Certificate(json.loads(sa_json))
+                firebase_admin.initialize_app(cred)
+            db = fs.client()
+            snap = db.collection('nba_darko').document(source_date).get()
+            if not snap.exists:
+                self._json_response(404, {'error': f'No DARKO cache for {source_date}'})
+                return
+            data = snap.to_dict()
+            data['sourceDate'] = source_date
+            data['savedAt'] = fs.SERVER_TIMESTAMP
+            db.collection('nba_darko').document('preseason').set(data)
+            count = len(data.get('players', []))
+            self._json_response(200, {'success': True, 'players': count, 'sourceDate': source_date})
+            print(f'Saved preseason DARKO from {source_date}: {count} players')
+        except Exception as e:
+            print(f'Save preseason DARKO failed: {e}')
             self._json_response(500, {'error': str(e)})
 
     def _trigger_pipeline(self):
