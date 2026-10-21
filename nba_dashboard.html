@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v133</title>
+<title>NBA ALGO v134</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -825,6 +825,8 @@ input[type=number] { -moz-appearance: textfield; }
     <div class="stat-strip-item"><div class="sl">Total Risked</div><div class="sv" id="bets-all-risk">$0</div></div>
     <div class="stat-strip-item"><div class="sl">Avg EV%</div><div class="sv" id="bets-avg-ev">--</div></div>
     <div class="stat-strip-item"><div class="sl">Avg CLV</div><div class="sv" id="bets-avg-clv">--</div></div>
+    <div class="stat-strip-item"><div class="sl">Record</div><div class="sv" id="bets-record">--</div></div>
+    <div class="stat-strip-item"><div class="sl">P/L</div><div class="sv" id="bets-total-pnl">--</div></div>
     <div class="stat-strip-item"><div class="sl">Positions</div><div class="sv" id="bets-positions-count">0</div></div>
   </div>
 
@@ -836,7 +838,7 @@ input[type=number] { -moz-appearance: textfield; }
     <div class="sw">
       <table class="dt" id="bets-today-table">
         <thead><tr>
-          <th>Time</th><th>Game</th><th>Bet</th><th>Price</th><th>Stake</th><th>To Win</th><th>EV%</th><th>CLV</th><th>Status</th>
+          <th>Time</th><th>Game</th><th>Bet</th><th>Price</th><th>Stake</th><th>To Win</th><th>EV%</th><th>CLV</th><th>P/L</th><th>Status</th>
         </tr></thead>
         <tbody id="bets-today-body"></tbody>
       </table>
@@ -3123,6 +3125,7 @@ function updateStrip() {
 let _allBets = [];
 let _novigPositions = [];
 let _novigOrders = [];
+let _novigHistory = [];
 
 async function loadBetsTab() {
   try {
@@ -3142,8 +3145,26 @@ async function refreshNovigAccount() {
       const data = await r.json();
       _novigPositions = (data.positions && data.positions.positions) || [];
       _novigOrders = (data.orders && data.orders.open) || [];
+      _novigHistory = data.history || [];
       const posCount = _novigPositions.length + _novigOrders.length;
       document.getElementById('bets-positions-count').textContent = posCount;
+      // Compute W/L record and P/L from settled history
+      if (Array.isArray(_novigHistory) && _novigHistory.length) {
+        let wins = 0, losses = 0, pushes = 0, totalPnl = 0;
+        for (const h of _novigHistory) {
+          const cost = parseFloat(h.cost || 0);
+          const payout = parseFloat(h.payout || h.settlement || 0);
+          const pl = payout - Math.abs(cost);
+          totalPnl += pl;
+          if (pl > 0) wins++;
+          else if (pl < 0) losses++;
+          else pushes++;
+        }
+        document.getElementById('bets-record').textContent = `${wins}-${losses}${pushes ? '-' + pushes : ''}`;
+        document.getElementById('bets-record').style.color = wins > losses ? 'var(--green)' : wins < losses ? 'var(--red)' : '';
+        document.getElementById('bets-total-pnl').textContent = (totalPnl >= 0 ? '+' : '') + '$' + totalPnl.toFixed(2);
+        document.getElementById('bets-total-pnl').style.color = totalPnl >= 0 ? 'var(--green)' : 'var(--red)';
+      }
       if (data.balance != null) {
         const bal = parseFloat(data.balance);
         document.getElementById('bets-balance').textContent = '$' + bal.toFixed(2);
@@ -3177,7 +3198,7 @@ function renderBetsTab() {
   // Today's bets table
   const todayBody = document.getElementById('bets-today-body');
   if (!todayBets.length) {
-    todayBody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--muted);font-family:var(--sans)">No bets today</td></tr>';
+    todayBody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--muted);font-family:var(--sans)">No bets today</td></tr>';
   } else {
     todayBody.innerHTML = todayBets.map(b => {
       const time = b.placedAtMs ? new Date(b.placedAtMs).toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York'}) : '--';
@@ -3214,10 +3235,23 @@ function renderBetsTab() {
           clv = `<span style="color:${clvColor};font-weight:600">${clvPct > 0 ? '+' : ''}${clvPct.toFixed(1)}%${star}</span>`;
         }
       }
-      // Check Novig position status for this bet
+      // Check Novig position status — history (settled) > active > placed
+      const hist = _novigHistory && Array.isArray(_novigHistory) ? _novigHistory.find(h => h.outcomeId === b.outcomeId) : null;
       const pos = _novigPositions.find(p => p.outcomeId === b.outcomeId);
-      const status = pos ? 'filled' : 'placed';
-      const statusColor = pos ? 'var(--green)' : 'var(--yellow)';
+      let status, statusColor, pnl = null;
+      if (hist) {
+        // Settled — check payout vs cost
+        const cost = parseFloat(hist.cost || 0);
+        const payout = parseFloat(hist.payout || hist.settlement || 0);
+        pnl = payout - Math.abs(cost);
+        if (pnl > 0) { status = 'WON'; statusColor = 'var(--green)'; }
+        else if (pnl < 0) { status = 'LOST'; statusColor = 'var(--red)'; }
+        else { status = 'PUSH'; statusColor = 'var(--muted)'; }
+      } else if (pos) {
+        status = 'ACTIVE'; statusColor = 'var(--green)';
+      } else {
+        status = 'PLACED'; statusColor = 'var(--yellow)';
+      }
       return `<tr style="font-size:14px;height:44px;">
         <td style="font-family:var(--sans);white-space:nowrap;color:var(--muted)">${time}</td>
         <td style="font-family:var(--sans);white-space:nowrap;">${game}</td>
@@ -3227,6 +3261,7 @@ function renderBetsTab() {
         <td style="font-family:var(--mono);font-weight:700;color:var(--green)">${toWin}</td>
         <td style="font-family:var(--mono);font-weight:600;color:${parseFloat(b.ev) > 0 ? 'var(--green)' : 'var(--muted)'}">${ev}</td>
         <td style="font-family:var(--mono);font-weight:600">${clv}</td>
+        <td style="font-family:var(--mono);font-weight:700;color:${pnl != null ? (pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--muted)') : 'var(--muted)'}">${pnl != null ? (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2) : '--'}</td>
         <td style="text-transform:uppercase;font-size:11px;font-weight:700;color:${statusColor}">${status}</td>
       </tr>`;
     }).join('');

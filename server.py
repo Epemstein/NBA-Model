@@ -415,6 +415,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             nc = NovigClient(novig_key, novig_pem)
             positions = nc.get_positions()
             orders = nc.get_orders()
+            # Settled position history
+            try:
+                hist_r = nc._request('GET', '/v3/history/positions')
+                history = hist_r.json() if hist_r.ok else []
+            except:
+                history = []
 
             # Get balance via management key
             balance = None
@@ -430,7 +436,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 except:
                     pass
 
-            self._json_response(200, {'positions': positions, 'orders': orders, 'balance': balance})
+            self._json_response(200, {'positions': positions, 'orders': orders, 'balance': balance, 'history': history})
         except Exception as e:
             print(f'Novig account failed: {e}')
             import traceback; traceback.print_exc()
