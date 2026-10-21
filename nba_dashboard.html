@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v145</title>
+<title>NBA ALGO v146</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -836,12 +836,15 @@ input[type=number] { -moz-appearance: textfield; }
   <div class="card">
     <div class="ct" style="display:flex;justify-content:space-between;align-items:center;">
       Today's Bets
-      <button class="btn bp" style="font-size:11px;padding:4px 12px;" onclick="refreshNovigAccount()">Refresh</button>
+      <span style="display:flex;gap:6px;">
+        <button class="btn bp" style="font-size:11px;padding:4px 12px;" onclick="refreshMTM()" id="mtm-btn">MTM</button>
+        <button class="btn bp" style="font-size:11px;padding:4px 12px;" onclick="refreshNovigAccount()">Refresh</button>
+      </span>
     </div>
     <div class="sw">
       <table class="dt" id="bets-today-table">
         <thead><tr>
-          <th>Time</th><th>Game</th><th>Bet</th><th>Price</th><th>Stake</th><th>To Win</th><th>EV%</th><th>CLV</th><th>P/L</th><th>Status</th>
+          <th>Time</th><th>Game</th><th>Bet</th><th>Price</th><th>Stake</th><th>To Win</th><th>EV%</th><th>CLV</th><th>MTM</th><th>P/L</th><th>Status</th>
         </tr></thead>
         <tbody id="bets-today-body"></tbody>
       </table>
@@ -3130,6 +3133,7 @@ let _allBets = [];
 let _novigPositions = [];
 let _novigOrders = [];
 let _novigHistory = [];
+let _mtmData = {}; // {outcomeId: unrealizedPnL}
 
 async function loadBetsTab() {
   try {
@@ -3206,7 +3210,7 @@ function renderBetsTab() {
   // Today's bets table
   const todayBody = document.getElementById('bets-today-body');
   if (!todayBets.length) {
-    todayBody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--muted);font-family:var(--sans)">No bets today</td></tr>';
+    todayBody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--muted);font-family:var(--sans)">No bets today</td></tr>';
   } else {
     todayBody.innerHTML = todayBets.map(b => {
       const _betGame = STATE.games.find(g => (g.away + '@' + g.home) === b.gameKey);
@@ -3272,6 +3276,11 @@ function renderBetsTab() {
         <td style="font-family:var(--mono);font-weight:700;color:var(--green)">${toWin}</td>
         <td style="font-family:var(--mono);font-weight:600;color:${parseFloat(b.ev) > 0 ? 'var(--green)' : 'var(--muted)'}">${ev}</td>
         <td style="font-family:var(--mono);font-weight:600">${clv}</td>
+        <td style="font-family:var(--mono);font-weight:700;" id="mtm-${b.outcomeId || ''}">${(() => {
+          const mtm = _mtmData[b.outcomeId];
+          if (mtm == null) return '<span style="color:var(--muted)">--</span>';
+          return `<span style="color:${mtm >= 0 ? 'var(--green)' : 'var(--red)'}">${mtm >= 0 ? '+' : ''}$${mtm.toFixed(2)}</span>`;
+        })()}</td>
         <td style="font-family:var(--mono);font-weight:700;color:${pnl != null ? (pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--muted)') : 'var(--muted)'}">${pnl != null ? (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2) : '--'}</td>
         <td style="text-transform:uppercase;font-size:11px;font-weight:700;color:${statusColor}">${status}</td>
       </tr>`;
@@ -3365,6 +3374,53 @@ function renderBetsTab() {
         </div>`;
     }).join('');
   }
+}
+
+async function refreshMTM() {
+  const btn = document.getElementById('mtm-btn');
+  btn.disabled = true;
+  btn.textContent = 'Loading...';
+
+  // Only MTM for active positions (not settled)
+  const activePositions = _novigPositions.filter(p => {
+    const settled = Array.isArray(_novigHistory) && _novigHistory.find(h => h.outcomeId === p.outcomeId);
+    return !settled;
+  });
+
+  if (!activePositions.length) {
+    btn.textContent = 'MTM';
+    btn.disabled = false;
+    _showBQToast('No active positions to mark');
+    return;
+  }
+
+  try {
+    const r = await fetch(RENDER_URL + '/novig-mtm', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ positions: activePositions }),
+    });
+    const data = await r.json();
+    if (data.mtm) {
+      _mtmData = data.mtm;
+      // Update MTM cells inline
+      let totalMTM = 0;
+      for (const [oid, val] of Object.entries(_mtmData)) {
+        totalMTM += val;
+        const el = document.getElementById('mtm-' + oid);
+        if (el) {
+          el.innerHTML = `<span style="color:${val >= 0 ? 'var(--green)' : 'var(--red)'}">${val >= 0 ? '+' : ''}$${val.toFixed(2)}</span>`;
+        }
+      }
+      _showBQToast('MTM: ' + (totalMTM >= 0 ? '+' : '') + '$' + totalMTM.toFixed(2));
+    }
+  } catch(e) {
+    console.error('MTM failed:', e);
+    _showBQToast('MTM failed: ' + e.message);
+  }
+
+  btn.textContent = 'MTM';
+  btn.disabled = false;
 }
 
 async function voidBet(docId) {

@@ -48,6 +48,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
+        if self.path == '/novig-mtm':
+            self._novig_mtm()
+            return
         if self.path == '/place-bet':
             self._place_bet()
             return
@@ -536,6 +539,64 @@ class Handler(http.server.BaseHTTPRequestHandler):
             print(f'Check roster failed: {e}')
             import traceback; traceback.print_exc()
             self._json_response(502, {'error': str(e)})
+
+    def _novig_mtm(self):
+        """Fetch current bid prices for given positions to calculate mark-to-market."""
+        try:
+            from scripts.novig import NovigClient
+        except ImportError:
+            import sys
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            from scripts.novig import NovigClient
+
+        novig_key = os.environ.get('NOVIG_KEY_ID', '')
+        novig_pem = os.environ.get('NOVIG_PRIVATE_KEY', '')
+        if not novig_key or not novig_pem:
+            self._json_response(400, {'error': 'NOVIG keys not configured'})
+            return
+
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            body = json.loads(self.rfile.read(length)) if length else {}
+            positions = body.get('positions', [])  # [{outcomeId, marketId, qty, cost}]
+
+            if not positions:
+                self._json_response(200, {'mtm': {}})
+                return
+
+            nc = NovigClient(novig_key, novig_pem)
+            mtm = {}
+
+            # Group by marketId to minimize API calls
+            by_market = {}
+            for p in positions:
+                mid = p.get('marketId', '')
+                if mid not in by_market:
+                    by_market[mid] = []
+                by_market[mid].append(p)
+
+            for mid, pos_list in by_market.items():
+                try:
+                    book = nc.get_book(mid)
+                    if not book or not book.get('orders'):
+                        continue
+                    for p in pos_list:
+                        oid = p['outcomeId']
+                        orders = book['orders'].get(oid, [])
+                        if orders:
+                            best_bid = max(float(o['price']) for o in orders)
+                            qty = p.get('qty', 0)
+                            cost = float(p.get('cost', 0))
+                            value = best_bid * qty / 100  # current value at best bid
+                            mtm[oid] = round(value - cost, 2)
+                except Exception as e:
+                    print(f'MTM book fetch failed for {mid}: {e}')
+
+            self._json_response(200, {'mtm': mtm})
+        except Exception as e:
+            print(f'MTM failed: {e}')
+            import traceback; traceback.print_exc()
+            self._json_response(500, {'error': str(e)})
 
     def _fund_subaccount(self):
         """Transfer funds from main wallet to trading subaccount."""
