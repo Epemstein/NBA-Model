@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v135</title>
+<title>NBA ALGO v136</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -3131,7 +3131,7 @@ async function loadBetsTab() {
   try {
     // Load ALL bets from Firestore (not just today)
     const snap = await fbDb.collection('nba_bets').orderBy('placedAtMs', 'desc').get();
-    _allBets = snap.docs.map(d => d.data());
+    _allBets = snap.docs.map(d => ({ ...d.data(), _docId: d.id }));
   } catch(e) { console.warn('Failed to load bets:', e); _allBets = []; }
 
   renderBetsTab();
@@ -3177,18 +3177,19 @@ async function refreshNovigAccount() {
 
 function renderBetsTab() {
   const today = todayET();
-  const todayBets = _allBets.filter(b => b.date === today);
+  const todayBets = _allBets.filter(b => b.date === today && !b.voided);
   const pastBets = _allBets.filter(b => b.date !== today);
 
-  // Stat strip — all-time stats
-  document.getElementById('bets-all-count').textContent = _allBets.length;
-  const totalRisked = _allBets.reduce((s, b) => s + (b.stake || 0), 0);
+  // Stat strip — all-time stats (exclude voided)
+  const activeBetsAll = _allBets.filter(b => !b.voided);
+  document.getElementById('bets-all-count').textContent = activeBetsAll.length;
+  const totalRisked = activeBetsAll.reduce((s, b) => s + (b.stake || 0), 0);
   document.getElementById('bets-all-risk').textContent = '$' + totalRisked.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0});
-  const evBets = _allBets.filter(b => b.ev != null && b.ev > 0);
+  const evBets = activeBetsAll.filter(b => b.ev != null && b.ev > 0);
   const avgEV = evBets.length ? (evBets.reduce((s, b) => s + b.ev, 0) / evBets.length) : 0;
   document.getElementById('bets-avg-ev').textContent = avgEV > 0 ? '+' + avgEV.toFixed(1) + '%' : '--';
   document.getElementById('bets-avg-ev').style.color = avgEV > 0 ? 'var(--green)' : '';
-  const clvBets = _allBets.filter(b => b.primaryPriceAtBet != null && b.closingPrimaryPrice != null);
+  const clvBets = activeBetsAll.filter(b => b.primaryPriceAtBet != null && b.closingPrimaryPrice != null);
   const avgCLV = clvBets.length ? (clvBets.reduce((s, b) => s + (b.closingPrimaryPrice - b.primaryPriceAtBet) * 100, 0) / clvBets.length) : 0;
   document.getElementById('bets-avg-clv').textContent = clvBets.length ? (avgCLV >= 0 ? '+' : '') + avgCLV.toFixed(1) + '%' : '--';
   document.getElementById('bets-avg-clv').style.color = avgCLV > 0 ? 'var(--green)' : avgCLV < 0 ? 'var(--red)' : '';
@@ -3265,10 +3266,11 @@ function renderBetsTab() {
     }).join('');
   }
 
-  // Full bet history grouped by date
+  // Full bet history grouped by date — filter out voided bets
   const histContainer = document.getElementById('bets-history-container');
+  const activeBets = _allBets.filter(b => !b.voided);
   const byDate = {};
-  for (const b of _allBets) {
+  for (const b of activeBets) {
     const d = b.date || 'Unknown';
     if (!byDate[d]) byDate[d] = [];
     byDate[d].push(b);
@@ -3281,8 +3283,14 @@ function renderBetsTab() {
       const bets = byDate[d];
       const dayRisk = bets.reduce((s, b) => s + (b.stake || 0), 0);
       const dayWin = bets.reduce((s, b) => s + (b.stake && b.price ? _calcToWin(b.stake, probToML(b.price)) : 0), 0);
-      const dayEVBets = bets.filter(b => b.ev != null && b.ev > 0);
-      const dayAvgEV = dayEVBets.length ? (dayEVBets.reduce((s, b) => s + b.ev, 0) / dayEVBets.length).toFixed(1) : '--';
+      // Day P/L from Novig history
+      let dayPnl = 0, daySettled = 0;
+      for (const b of bets) {
+        const hist = Array.isArray(_novigHistory) ? _novigHistory.find(h => h.outcomeId === b.outcomeId) : null;
+        if (hist) { dayPnl += parseFloat(hist.pnl || 0); daySettled++; }
+      }
+      const dayPnlStr = daySettled ? (dayPnl >= 0 ? '+' : '') + '$' + dayPnl.toFixed(2) : '';
+      const dayPnlColor = dayPnl >= 0 ? 'var(--green)' : 'var(--red)';
       return `
         <div style="margin-bottom:16px;">
           <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:2px solid var(--border);">
@@ -3290,8 +3298,7 @@ function renderBetsTab() {
             <div style="display:flex;gap:16px;font-size:12px;color:var(--muted);">
               <span>${bets.length} bet${bets.length > 1 ? 's' : ''}</span>
               <span>Risk: <strong style="color:var(--text);">$${dayRisk.toLocaleString()}</strong></span>
-              <span>To Win: <strong style="color:var(--green);">$${dayWin.toFixed(0)}</strong></span>
-              <span>Avg EV: <strong style="color:${dayAvgEV !== '--' ? 'var(--green)' : 'var(--muted)'};">${dayAvgEV !== '--' ? '+' + dayAvgEV + '%' : '--'}</strong></span>
+              ${dayPnlStr ? `<span>P/L: <strong style="color:${dayPnlColor};">${dayPnlStr}</strong></span>` : ''}
             </div>
           </div>
           <table style="width:100%;border-collapse:collapse;font-size:12px;">
@@ -3300,23 +3307,48 @@ function renderBetsTab() {
               const betTeam = b.side === 'away' ? aw : (b.side === 'home' ? hm : '');
               const logo = betTeam ? `<img src="${teamLogo(betTeam)}" style="width:16px;height:16px;object-fit:contain;vertical-align:middle;margin-right:4px;" onerror="this.style.display='none'" />` : '';
               const ml = b.price != null ? fmtML(probToML(b.price)) : '--';
-              const win = (b.stake && b.price) ? '$' + _calcToWin(b.stake, probToML(b.price)).toFixed(0) : '--';
               const ev = b.ev != null ? '+' + b.ev.toFixed(1) + '%' : '--';
               const time = b.placedAtMs ? new Date(b.placedAtMs).toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit',timeZone:'America/New_York'}) : '';
+              // P/L and status from Novig history
+              const hist = Array.isArray(_novigHistory) ? _novigHistory.find(h => h.outcomeId === b.outcomeId) : null;
+              let pnlStr = '--', pnlColor = 'var(--muted)', statusStr = '', statusColor = '';
+              if (hist) {
+                const pl = parseFloat(hist.pnl || 0);
+                pnlStr = (pl >= 0 ? '+' : '') + '$' + pl.toFixed(2);
+                pnlColor = pl > 0 ? 'var(--green)' : pl < 0 ? 'var(--red)' : 'var(--muted)';
+                const r = (hist.result || '').toUpperCase();
+                statusStr = r === 'WIN' ? 'W' : r === 'LOSS' ? 'L' : r;
+                statusColor = r === 'WIN' ? 'var(--green)' : r === 'LOSS' ? 'var(--red)' : 'var(--muted)';
+              }
+              const voidBtn = b._docId ? `<button onclick="voidBet('${b._docId}')" style="font-size:9px;color:var(--muted);background:none;border:1px solid #ddd;border-radius:3px;padding:1px 5px;cursor:pointer;" title="Void this bet">void</button>` : '';
               return `<tr style="border-bottom:1px solid #f0f0f0;height:36px;">
-                <td style="color:var(--muted);font-size:11px;width:70px;">${time}</td>
+                <td style="color:var(--muted);font-size:11px;width:60px;">${time}</td>
                 <td style="white-space:nowrap;font-size:11px;">${aw} @ ${hm}</td>
                 <td style="font-weight:700;font-size:13px;white-space:nowrap;">${logo}${b.description || '--'}</td>
                 <td style="font-family:var(--mono);font-weight:600;">${ml}</td>
                 <td style="font-family:var(--mono);">$${(b.stake||0).toLocaleString()}</td>
-                <td style="font-family:var(--mono);color:var(--green);">${win}</td>
                 <td style="font-family:var(--mono);color:var(--green);">${ev}</td>
+                <td style="font-family:var(--mono);font-weight:700;color:${pnlColor};">${pnlStr}</td>
+                <td style="font-weight:700;font-size:11px;color:${statusColor};">${statusStr}</td>
+                <td style="width:40px;">${voidBtn}</td>
               </tr>`;
             }).join('')}
           </table>
         </div>`;
     }).join('');
   }
+}
+
+async function voidBet(docId) {
+  if (!confirm('Void this bet? It will be excluded from all stats.')) return;
+  try {
+    await fbDb.collection('nba_bets').doc(docId).update({ voided: true });
+    // Update local state
+    const bet = _allBets.find(b => b._docId === docId);
+    if (bet) bet.voided = true;
+    renderBetsTab();
+    _showBQToast('Bet voided');
+  } catch(e) { alert('Failed: ' + e.message); }
 }
 
 async function fundSubaccount() {
