@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v147</title>
+<title>NBA ALGO v149</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -824,12 +824,9 @@ input[type=number] { -moz-appearance: textfield; }
 
   <div class="stat-strip">
     <div class="stat-strip-item"><div class="sl">Balance</div><div class="sv a" id="bets-balance">--</div></div>
-    <div class="stat-strip-item"><div class="sl">All-Time Bets</div><div class="sv" id="bets-all-count">0</div></div>
-    <div class="stat-strip-item"><div class="sl">Total Risked</div><div class="sv" id="bets-all-risk">$0</div></div>
-    <div class="stat-strip-item"><div class="sl">Avg EV%</div><div class="sv" id="bets-avg-ev">--</div></div>
-    <div class="stat-strip-item"><div class="sl">Avg CLV</div><div class="sv" id="bets-avg-clv">--</div></div>
-    <div class="stat-strip-item"><div class="sl">Record</div><div class="sv" id="bets-record">--</div></div>
-    <div class="stat-strip-item"><div class="sl">P/L</div><div class="sv" id="bets-total-pnl">--</div></div>
+    <div class="stat-strip-item"><div class="sl">Today's Bets</div><div class="sv" id="bets-today-count">0</div></div>
+    <div class="stat-strip-item"><div class="sl">Today's Risk</div><div class="sv" id="bets-today-risk">$0</div></div>
+    <div class="stat-strip-item"><div class="sl">MTM</div><div class="sv" id="bets-mtm-total">--</div></div>
     <div class="stat-strip-item"><div class="sl">Positions</div><div class="sv" id="bets-positions-count">0</div></div>
   </div>
 
@@ -848,22 +845,6 @@ input[type=number] { -moz-appearance: textfield; }
         </tr></thead>
         <tbody id="bets-today-body"></tbody>
       </table>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="ct">All Bet History</div>
-    <div class="sw" style="max-height:600px;">
-      <div id="bets-history-container"></div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="ct">Account</div>
-    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-      <div style="font-size:13px;color:var(--text2);">Balance: <strong id="bets-acct-balance">--</strong></div>
-      <input id="bets-fund-amount" type="number" placeholder="Amount" style="width:100px;">
-      <button class="btn bp" style="font-size:11px;padding:4px 12px;" onclick="fundSubaccount()">Fund Subaccount</button>
     </div>
   </div>
 
@@ -1028,26 +1009,32 @@ input[type=number] { -moz-appearance: textfield; }
 
 <!-- ═══════════ HISTORY PANEL ═══════════ -->
 <div class="panel" id="panel-history">
+
+  <div class="stat-strip">
+    <div class="stat-strip-item"><div class="sl">All-Time Bets</div><div class="sv" id="hist-all-count">0</div></div>
+    <div class="stat-strip-item"><div class="sl">Total Risked</div><div class="sv" id="hist-all-risk">$0</div></div>
+    <div class="stat-strip-item"><div class="sl">Avg EV%</div><div class="sv" id="hist-avg-ev">--</div></div>
+    <div class="stat-strip-item"><div class="sl">Avg CLV</div><div class="sv" id="hist-avg-clv">--</div></div>
+    <div class="stat-strip-item"><div class="sl">Record</div><div class="sv" id="hist-record">--</div></div>
+    <div class="stat-strip-item"><div class="sl">P/L</div><div class="sv" id="hist-total-pnl">--</div></div>
+  </div>
+
   <div class="card">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-      <div class="ct" style="margin:0;padding:0;border:none;">Change Log</div>
-      <div style="display:flex;gap:2px;">
-        <button class="btn bg hist-filter active" data-filter="all" onclick="filterHistory('all')" style="font-size:10px;padding:4px 10px;">All</button>
-        <button class="btn bg hist-filter" data-filter="baseline" onclick="filterHistory('baseline')" style="font-size:10px;padding:4px 10px;">Baseline</button>
-        <button class="btn bg hist-filter" data-filter="game" onclick="filterHistory('game')" style="font-size:10px;padding:4px 10px;">Game Day</button>
-      </div>
-    </div>
-    <div class="sw" style="max-height:700px;">
-      <table class="dt" id="history-log-table" style="font-size:14px;">
-        <thead><tr>
-          <th style="width:150px;">Time</th><th style="width:80px;">User</th><th style="width:80px;">Team</th><th>Action</th>
-        </tr></thead>
-        <tbody id="history-log-body">
-          <tr><td colspan="4" style="text-align:center;color:var(--muted);font-family:var(--sans);padding:20px;">Loading...</td></tr>
-        </tbody>
-      </table>
+    <div class="ct">All Bet History</div>
+    <div class="sw" style="max-height:600px;">
+      <div id="bets-history-container"></div>
     </div>
   </div>
+
+  <div class="card">
+    <div class="ct">Account</div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <div style="font-size:13px;color:var(--text2);">Balance: <strong id="bets-acct-balance">--</strong></div>
+      <input id="bets-fund-amount" type="number" placeholder="Amount" style="width:100px;">
+      <button class="btn bp" style="font-size:11px;padding:4px 12px;" onclick="fundSubaccount()">Fund Subaccount</button>
+    </div>
+  </div>
+
 </div>
 
 <!-- ═══════════ SETTINGS PANEL ═══════════ -->
@@ -1109,6 +1096,27 @@ input[type=number] { -moz-appearance: textfield; }
       <strong>Team Pace:</strong> NBA API — season averages<br>
       <strong>Odds:</strong> The Odds API — BetOnline spreads & totals<br>
       <strong>Schedule:</strong> NBA Live Data API<br>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <div class="ct" style="margin:0;padding:0;border:none;">Change Log</div>
+      <div style="display:flex;gap:2px;">
+        <button class="btn bg hist-filter active" data-filter="all" onclick="filterHistory('all')" style="font-size:10px;padding:4px 10px;">All</button>
+        <button class="btn bg hist-filter" data-filter="baseline" onclick="filterHistory('baseline')" style="font-size:10px;padding:4px 10px;">Baseline</button>
+        <button class="btn bg hist-filter" data-filter="game" onclick="filterHistory('game')" style="font-size:10px;padding:4px 10px;">Game Day</button>
+      </div>
+    </div>
+    <div class="sw" style="max-height:700px;">
+      <table class="dt" id="history-log-table" style="font-size:14px;">
+        <thead><tr>
+          <th style="width:150px;">Time</th><th style="width:80px;">User</th><th style="width:80px;">Team</th><th>Action</th>
+        </tr></thead>
+        <tbody id="history-log-body">
+          <tr><td colspan="4" style="text-align:center;color:var(--muted);font-family:var(--sans);padding:20px;">Loading...</td></tr>
+        </tbody>
+      </table>
     </div>
   </div>
 
@@ -1294,6 +1302,7 @@ document.querySelectorAll('#nav button').forEach(btn => {
     if (btn.dataset.tab === 'players' && !_allPlayers.length) loadAllPlayers();
     if (btn.dataset.tab === 'standings' && !_standingsData.length) loadStandings();
     if (btn.dataset.tab === 'bets') loadBetsTab();
+    if (btn.dataset.tab === 'history') loadBetsTab();
   });
 });
 
@@ -3143,6 +3152,7 @@ async function loadBetsTab() {
   } catch(e) { console.warn('Failed to load bets:', e); _allBets = []; }
 
   renderBetsTab();
+  renderHistoryTab();
   refreshNovigAccount();
 }
 
@@ -3156,7 +3166,7 @@ async function refreshNovigAccount() {
       _novigHistory = (data.history && data.history.items) || data.history || [];
       const posCount = _novigPositions.length + _novigOrders.length;
       document.getElementById('bets-positions-count').textContent = posCount;
-      // Compute W/L record and P/L from settled history
+      // Compute W/L record and P/L from settled history — write to History panel
       if (Array.isArray(_novigHistory) && _novigHistory.length) {
         let wins = 0, losses = 0, pushes = 0, totalPnl = 0;
         for (const h of _novigHistory) {
@@ -3167,10 +3177,10 @@ async function refreshNovigAccount() {
           else if (result === 'LOSS') losses++;
           else pushes++;
         }
-        document.getElementById('bets-record').textContent = `${wins}-${losses}${pushes ? '-' + pushes : ''}`;
-        document.getElementById('bets-record').style.color = wins > losses ? 'var(--green)' : wins < losses ? 'var(--red)' : '';
-        document.getElementById('bets-total-pnl').textContent = (totalPnl >= 0 ? '+' : '') + '$' + totalPnl.toFixed(2);
-        document.getElementById('bets-total-pnl').style.color = totalPnl >= 0 ? 'var(--green)' : 'var(--red)';
+        document.getElementById('hist-record').textContent = `${wins}-${losses}${pushes ? '-' + pushes : ''}`;
+        document.getElementById('hist-record').style.color = wins > losses ? 'var(--green)' : wins < losses ? 'var(--red)' : '';
+        document.getElementById('hist-total-pnl').textContent = (totalPnl >= 0 ? '+' : '') + '$' + totalPnl.toFixed(2);
+        document.getElementById('hist-total-pnl').style.color = totalPnl >= 0 ? 'var(--green)' : 'var(--red)';
       }
       if (data.balance != null) {
         const bal = parseFloat(data.balance);
@@ -3178,7 +3188,8 @@ async function refreshNovigAccount() {
         const acctBal = document.getElementById('bets-acct-balance');
         if (acctBal) acctBal.textContent = '$' + bal.toFixed(2);
       }
-      renderBetsTab(); // re-render with updated position status
+      renderBetsTab();
+      renderHistoryTab();
     }
   } catch(e) { console.warn('Failed to refresh Novig account:', e); }
 }
@@ -3186,26 +3197,14 @@ async function refreshNovigAccount() {
 function renderBetsTab() {
   const today = todayET();
   const todayBets = _allBets.filter(b => b.date === today && !b.voided);
-  const pastBets = _allBets.filter(b => b.date !== today);
 
-  // Stat strip — all-time stats (exclude voided)
-  const activeBetsAll = _allBets.filter(b => !b.voided);
-  document.getElementById('bets-all-count').textContent = activeBetsAll.length;
-  // Use actual position costs when available
-  const totalRisked = activeBetsAll.reduce((s, b) => {
+  // Stat strip — today's stats
+  document.getElementById('bets-today-count').textContent = todayBets.length;
+  const todayRisk = todayBets.reduce((s, b) => {
     const pos = _novigPositions.find(p => p.outcomeId === b.outcomeId);
     return s + (pos ? parseFloat(pos.cost) : (b.stake || 0));
   }, 0);
-  document.getElementById('bets-all-risk').textContent = '$' + totalRisked.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0});
-  const evBets = activeBetsAll.filter(b => b.ev != null && b.ev > 0);
-  const avgEV = evBets.length ? (evBets.reduce((s, b) => s + b.ev, 0) / evBets.length) : 0;
-  document.getElementById('bets-avg-ev').textContent = avgEV > 0 ? '+' + avgEV.toFixed(1) + '%' : '--';
-  document.getElementById('bets-avg-ev').style.color = avgEV > 0 ? 'var(--green)' : '';
-  const clvBets = activeBetsAll.filter(b => b.primaryPriceAtBet != null && b.closingPrimaryPrice != null);
-  const avgCLV = clvBets.length ? (clvBets.reduce((s, b) => s + (b.closingPrimaryPrice - b.primaryPriceAtBet) * 100, 0) / clvBets.length) : 0;
-  document.getElementById('bets-avg-clv').textContent = clvBets.length ? (avgCLV >= 0 ? '+' : '') + avgCLV.toFixed(1) + '%' : '--';
-  document.getElementById('bets-avg-clv').style.color = avgCLV > 0 ? 'var(--green)' : avgCLV < 0 ? 'var(--red)' : '';
-  // Balance is set by refreshNovigAccount() from the API
+  document.getElementById('bets-today-risk').textContent = '$' + todayRisk.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0});
 
   // Today's bets table
   const todayBody = document.getElementById('bets-today-body');
@@ -3287,7 +3286,27 @@ function renderBetsTab() {
     }).join('');
   }
 
-  // Full bet history grouped by date — filter out voided bets
+}
+
+function renderHistoryTab() {
+  // Stat strip — all-time stats (exclude voided)
+  const activeBetsAll = _allBets.filter(b => !b.voided);
+  document.getElementById('hist-all-count').textContent = activeBetsAll.length;
+  const totalRisked = activeBetsAll.reduce((s, b) => {
+    const pos = _novigPositions.find(p => p.outcomeId === b.outcomeId);
+    return s + (pos ? parseFloat(pos.cost) : (b.stake || 0));
+  }, 0);
+  document.getElementById('hist-all-risk').textContent = '$' + totalRisked.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0});
+  const evBets = activeBetsAll.filter(b => b.ev != null && b.ev > 0);
+  const avgEV = evBets.length ? (evBets.reduce((s, b) => s + b.ev, 0) / evBets.length) : 0;
+  document.getElementById('hist-avg-ev').textContent = avgEV > 0 ? '+' + avgEV.toFixed(1) + '%' : '--';
+  document.getElementById('hist-avg-ev').style.color = avgEV > 0 ? 'var(--green)' : '';
+  const clvBets = activeBetsAll.filter(b => b.primaryPriceAtBet != null && b.closingPrimaryPrice != null);
+  const avgCLV = clvBets.length ? (clvBets.reduce((s, b) => s + (b.closingPrimaryPrice - b.primaryPriceAtBet) * 100, 0) / clvBets.length) : 0;
+  document.getElementById('hist-avg-clv').textContent = clvBets.length ? (avgCLV >= 0 ? '+' : '') + avgCLV.toFixed(1) + '%' : '--';
+  document.getElementById('hist-avg-clv').style.color = avgCLV > 0 ? 'var(--green)' : avgCLV < 0 ? 'var(--red)' : '';
+
+  // Full bet history grouped by date
   const histContainer = document.getElementById('bets-history-container');
   const activeBets = _allBets.filter(b => !b.voided);
   const byDate = {};
@@ -3307,7 +3326,6 @@ function renderBetsTab() {
         return s + (pos ? parseFloat(pos.cost) : (b.stake || 0));
       }, 0);
       const dayWin = bets.reduce((s, b) => s + (b.stake && b.price ? _calcToWin(b.stake, probToML(b.price)) : 0), 0);
-      // Day P/L from Novig history
       let dayPnl = 0, daySettled = 0;
       for (const b of bets) {
         const hist = Array.isArray(_novigHistory) ? _novigHistory.find(h => h.outcomeId === b.outcomeId) : null;
@@ -3408,6 +3426,11 @@ async function refreshMTM() {
           el.innerHTML = `<span style="color:${val >= 0 ? 'var(--green)' : 'var(--red)'}">${val >= 0 ? '+' : ''}$${val.toFixed(2)}</span>`;
         }
       }
+      const mtmEl = document.getElementById('bets-mtm-total');
+      if (mtmEl) {
+        mtmEl.textContent = (totalMTM >= 0 ? '+' : '') + '$' + totalMTM.toFixed(2);
+        mtmEl.style.color = totalMTM >= 0 ? 'var(--green)' : 'var(--red)';
+      }
       _showBQToast('MTM: ' + (totalMTM >= 0 ? '+' : '') + '$' + totalMTM.toFixed(2));
     }
   } catch(e) {
@@ -3427,6 +3450,7 @@ async function voidBet(docId) {
     const bet = _allBets.find(b => b._docId === docId);
     if (bet) bet.voided = true;
     renderBetsTab();
+    renderHistoryTab();
     _showBQToast('Bet voided');
   } catch(e) { alert('Failed: ' + e.message); }
 }
