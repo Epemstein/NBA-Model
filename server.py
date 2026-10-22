@@ -697,7 +697,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return
 
             # Calculate qty: dollars = price * qty / 100 → qty = stake * 100 / price
-            qty = round(stake * 100 / price)
+            tif = body.get('tif', 'IOC')
+            qty = body.get('qty') or round(stake * 100 / price)
 
             price_str = str(round(price, 4))
             print(f'=== PLACE BET ===')
@@ -706,10 +707,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             print(f'  outcomeId: {outcome_id}')
             print(f'  price: {price_str} (decimal prob)')
             print(f'  qty: {qty} (from stake=${stake})')
+            print(f'  tif: {tif}')
             print(f'  side: {side}, type: {bet_type}')
 
             nc = NovigClient(novig_key, novig_pem)
-            status_code, response = nc.place_order(outcome_id, price_str, qty)
+            status_code, response = nc.place_order(outcome_id, price_str, qty, tif=tif)
 
             print(f'  Novig HTTP: {status_code}')
             print(f'  Novig body: {response}')
