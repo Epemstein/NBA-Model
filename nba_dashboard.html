@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v152</title>
+<title>NBA ALGO v153</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -885,6 +885,7 @@ input[type=number] { -moz-appearance: textfield; }
             <th style="text-align:right;width:50px;">OFF</th>
             <th style="text-align:right;width:50px;">DEF</th>
             <th style="text-align:right;width:50px;">DPM</th>
+            <th style="text-align:right;width:50px;">PACE</th>
           </tr>
           <tr id="team-sums-row" style="background:#f0f7ff;font-weight:700;font-family:var(--mono);font-size:12px;position:sticky;top:30px;z-index:1;">
             <td style="font-family:var(--sans);font-size:11px;color:var(--muted)">SUM</td>
@@ -894,7 +895,7 @@ input[type=number] { -moz-appearance: textfield; }
             <td style="text-align:center" id="sum-sf">0</td>
             <td style="text-align:center" id="sum-pf">0</td>
             <td style="text-align:center" id="sum-c">0</td>
-            <td></td><td></td><td></td>
+            <td></td><td></td><td></td><td></td>
           </tr>
         </thead>
         <tbody id="team-baseline-body"></tbody>
@@ -3972,6 +3973,7 @@ function renderTeamBaseline() {
         <div class="team-banner-stat"><div class="tbs-label">OFF</div><div class="tbs-val">${rating.off >= 0 ? '+' : ''}${rating.off.toFixed(1)} <span style="font-size:10px;opacity:.7;">#${offRank}</span></div></div>
         <div class="team-banner-stat"><div class="tbs-label">DEF</div><div class="tbs-val">${rating.def >= 0 ? '+' : ''}${rating.def.toFixed(1)} <span style="font-size:10px;opacity:.7;">#${defRank}</span></div></div>
         <div class="team-banner-stat"><div class="tbs-label">Total</div><div class="tbs-val">${rating.total >= 0 ? '+' : ''}${rating.total.toFixed(1)} <span style="font-size:10px;opacity:.7;">#${totalRank}</span></div></div>
+        <div class="team-banner-stat"><div class="tbs-label">PACE</div><div class="tbs-val" id="banner-pace">--</div></div>
         <div class="team-banner-stat"><div class="tbs-label">Total Min</div><div class="tbs-val" id="banner-total">0</div></div>
       </div>
     </div>`;
@@ -4015,6 +4017,7 @@ function renderTeamBaseline() {
       <td style="text-align:right;font-family:var(--mono);font-size:11px;color:${dpmColor(getPlayerOffDef(p).off)};padding:6px 4px;">${fmtDpm(getPlayerOffDef(p).off)}</td>
       <td style="text-align:right;font-family:var(--mono);font-size:11px;color:${dpmColor(getPlayerOffDef(p).def)};padding:6px 4px;">${fmtDpm(getPlayerOffDef(p).def)}</td>
       <td style="text-align:right;font-family:var(--mono);font-size:11px;font-weight:700;color:${dpmColor(pDpm(p))};padding:6px 4px;">${fmtDpm(pDpm(p))}</td>
+      <td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--muted);padding:6px 4px;">${p.pace ? p.pace.toFixed(1) : '--'}</td>
     </tr>`;
   }).join('');
   updateTeamSums();
@@ -4083,6 +4086,16 @@ function updateTeamSums() {
   document.getElementById('sum-pf').style.color = clr(sumPf, 48);
   document.getElementById('sum-c').textContent = sumC.toFixed(0);
   document.getElementById('sum-c').style.color = clr(sumC, 48);
+
+  // Compute weighted pace
+  let paceSum = 0, paceMinSum = 0;
+  for (const p of _teamPlayers) {
+    const mins = p.pg + p.sg + p.sf + p.pf + p.c;
+    if (mins > 0 && p.pace) { paceSum += p.pace * mins; paceMinSum += mins; }
+  }
+  const teamPace = paceMinSum > 0 ? (paceSum / paceMinSum) : 0;
+  const bp = document.getElementById('banner-pace');
+  if (bp) bp.textContent = teamPace > 0 ? teamPace.toFixed(1) : '--';
 
   document.getElementById('team-total-min').textContent = sumTotal.toFixed(0);
   const bt = document.getElementById('banner-total');
@@ -4286,6 +4299,7 @@ async function applyBaselines() {
           name: p.name, dpm: p.dpm||0, o_dpm: p.o_dpm||0, d_dpm: p.d_dpm||0,
           lb_dpm: p.lb_dpm, lb_o_dpm: p.lb_o_dpm, lb_d_dpm: p.lb_d_dpm,
           epm: p.epm, epm_o: p.epm_o, epm_d: p.epm_d,
+          pace: p.pace||0,
           injury: p.injury||"", injury_detail: p.injury_detail||"",
           nba_id: p.nba_id||'', min: _resolveMin(blNorm, goNorm, p.name),
         }));
