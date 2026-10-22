@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v155</title>
+<title>NBA ALGO v156</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -3294,19 +3294,21 @@ function renderBetsTab() {
           clv = `<span style="color:${clvColor};font-weight:600">${clvPct > 0 ? '+' : ''}${clvPct.toFixed(1)}%${star}</span>`;
         }
       }
-      // Check Novig position status — history (settled) > active > placed
+      // Check Novig position status — history (settled) > open order > active position > TBD
       const hist = _novigHistory && Array.isArray(_novigHistory) ? _novigHistory.find(h => h.outcomeId === b.outcomeId) : null;
+      const openOrder = Array.isArray(_novigOrders) ? _novigOrders.find(o => o.outcomeId === b.outcomeId) : null;
       const activePos = _novigPositions.find(p => p.outcomeId === b.outcomeId);
       let status, statusColor, pnl = null;
       if (hist) {
-        // Settled — Novig provides result and pnl directly
         pnl = parseFloat(hist.pnl || 0);
         const result = (hist.result || '').toUpperCase();
         if (result === 'WIN') { status = 'WON'; statusColor = 'var(--green)'; }
         else if (result === 'LOSS') { status = 'LOST'; statusColor = 'var(--red)'; }
         else { status = result || 'SETTLED'; statusColor = 'var(--muted)'; }
+      } else if (openOrder) {
+        status = 'OPEN'; statusColor = '#f5a623';
       } else if (activePos) {
-        status = 'ACTIVE'; statusColor = 'var(--green)';
+        status = 'FILLED'; statusColor = 'var(--green)';
       } else {
         status = 'PLACED'; statusColor = 'var(--yellow)';
       }
@@ -3410,6 +3412,8 @@ function renderHistoryTab() {
               const time = _hGame && _hGame.game_time_et ? _hGame.game_time_et.replace(' ET','') : (b.placedAtMs ? new Date(b.placedAtMs).toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit',timeZone:'America/New_York'}) : '');
               const hist = Array.isArray(_novigHistory) ? _novigHistory.find(h => h.outcomeId === b.outcomeId) : null;
               let pnlStr = '--', pnlColor = 'var(--muted)', statusStr = 'TBD', statusColor = 'var(--muted)';
+              const openOrder = Array.isArray(_novigOrders) ? _novigOrders.find(o => o.outcomeId === b.outcomeId) : null;
+              const activePos = _novigPositions.find(p => p.outcomeId === b.outcomeId);
               if (hist) {
                 const pl = parseFloat(hist.pnl || 0);
                 pnlStr = (pl >= 0 ? '+' : '') + '$' + pl.toFixed(2);
@@ -3417,6 +3421,10 @@ function renderHistoryTab() {
                 const r = (hist.result || '').toUpperCase();
                 statusStr = r === 'WIN' ? 'W' : r === 'LOSS' ? 'L' : r;
                 statusColor = r === 'WIN' ? 'var(--green)' : r === 'LOSS' ? 'var(--red)' : 'var(--muted)';
+              } else if (openOrder) {
+                statusStr = 'OPEN'; statusColor = '#f5a623';
+              } else if (activePos) {
+                statusStr = 'FILLED'; statusColor = 'var(--green)';
               }
               const voidBtn = b._docId ? `<button onclick="voidBet('${b._docId}')" style="font-size:9px;color:var(--muted);background:none;border:1px solid #ddd;border-radius:3px;padding:1px 5px;cursor:pointer;" title="Void this bet">void</button>` : '';
               return `<tr style="border-bottom:1px solid #f0f0f0;height:38px;">
