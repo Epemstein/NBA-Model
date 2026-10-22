@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v159</title>
+<title>NBA ALGO v162</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -3320,8 +3320,10 @@ function renderBetsTab() {
         status = 'OPEN'; statusColor = '#f5a623';
       } else if (activePos) {
         status = 'FILLED'; statusColor = 'var(--green)';
+      } else if (_novigPositions.length > 0 || (_novigHistory && _novigHistory.length > 0)) {
+        status = 'CANCELLED'; statusColor = '#888';
       } else {
-        status = 'PLACED'; statusColor = 'var(--yellow)';
+        status = 'TBD'; statusColor = 'var(--yellow)';
       }
       return `<tr style="font-size:14px;height:44px;">
         <td style="font-family:var(--sans);white-space:nowrap;color:var(--muted)">${time}</td>
@@ -3436,6 +3438,9 @@ function renderHistoryTab() {
                 statusStr = 'OPEN'; statusColor = '#f5a623';
               } else if (activePos) {
                 statusStr = 'FILLED'; statusColor = 'var(--green)';
+              } else if (_novigPositions.length > 0 || (_novigHistory && _novigHistory.length > 0)) {
+                // Novig data loaded but bet not found anywhere → cancelled/unfilled
+                statusStr = 'CANCELLED'; statusColor = '#888';
               }
               const voidBtn = b._docId ? `<button onclick="voidBet('${b._docId}')" style="font-size:9px;color:var(--muted);background:none;border:1px solid #ddd;border-radius:3px;padding:1px 5px;cursor:pointer;" title="Void this bet">void</button>` : '';
               return `<tr style="border-bottom:1px solid #f0f0f0;height:38px;">
