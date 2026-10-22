@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v149</title>
+<title>NBA ALGO v150</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -826,6 +826,7 @@ input[type=number] { -moz-appearance: textfield; }
     <div class="stat-strip-item"><div class="sl">Balance</div><div class="sv a" id="bets-balance">--</div></div>
     <div class="stat-strip-item"><div class="sl">Today's Bets</div><div class="sv" id="bets-today-count">0</div></div>
     <div class="stat-strip-item"><div class="sl">Today's Risk</div><div class="sv" id="bets-today-risk">$0</div></div>
+    <div class="stat-strip-item"><div class="sl">Day P/L</div><div class="sv" id="bets-day-pnl">--</div></div>
     <div class="stat-strip-item"><div class="sl">MTM</div><div class="sv" id="bets-mtm-total">--</div></div>
     <div class="stat-strip-item"><div class="sl">Positions</div><div class="sv" id="bets-positions-count">0</div></div>
   </div>
@@ -3166,6 +3167,22 @@ async function refreshNovigAccount() {
       _novigHistory = (data.history && data.history.items) || data.history || [];
       const posCount = _novigPositions.length + _novigOrders.length;
       document.getElementById('bets-positions-count').textContent = posCount;
+      // Compute today's P/L from settled bets
+      const today = todayET();
+      const todayBetsForPnl = _allBets.filter(b => b.date === today && !b.voided);
+      let dayPnl = 0, daySettled = 0;
+      for (const b of todayBetsForPnl) {
+        const hist = Array.isArray(_novigHistory) ? _novigHistory.find(h => h.outcomeId === b.outcomeId) : null;
+        if (hist) { dayPnl += parseFloat(hist.pnl || 0); daySettled++; }
+      }
+      const dayPnlEl = document.getElementById('bets-day-pnl');
+      if (daySettled > 0) {
+        dayPnlEl.textContent = (dayPnl >= 0 ? '+' : '') + '$' + dayPnl.toFixed(2);
+        dayPnlEl.style.color = dayPnl >= 0 ? 'var(--green)' : 'var(--red)';
+      } else {
+        dayPnlEl.textContent = '--';
+        dayPnlEl.style.color = '';
+      }
       // Compute W/L record and P/L from settled history — write to History panel
       if (Array.isArray(_novigHistory) && _novigHistory.length) {
         let wins = 0, losses = 0, pushes = 0, totalPnl = 0;
