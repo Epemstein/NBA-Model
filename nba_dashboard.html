@@ -3879,10 +3879,13 @@ async function _fetchLastGameMin(team) {
       // ESPN uses different abbreviations (WSH, GS, SA, etc.)
       const espnMap = {WAS:'WSH',GSW:'GS',SAS:'SA',NYK:'NY',NOP:'NO',UTA:'UTAH'};
       const players = lastGame.players[team] || lastGame.players[espnMap[team]] || Object.values(lastGame.players).find(arr => arr.length > 0) || [];
+      // ESPN name → roster name aliases (nicknames, legal names)
+      const _nameAlias = {'Bones Hyland':'Nah\'Shon Hyland','Nic Claxton':'Nicolas Claxton','Moe Wagner':'Moritz Wagner','PJ Washington':'P.J. Washington','CJ McCollum':'C.J. McCollum','AJ Green':'A.J. Green','RJ Barrett':'R.J. Barrett','OG Anunoby':'O.G. Anunoby','TJ McConnell':'T.J. McConnell','JT Thor':'Jamal Terrell Thor','Tari Eason':'Tari Eason'};
       _lastGameMin = {};
       for (const p of players) {
         _lastGameMin[p.name] = p.min;
-        _lastGameMin[normName(p.name)] = p.min; // fuzzy match for accents
+        _lastGameMin[normName(p.name)] = p.min;
+        if (_nameAlias[p.name]) { _lastGameMin[_nameAlias[p.name]] = p.min; _lastGameMin[normName(_nameAlias[p.name])] = p.min; }
       }
       // Apply to _teamPlayers and re-sort
       for (const p of _teamPlayers) {
