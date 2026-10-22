@@ -5528,16 +5528,20 @@ function _updateLimitPreview() {
   const mlVal = parseInt(inp.value) || 0;
   const item = _betQueue.find(b => b.id === _pendingPlaceBetId);
   if (!item) return;
-  const prob = mlVal > 0 ? 100 / (mlVal + 100) : mlVal < 0 ? Math.abs(mlVal) / (Math.abs(mlVal) + 100) : 0.5;
-  const toWin = _calcToWin(item.stake, mlVal);
-  document.getElementById('place-price-display').textContent = fmtML(mlVal);
+  // Round to Novig's 0.001 price grid
+  const rawProb = mlVal > 0 ? 100 / (mlVal + 100) : mlVal < 0 ? Math.abs(mlVal) / (Math.abs(mlVal) + 100) : 0.5;
+  const gridProb = Math.round(rawProb * 1000) / 1000;
+  const actualML = probToML(gridProb);
+  const toWin = _calcToWin(item.stake, actualML);
+  document.getElementById('place-price-display').textContent = fmtML(actualML);
   document.getElementById('place-towin-display').textContent = '$' + toWin.toFixed(2);
   const preview = document.getElementById('place-limit-preview');
   const marketML = probToML(item.price);
   const better = (mlVal > 0 && mlVal > marketML) || (mlVal < 0 && mlVal > marketML);
+  const gridNote = actualML !== mlVal ? ` (grid: ${fmtML(actualML)})` : '';
   preview.innerHTML = better
-    ? `<span style="color:var(--green);">Better price than market — may not fill</span>`
-    : `<span style="color:var(--red);">Worse than market — will fill instantly (use Take instead)</span>`;
+    ? `<span style="color:var(--green);">Better price than market — may not fill${gridNote}</span>`
+    : `<span style="color:var(--red);">Worse than market — will fill instantly (use Take)${gridNote}</span>`;
 }
 
 async function _executePlaceBet() {
