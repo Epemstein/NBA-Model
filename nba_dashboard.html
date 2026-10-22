@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v150</title>
+<title>NBA ALGO v151</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1083,6 +1083,27 @@ input[type=number] { -moz-appearance: textfield; }
   </div>
 
   <div class="card">
+    <div class="ct">Last Updated</div>
+    <div style="font-size:13px;line-height:2;">
+      <div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding:4px 0;">
+        <strong>DARKO</strong><span id="last-darko" style="font-family:var(--mono);color:var(--muted);">--</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding:4px 0;">
+        <strong>LEBRON</strong><span id="last-lebron" style="font-family:var(--mono);color:var(--muted);">--</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding:4px 0;">
+        <strong>EPM</strong><span id="last-epm" style="font-family:var(--mono);color:var(--muted);">--</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding:4px 0;">
+        <strong>Rosters</strong><span id="last-rosters" style="font-family:var(--mono);color:var(--muted);">--</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:4px 0;">
+        <strong>Slate</strong><span id="last-slate" style="font-family:var(--mono);color:var(--muted);">--</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
     <div class="ct">Firestore Connection</div>
     <div class="fr">
       <div class="fg"><label class="fl">Status</label><div id="fs-status" style="font-family:var(--mono);font-size:12px;padding:6px 0;">Checking...</div></div>
@@ -1092,7 +1113,7 @@ input[type=number] { -moz-appearance: textfield; }
   <div class="card">
     <div class="ct">Data Sources</div>
     <div style="font-size:12px;color:var(--text2);line-height:1.6;">
-      <strong>DARKO Ratings:</strong> Google Sheets (public) — updated daily<br>
+      <strong>DARKO Ratings:</strong> darko.app — updated daily<br>
       <strong>Player Minutes:</strong> NBA API — last 8 games average<br>
       <strong>Team Pace:</strong> NBA API — season averages<br>
       <strong>Odds:</strong> The Odds API — BetOnline spreads & totals<br>
@@ -1304,6 +1325,7 @@ document.querySelectorAll('#nav button').forEach(btn => {
     if (btn.dataset.tab === 'standings' && !_standingsData.length) loadStandings();
     if (btn.dataset.tab === 'bets') loadBetsTab();
     if (btn.dataset.tab === 'history') loadBetsTab();
+    if (btn.dataset.tab === 'settings') loadLastUpdated();
   });
 });
 
@@ -3661,6 +3683,29 @@ function saveSettings() {
   renderGames();
   renderOddsSummary();
   updateStrip();
+}
+
+async function loadLastUpdated() {
+  const today = todayET();
+  const fmt = ts => {
+    if (!ts) return '--';
+    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    return d.toLocaleString('en-US', {month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZone:'America/New_York'});
+  };
+  try {
+    const [darko, lebron, epm, rosters, slate] = await Promise.all([
+      fbDb.collection('nba_darko').doc(today).get(),
+      fbDb.collection('nba_lebron').doc(today).get(),
+      fbDb.collection('nba_epm').doc(today).get(),
+      fbDb.collection('nba_rosters').doc('all').get(),
+      fbDb.collection('nba_slate').doc(today).get(),
+    ]);
+    document.getElementById('last-darko').textContent = darko.exists ? fmt(darko.data().ts) + ' (' + (darko.data().players||[]).length + ' players)' : 'Not loaded';
+    document.getElementById('last-lebron').textContent = lebron.exists ? fmt(lebron.data().ts) + ' (' + (lebron.data().players||[]).length + ' players)' : 'Not loaded';
+    document.getElementById('last-epm').textContent = epm.exists ? fmt(epm.data().ts) + ' (' + (epm.data().players||[]).length + ' players)' : 'Not loaded';
+    document.getElementById('last-rosters').textContent = rosters.exists ? fmt(rosters.data()._ts) : 'Not loaded';
+    document.getElementById('last-slate').textContent = slate.exists ? fmt(slate.data().lastUpdated) + ' (' + (slate.data().games||[]).length + ' games)' : 'Not loaded';
+  } catch(e) { console.warn('loadLastUpdated failed:', e); }
 }
 
 function loadSettingsUI() {
