@@ -206,6 +206,7 @@ def fetch_darko():
                 'pos': pos,
                 'nba_id': str(columns['nba_id'][i]),
                 'team': team_abr,
+                'pace': round(columns['x_pace'][i], 1),
             }
             players[norm_name(name)] = entry
             players[f'id:{columns["nba_id"][i]}'] = entry  # Also key by NBA ID
@@ -1260,6 +1261,7 @@ def _write_rosters(db, darko, player_minutes, lebron=None, epm=None, injuries=No
             'dpm': round(dk['dpm'], 1) if dk else None,
             'o_dpm': round(dk['o_dpm'], 1) if dk else None,
             'd_dpm': round(dk['d_dpm'], 1) if dk else None,
+            'pace': round(dk.get('pace', 0), 1) if dk else None,
             'pos': dk.get('pos', '') if dk else '',
             'nba_id': dk.get('nba_id', pid) if dk else pid,
         }
@@ -1344,6 +1346,7 @@ def _write_rosters(db, darko, player_minutes, lebron=None, epm=None, injuries=No
             entry = {
                 'name': dk['name'], 'min': 0,
                 'dpm': round(dk['dpm'], 1), 'o_dpm': round(dk['o_dpm'], 1), 'd_dpm': round(dk['d_dpm'], 1),
+                'pace': round(dk.get('pace', 0), 1),
                 'pos': dk.get('pos', ''), 'nba_id': dk.get('nba_id', ''),
             }
             if lebron:

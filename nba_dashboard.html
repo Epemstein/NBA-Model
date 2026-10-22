@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v151</title>
+<title>NBA ALGO v152</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1504,9 +1504,10 @@ function recomputeProjections() {
       const players = g[`${side}_players`] || [];
       const totalRaw = players.reduce((s, p) => s + (p.min || 0) / 48, 0);
       const scale = totalRaw > 0 ? 5.0 / totalRaw : 0;
-      let off = 0, def = 0;
+      let off = 0, def = 0, paceSum = 0, paceMinSum = 0;
       for (const p of players) {
         const w = ((p.min || 0) / 48) * scale;
+        if (p.pace && p.min > 0) { paceSum += p.pace * (p.min || 0); paceMinSum += (p.min || 0); }
         if (_ratingSource === 'model') {
           const bl = blendPlayerOffDef(p);
           off += bl.off * w;
@@ -1537,11 +1538,14 @@ function recomputeProjections() {
       }
       g[`${side}_off`] = Math.round(off * 100) / 100;
       g[`${side}_def`] = Math.round(def * 100) / 100;
+      g[`${side}_pace`] = paceMinSum > 0 ? Math.round(paceSum / paceMinSum * 10) / 10 : null;
     }
 
-    // Pace
-    if (!g._rawPace) g._rawPace = (g.matchup_pace || 95) / (paceMult || 1);
-    const pace = g._rawPace * paceMult;
+    // Pace: use player-weighted pace from DARKO if available, else fall back to old team pace
+    const awPace = g.away_pace || (g._rawPace ? g._rawPace : null);
+    const hwPace = g.home_pace || (g._rawPace ? g._rawPace : null);
+    const rawPace = (awPace && hwPace) ? (awPace + hwPace) / 2 : (awPace || hwPace || 95);
+    const pace = rawPace * paceMult;
     g.matchup_pace = Math.round(pace * 10) / 10;
 
     // Score projection
