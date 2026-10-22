@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v158</title>
+<title>NBA ALGO v159</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -2005,6 +2005,7 @@ function _buildInlineSide(gameIdx, side, roster, baselines, overrides) {
       dpm: p.dpm||0, o_dpm: p.o_dpm||0, d_dpm: p.d_dpm||0,
       epm: p.epm, epm_o: p.epm_o, epm_d: p.epm_d,
       lb_dpm: p.lb_dpm, lb_o_dpm: p.lb_o_dpm, lb_d_dpm: p.lb_d_dpm,
+      pace: p.pace||0,
       injury: p.injury||"", injury_detail: p.injury_detail||"",
     };
   });
@@ -3844,6 +3845,7 @@ function loadTeamBaseline() {
           dpm: p.dpm, o_dpm: p.o_dpm, d_dpm: p.d_dpm,
           lb_dpm: p.lb_dpm, lb_o_dpm: p.lb_o_dpm, lb_d_dpm: p.lb_d_dpm,
           epm: p.epm, epm_o: p.epm_o, epm_d: p.epm_d,
+          pace: p.pace || 0,
           injury: p.injury||"", injury_detail: p.injury_detail||"",
         };
       });
@@ -3876,10 +3878,13 @@ async function _fetchLastGameMin(team) {
       const lastGame = data.games[data.games.length - 1];
       const players = lastGame.players[team] || [];
       _lastGameMin = {};
-      for (const p of players) _lastGameMin[p.name] = p.min;
+      for (const p of players) {
+        _lastGameMin[p.name] = p.min;
+        _lastGameMin[normName(p.name)] = p.min; // fuzzy match for accents
+      }
       // Apply to _teamPlayers and re-sort
       for (const p of _teamPlayers) {
-        p.lastMin = _lastGameMin[p.name] || 0;
+        p.lastMin = _lastGameMin[p.name] || _lastGameMin[normName(p.name)] || 0;
       }
       _teamPlayers.sort((a, b) => {
         const aT = a.pg+a.sg+a.sf+a.pf+a.c, bT = b.pg+b.sg+b.sf+b.pf+b.c;
