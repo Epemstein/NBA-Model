@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v146</title>
+<title>NBA ALGO v147</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -3381,18 +3381,14 @@ async function refreshMTM() {
   btn.disabled = true;
   btn.textContent = 'Loading...';
 
-  // Only MTM for active positions (not settled)
-  const activePositions = _novigPositions.filter(p => {
-    const settled = Array.isArray(_novigHistory) && _novigHistory.find(h => h.outcomeId === p.outcomeId);
-    return !settled;
-  });
-
-  if (!activePositions.length) {
+  // Send all positions — server will get bids for those with live order books
+  if (!_novigPositions.length) {
     btn.textContent = 'MTM';
     btn.disabled = false;
-    _showBQToast('No active positions to mark');
+    _showBQToast('No positions loaded — click Refresh first');
     return;
   }
+  const activePositions = _novigPositions;
 
   try {
     const r = await fetch(RENDER_URL + '/novig-mtm', {
