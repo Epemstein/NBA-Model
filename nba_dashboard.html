@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v156</title>
+<title>NBA ALGO v157</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1215,6 +1215,16 @@ input[type=number] { -moz-appearance: textfield; }
 </div>
 
 <!-- ═══════════ BET PLACEMENT CONFIRMATION MODAL ═══════════ -->
+<div id="game-logs-overlay" class="novig-overlay" onclick="if(event.target===this)document.getElementById('game-logs-overlay').classList.remove('open')">
+  <div style="background:var(--surface);border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,.25);width:700px;max-width:95vw;max-height:80vh;overflow-y:auto;padding:24px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h3 style="font-size:16px;font-weight:700;" id="game-logs-title">Game Logs</h3>
+      <button onclick="document.getElementById('game-logs-overlay').classList.remove('open')" style="font-size:20px;background:none;border:none;cursor:pointer;color:var(--text);">&times;</button>
+    </div>
+    <div id="game-logs-body" style="font-size:12px;">Loading...</div>
+  </div>
+</div>
+
 <div id="place-bet-overlay" class="novig-overlay" onclick="if(event.target===this)closePlaceBetModal()">
   <div style="background:var(--surface);border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,.25);width:480px;max-width:90vw;padding:24px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
@@ -3975,7 +3985,7 @@ function renderTeamBaseline() {
       <img class="team-banner-logo" src="${teamLogo(_selectedTeam)}" onerror="this.style.display='none'" />
       <div class="team-banner-info">
         <div class="team-banner-name">${_selectedTeam}</div>
-        <div class="team-banner-sub">${fullName}</div>
+        <div class="team-banner-sub">${fullName} <button onclick="showGameLogs('${_selectedTeam}')" style="font-size:10px;padding:2px 8px;margin-left:8px;border:1px solid rgba(255,255,255,0.3);border-radius:3px;background:rgba(255,255,255,0.1);color:#fff;cursor:pointer;">Game Logs</button></div>
       </div>
       <div class="team-banner-stats">
         <div class="team-banner-stat"><div class="tbs-label">OFF</div><div class="tbs-val">${rating.off >= 0 ? '+' : ''}${rating.off.toFixed(1)} <span style="font-size:10px;opacity:.7;">#${offRank}</span></div></div>
@@ -4063,6 +4073,81 @@ function renderArchivedPlayers() {
         </div>`;
       }).join('')}
     </div>`;
+}
+
+async function showGameLogs(team) {
+  const overlay = document.getElementById('game-logs-overlay');
+  const body = document.getElementById('game-logs-body');
+  const title = document.getElementById('game-logs-title');
+  title.textContent = team + ' Recent Game Logs';
+  body.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);">Loading box scores...</div>';
+  overlay.classList.add('open');
+
+  try {
+    const slug = NBA_TEAM_SLUGS[team] || team.toLowerCase();
+    const r = await fetch(`${RENDER_URL}/game-logs?team=${team.toLowerCase()}&limit=5`);
+    const data = await r.json();
+    if (!data.games || !data.games.length) {
+      body.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);">No completed games found</div>';
+      return;
+    }
+
+    // Build comparison table: players as rows, games as columns
+    const playerMap = {}; // name → {nba_id, games: [{date, min}]}
+    const gameDates = [];
+    for (const g of data.games) {
+      const dateStr = new Date(g.date).toLocaleDateString('en-US', {month:'short', day:'numeric'});
+      const opp = Object.keys(g.players).find(t => t !== team) || '?';
+      gameDates.push(dateStr + ' vs ' + opp);
+      const teamPlayers = g.players[team] || [];
+      for (const p of teamPlayers) {
+        if (!playerMap[p.name]) playerMap[p.name] = {nba_id: p.nba_id, games: []};
+        playerMap[p.name].games.push({idx: gameDates.length - 1, min: p.min});
+      }
+    }
+
+    // Sort by average minutes
+    const sorted = Object.entries(playerMap).sort((a, b) => {
+      const avgA = a[1].games.reduce((s, g) => s + g.min, 0) / Math.max(a[1].games.length, 1);
+      const avgB = b[1].games.reduce((s, g) => s + g.min, 0) / Math.max(b[1].games.length, 1);
+      return avgB - avgA;
+    });
+
+    // Get current baseline for comparison
+    const baselines = {};
+    for (const p of _teamPlayers) {
+      baselines[p.name] = p.pg + p.sg + p.sf + p.pf + p.c;
+    }
+
+    let html = `<table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead><tr>
+        <th style="text-align:left;padding:4px 6px;border-bottom:2px solid var(--border);min-width:120px;">Player</th>
+        ${gameDates.map(d => `<th style="text-align:center;padding:4px 6px;border-bottom:2px solid var(--border);font-size:10px;white-space:nowrap;">${d}</th>`).join('')}
+        <th style="text-align:center;padding:4px 6px;border-bottom:2px solid var(--border);font-weight:700;">AVG</th>
+        <th style="text-align:center;padding:4px 6px;border-bottom:2px solid var(--border);font-weight:700;color:var(--accent);">BASE</th>
+      </tr></thead><tbody>`;
+
+    for (const [name, data] of sorted) {
+      const avg = data.games.reduce((s, g) => s + g.min, 0) / Math.max(data.games.length, 1);
+      const base = baselines[name] || 0;
+      const diff = base - avg;
+      const diffColor = Math.abs(diff) > 3 ? (diff > 0 ? 'var(--green)' : 'var(--red)') : 'var(--muted)';
+
+      html += `<tr style="border-bottom:1px solid #f0f0f0;">
+        <td style="padding:4px 6px;font-weight:600;white-space:nowrap;">${name}</td>`;
+      for (let i = 0; i < gameDates.length; i++) {
+        const gm = data.games.find(g => g.idx === i);
+        html += `<td style="text-align:center;font-family:var(--mono);padding:4px 6px;">${gm ? gm.min : '<span style="color:var(--muted);">DNP</span>'}</td>`;
+      }
+      html += `<td style="text-align:center;font-family:var(--mono);font-weight:700;padding:4px 6px;">${avg.toFixed(0)}</td>`;
+      html += `<td style="text-align:center;font-family:var(--mono);font-weight:700;padding:4px 6px;color:${diffColor};">${base || '--'}</td>`;
+      html += `</tr>`;
+    }
+    html += '</tbody></table>';
+    body.innerHTML = html;
+  } catch(e) {
+    body.innerHTML = `<div style="color:var(--red);padding:20px;">Error: ${e.message}</div>`;
+  }
 }
 
 function updatePosMin(idx, pos, val) {

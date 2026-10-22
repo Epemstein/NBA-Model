@@ -94,6 +94,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._save_preseason_darko()
             return
 
+        if self.path.startswith('/game-logs'):
+            self._game_logs()
+            return
+
         if self.path.startswith('/trigger-pipeline'):
             self._trigger_pipeline()
             return
@@ -474,6 +478,78 @@ class Handler(http.server.BaseHTTPRequestHandler):
             print(f'Saved preseason DARKO from {source_date}: {count} players')
         except Exception as e:
             print(f'Save preseason DARKO failed: {e}')
+            self._json_response(500, {'error': str(e)})
+
+    def _game_logs(self):
+        """Fetch recent box scores for a team from ESPN."""
+        from urllib.parse import urlparse, parse_qs
+        qs = parse_qs(urlparse(self.path).query)
+        team_slug = qs.get('team', [''])[0].lower()
+        limit = int(qs.get('limit', ['5'])[0])
+        if not team_slug:
+            self._json_response(400, {'error': 'Missing team param'})
+            return
+        try:
+            # ESPN team abbreviation mapping
+            espn_map = {'gsw':'gs','nop':'no','nyk':'ny','sas':'sa','was':'wsh','uta':'utah'}
+            espn_team = espn_map.get(team_slug, team_slug)
+
+            # Get schedule
+            req = urllib.request.Request(
+                f'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/{espn_team}/schedule?season=2027',
+                headers={'User-Agent': 'Mozilla/5.0'}
+            )
+            resp = urllib.request.urlopen(req, timeout=15)
+            sched = json.loads(resp.read())
+
+            # Find completed games
+            completed = []
+            for ev in sched.get('events', []):
+                comp = ev.get('competitions', [{}])[0]
+                if comp.get('status', {}).get('type', {}).get('completed', False):
+                    completed.append(ev)
+            completed = completed[-limit:]  # most recent N
+
+            # Fetch box scores
+            games = []
+            for ev in completed:
+                try:
+                    req2 = urllib.request.Request(
+                        f'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event={ev["id"]}',
+                        headers={'User-Agent': 'Mozilla/5.0'}
+                    )
+                    resp2 = urllib.request.urlopen(req2, timeout=15)
+                    summary = json.loads(resp2.read())
+                    box = summary.get('boxscore', {})
+                    game_info = {'date': ev.get('date', ''), 'name': ev.get('name', ''), 'id': ev['id'], 'players': {}}
+
+                    for team_data in box.get('players', []):
+                        team_abr = team_data.get('team', {}).get('abbreviation', '')
+                        team_players = []
+                        for stat_group in team_data.get('statistics', []):
+                            labels = stat_group.get('labels', [])
+                            min_idx = labels.index('MIN') if 'MIN' in labels else -1
+                            for p in stat_group.get('athletes', []):
+                                name = p.get('athlete', {}).get('displayName', '?')
+                                nba_id = str(p.get('athlete', {}).get('id', ''))
+                                stats = p.get('stats', [])
+                                mins = stats[min_idx] if min_idx >= 0 and min_idx < len(stats) else '0'
+                                try:
+                                    mins = int(mins)
+                                except:
+                                    mins = 0
+                                if mins > 0:
+                                    team_players.append({'name': name, 'min': mins, 'nba_id': nba_id})
+                        team_players.sort(key=lambda x: -x['min'])
+                        game_info['players'][team_abr] = team_players
+                    games.append(game_info)
+                except Exception as e:
+                    print(f'Box score fetch failed for {ev["id"]}: {e}')
+
+            self._json_response(200, {'games': games, 'team': team_slug.upper()})
+        except Exception as e:
+            print(f'Game logs failed: {e}')
+            import traceback; traceback.print_exc()
             self._json_response(500, {'error': str(e)})
 
     def _trigger_pipeline(self):
