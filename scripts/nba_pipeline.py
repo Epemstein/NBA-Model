@@ -1312,6 +1312,7 @@ def _write_rosters(db, darko, player_minutes, lebron=None, epm=None, injuries=No
                             ep['dpm'] = round(dk['dpm'], 1)
                             ep['o_dpm'] = round(dk['o_dpm'], 1)
                             ep['d_dpm'] = round(dk['d_dpm'], 1)
+                            ep['pace'] = round(dk.get('pace', 0), 1)
                             ep['pos'] = dk.get('pos', ep.get('pos', ''))
                         else:
                             ep['nba_id'] = pid
@@ -1324,6 +1325,7 @@ def _write_rosters(db, darko, player_minutes, lebron=None, epm=None, injuries=No
                 'dpm': round(dk['dpm'], 1) if dk else None,
                 'o_dpm': round(dk['o_dpm'], 1) if dk else None,
                 'd_dpm': round(dk['d_dpm'], 1) if dk else None,
+                'pace': round(dk.get('pace', 0), 1) if dk else None,
                 'pos': dk.get('pos', '') if dk else '',
                 'nba_id': dk.get('nba_id', pid) if dk else pid,
             }
