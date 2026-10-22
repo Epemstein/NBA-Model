@@ -700,7 +700,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             tif = body.get('tif', 'IOC')
             qty = body.get('qty') or round(stake * 100 / price)
 
-            price_str = str(round(price, 4))
+            price_str = str(round(price, 3))  # Novig price grid: 0.001 ticks
             print(f'=== PLACE BET ===')
             print(f'  Description: {description}')
             print(f'  Game: {game_key} ({date})')
