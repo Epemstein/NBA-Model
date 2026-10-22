@@ -3876,7 +3876,9 @@ async function _fetchLastGameMin(team) {
     const data = await r.json();
     if (data.games && data.games.length) {
       const lastGame = data.games[data.games.length - 1];
-      const players = lastGame.players[team] || [];
+      // ESPN uses different abbreviations (WSH, GS, SA, etc.)
+      const espnMap = {WAS:'WSH',GSW:'GS',SAS:'SA',NYK:'NY',NOP:'NO',UTA:'UTAH'};
+      const players = lastGame.players[team] || lastGame.players[espnMap[team]] || Object.values(lastGame.players).find(arr => arr.length > 0) || [];
       _lastGameMin = {};
       for (const p of players) {
         _lastGameMin[p.name] = p.min;
@@ -4138,7 +4140,8 @@ async function showGameLogs(team) {
       const dateStr = new Date(g.date).toLocaleDateString('en-US', {month:'short', day:'numeric'});
       const opp = Object.keys(g.players).find(t => t !== team) || '?';
       gameDates.push(dateStr + ' vs ' + opp);
-      const teamPlayers = g.players[team] || [];
+      const _espnMap = {WAS:'WSH',GSW:'GS',SAS:'SA',NYK:'NY',NOP:'NO',UTA:'UTAH'};
+      const teamPlayers = g.players[team] || g.players[_espnMap[team]] || [];
       for (const p of teamPlayers) {
         if (!playerMap[p.name]) playerMap[p.name] = {nba_id: p.nba_id, games: []};
         playerMap[p.name].games.push({idx: gameDates.length - 1, min: p.min});
