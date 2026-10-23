@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v162</title>
+<title>NBA ALGO v163</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1576,7 +1576,7 @@ function recomputeProjections() {
 }
 function fmtDpm(v) { if (v == null) return 'N/A'; return (v > 0 ? '+' : '') + v.toFixed(1); }
 function dpmColor(v) { if (v == null) return 'var(--muted)'; return v >= 0 ? 'var(--green)' : 'var(--red)'; }
-function fmtSpread(n) { return n > 0 ? `+${n.toFixed(1)}` : n.toFixed(1); }
+function fmtSpread(n) { if (n == null) return '—'; return n > 0 ? `+${n.toFixed(1)}` : n.toFixed(1); }
 function fmtRating(n) { return n > 0 ? `+${n.toFixed(1)}` : n.toFixed(1); }
 function fmtMoney(n) { return '$' + Math.abs(n).toLocaleString(); }
 function edgeClass(e) {
