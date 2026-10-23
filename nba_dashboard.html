@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v168</title>
+<title>NBA ALGO v169</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -876,7 +876,7 @@ input[type=number] { -moz-appearance: textfield; }
       <table class="dt" style="font-size:13px;">
         <thead>
           <tr>
-            <th style="width:220px;">Player</th><th style="text-align:right;width:40px;font-size:9px;color:var(--muted);">LAST</th><th style="text-align:right;width:50px;">Total</th>
+            <th style="width:220px;">Player</th><th id="last5-header" style="text-align:center;font-size:9px;color:var(--muted);" colspan="5">LAST 5</th><th style="text-align:right;width:50px;">Total</th>
             <th style="text-align:center;color:var(--accent);width:50px;">PG</th>
             <th style="text-align:center;color:var(--accent);width:50px;">SG</th>
             <th style="text-align:center;color:var(--accent);width:50px;">SF</th>
@@ -889,7 +889,7 @@ input[type=number] { -moz-appearance: textfield; }
           </tr>
           <tr id="team-sums-row" style="background:#f0f7ff;font-weight:700;font-family:var(--mono);font-size:12px;position:sticky;top:30px;z-index:1;">
             <td style="font-family:var(--sans);font-size:11px;color:var(--muted)">SUM</td>
-            <td></td><td style="text-align:right" id="sum-total">0</td>
+            <td colspan="5"></td><td style="text-align:right" id="sum-total">0</td>
             <td style="text-align:center" id="sum-pg">0</td>
             <td style="text-align:center" id="sum-sg">0</td>
             <td style="text-align:center" id="sum-sf">0</td>
@@ -3802,6 +3802,8 @@ const NBA_TEAM_SLUGS = {
 };
 let _teamPlayers = []; // [{name, pos, pg, sg, sf, pf, c, dpm, o_dpm, d_dpm, lastMin}]
 let _lastGameMin = {}; // {playerName: lastGameMinutes} — fetched from ESPN
+let _last5Games = []; // [{date, opp}] — last 5 game headers
+let _last5PlayerMin = {}; // {playerName: [min, min, ...]} — minutes per game (indexed same as _last5Games)
 let _archivedPlayers = []; // players removed via "Zero Out" — restorable
 let _rosterWarnings = []; // [{name, minutes}] — baseline players not on active roster
 let _liveRosters = {}; // {TEAM: Set(normed names)} — cached from checkLiveRoster
@@ -3886,22 +3888,42 @@ function loadTeamBaseline() {
 
 async function _fetchLastGameMin(team) {
   try {
-    const r = await fetch(`${RENDER_URL}/game-logs?team=${team.toLowerCase()}&limit=1`);
+    const r = await fetch(`${RENDER_URL}/game-logs?team=${team.toLowerCase()}&limit=5`);
     const data = await r.json();
     if (data.games && data.games.length) {
-      const lastGame = data.games[data.games.length - 1];
-      // ESPN uses different abbreviations (WSH, GS, SA, etc.)
       const espnMap = {WAS:'WSH',GSW:'GS',SAS:'SA',NYK:'NY',NOP:'NO',UTA:'UTAH'};
-      const players = lastGame.players[team] || lastGame.players[espnMap[team]] || Object.values(lastGame.players).find(arr => arr.length > 0) || [];
-      // ESPN name → roster name aliases (nicknames, legal names)
       const _nameAlias = {'Bones Hyland':'Nah\'Shon Hyland','Nic Claxton':'Nicolas Claxton','Moe Wagner':'Moritz Wagner','PJ Washington':'P.J. Washington','CJ McCollum':'C.J. McCollum','AJ Green':'A.J. Green','RJ Barrett':'R.J. Barrett','OG Anunoby':'O.G. Anunoby','TJ McConnell':'T.J. McConnell','JT Thor':'Jamal Terrell Thor','Tari Eason':'Tari Eason'};
-      _lastGameMin = {};
-      for (const p of players) {
-        _lastGameMin[p.name] = p.min;
-        _lastGameMin[normName(p.name)] = p.min;
-        if (_nameAlias[p.name]) { _lastGameMin[_nameAlias[p.name]] = p.min; _lastGameMin[normName(_nameAlias[p.name])] = p.min; }
+
+      // Build last 5 game headers (most recent last)
+      _last5Games = [];
+      _last5PlayerMin = {};
+      for (const g of data.games) {
+        const dt = new Date(g.date);
+        const dateStr = (dt.getMonth()+1) + '/' + dt.getDate();
+        const opp = Object.keys(g.players).find(t => t !== team && t !== espnMap[team]) || '?';
+        _last5Games.push({date: dateStr, opp});
+
+        const players = g.players[team] || g.players[espnMap[team]] || Object.values(g.players).find(arr => arr.length > 0) || [];
+        for (const p of players) {
+          const names = [p.name, normName(p.name)];
+          if (_nameAlias[p.name]) { names.push(_nameAlias[p.name]); names.push(normName(_nameAlias[p.name])); }
+          for (const n of names) {
+            if (!_last5PlayerMin[n]) _last5PlayerMin[n] = new Array(_last5Games.length - 1).fill(null);
+            _last5PlayerMin[n][_last5Games.length - 1] = p.min;
+          }
+        }
+        // Pad players who didn't play this game
+        for (const n in _last5PlayerMin) {
+          if (_last5PlayerMin[n].length < _last5Games.length) _last5PlayerMin[n].push(null);
+        }
       }
-      // Apply to _teamPlayers and re-sort
+
+      // Set lastMin from most recent game
+      _lastGameMin = {};
+      const lastIdx = _last5Games.length - 1;
+      for (const [name, mins] of Object.entries(_last5PlayerMin)) {
+        if (mins[lastIdx] != null) _lastGameMin[name] = mins[lastIdx];
+      }
       for (const p of _teamPlayers) {
         p.lastMin = _lastGameMin[p.name] || _lastGameMin[normName(p.name)] || 0;
       }
@@ -3995,6 +4017,36 @@ function calcTeamRating(players) {
   return { off: Math.round(off*100)/100, def: Math.round(def*100)/100, total: Math.round((off+def)*100)/100 };
 }
 
+function _last5GamCells(p) {
+  if (!_last5Games.length) return '<td colspan="5" style="text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);padding:6px 4px;">--</td>';
+  const mins = _last5PlayerMin[p.name] || _last5PlayerMin[normName(p.name)] || [];
+  return _last5Games.map((g, i) => {
+    const m = mins[i];
+    return `<td style="text-align:center;font-family:var(--mono);font-size:10px;color:${m != null ? 'var(--fg)' : 'var(--muted)'};padding:4px 2px;min-width:32px;">${m != null ? m : '-'}</td>`;
+  }).join('');
+}
+
+function _renderLast5Header() {
+  const th = document.getElementById('last5-header');
+  if (!th) return;
+  if (!_last5Games.length) { th.innerHTML = 'LAST 5'; th.colSpan = 5; return; }
+  // Replace single header with individual game columns
+  const tr = th.parentElement;
+  // Remove the old header
+  th.remove();
+  // Remove any previously inserted last5 headers
+  tr.querySelectorAll('.last5-col').forEach(el => el.remove());
+  // Insert before the Total column (3rd th originally, now after Player)
+  const totalTh = tr.querySelector('th[style*="width:50px"]');
+  for (const g of _last5Games) {
+    const newTh = document.createElement('th');
+    newTh.className = 'last5-col';
+    newTh.style.cssText = 'text-align:center;font-size:8px;color:var(--muted);padding:2px 2px;min-width:32px;line-height:1.2;';
+    newTh.innerHTML = `${g.date}<br><span style="font-size:7px;">${g.opp}</span>`;
+    tr.insertBefore(newTh, totalTh);
+  }
+}
+
 function renderTeamBaseline() {
   const color = COLORS[_selectedTeam] || '#333';
   const fullName = FULL_NAMES[_selectedTeam] || _selectedTeam;
@@ -4083,7 +4135,7 @@ function renderTeamBaseline() {
           </div>
         </div>
       </td>
-      <td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--muted);padding:6px 4px;">${p.lastMin ? p.lastMin : '--'}</td>
+      ${_last5GamCells(p)}
       <td style="text-align:right;font-family:var(--mono);font-weight:700;font-size:14px;padding:6px 8px;">${total > 0 ? total.toFixed(1) : '—'}</td>
       <td style="text-align:center;padding:4px 2px;"><input type="number" value="${p.pg||''}" min="0" max="48" step="0.5" style="width:44px;text-align:center;font-size:13px;padding:4px 2px;" onchange="updatePosMin(${i},'pg',this.value)" placeholder="0"></td>
       <td style="text-align:center;padding:4px 2px;"><input type="number" value="${p.sg||''}" min="0" max="48" step="0.5" style="width:44px;text-align:center;font-size:13px;padding:4px 2px;" onchange="updatePosMin(${i},'sg',this.value)" placeholder="0"></td>
@@ -4097,6 +4149,7 @@ function renderTeamBaseline() {
     </tr>`;
   }).join('');
   updateTeamSums();
+  _renderLast5Header();
   renderArchivedPlayers();
 }
 
