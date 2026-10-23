@@ -5603,7 +5603,7 @@ async function confirmPlaceBet(queueId) {
   // Check for existing bets on same game
   const gameKey = item.away + '@' + item.home;
   // Only warn for same bet TYPE on same game (spread doesn't conflict with total)
-  const existingOnGame = _placedBets.filter(b => b.gameKey === gameKey && b.type === item.type);
+  const existingOnGame = _placedBets.filter(b => b.gameKey === gameKey && b.type === item.type && !b.voided);
   const existWarn = document.getElementById('place-bet-existing-warn');
   if (existingOnGame.length > 0) {
     existWarn.style.display = 'block';
