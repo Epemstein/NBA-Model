@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v165</title>
+<title>NBA ALGO v167</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -3693,7 +3693,7 @@ function saveSettings() {
     spreadEdge: parseFloat(document.getElementById('set-spread-edge').value) || 2,
     totalEdge: parseFloat(document.getElementById('set-total-edge').value) || 2,
     hca: parseFloat(document.getElementById('set-hca').value) || 1.5,
-    paceMult: parseFloat(document.getElementById('set-pace-mult').value) || 0.95,
+    paceMult: 1.0,
     sigma: parseFloat(document.getElementById('set-sigma').value) || 13,
     totalSigma: parseFloat(document.getElementById('set-total-sigma').value) || 17,
     minLiquidity: parseInt(document.getElementById('set-min-liq').value) || 500,
@@ -3741,7 +3741,7 @@ function loadSettingsUI() {
   document.getElementById('set-spread-edge').value = STATE.settings.spreadEdge;
   document.getElementById('set-total-edge').value = STATE.settings.totalEdge;
   document.getElementById('set-hca').value = STATE.settings.hca;
-  document.getElementById('set-pace-mult').value = STATE.settings.paceMult;
+  // Pace multiplier removed — always 1.0
   document.getElementById('set-sigma').value = STATE.settings.sigma ?? 13;
   document.getElementById('set-total-sigma').value = STATE.settings.totalSigma ?? 17;
   document.getElementById('set-min-liq').value = STATE.settings.minLiquidity ?? 500;
