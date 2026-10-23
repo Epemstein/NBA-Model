@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v167</title>
+<title>NBA ALGO v168</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1288,6 +1288,11 @@ function setDate(d) {
   const dayName = dt.toLocaleDateString('en-US', {weekday: 'long', month: 'short', day: 'numeric', timeZone: 'UTC'});
   const label = document.getElementById('date-label');
   label.textContent = d === todayET() ? `${dayName} (Today)` : dayName;
+  // Immediately clear stale data while new date loads
+  STATE.games = [];
+  renderOddsSummary();
+  document.getElementById('games-grid').innerHTML = '';
+  document.getElementById('no-games').style.display = 'none';
   loadSlate();
 }
 
@@ -1702,9 +1707,12 @@ async function loadSlate() {
   try {
     const snap = await fbDb.collection('nba_slate').doc(dateKey).get();
     if (!snap.exists) {
-      document.getElementById('no-games').style.display = 'block';
+      STATE.games = [];
+      renderOddsSummary();
       document.getElementById('games-grid').innerHTML = '';
       document.getElementById('ss-games').textContent = '0';
+      // Auto-fetch schedule for this date
+      loadDateGames();
       return;
     }
     const data = snap.data();
@@ -2339,6 +2347,7 @@ let _oddsTab = 'spread';
 const RENDER_URL = location.hostname === 'localhost' ? `http://localhost:${location.port}` : 'https://nba-model-7qcb.onrender.com';
 
 async function loadDateGames() {
+  document.getElementById('no-games').style.display = 'block';
   const btn = document.getElementById('load-games-btn');
   const status = document.getElementById('load-games-status');
   btn.disabled = true;
