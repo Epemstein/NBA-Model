@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v163</title>
+<title>NBA ALGO v164</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1048,7 +1048,7 @@ input[type=number] { -moz-appearance: textfield; }
       <div class="fg"><label class="fl">Min Spread Edge (pts)</label><input id="set-spread-edge" type="number" value="2.0" step="0.5"></div>
       <div class="fg"><label class="fl">Min Total Edge (pts)</label><input id="set-total-edge" type="number" value="2.0" step="0.5"></div>
       <div class="fg"><label class="fl">Home Court Advantage</label><input id="set-hca" type="number" value="1.5" step="0.5"></div>
-      <div class="fg"><label class="fl">Pace Multiplier</label><input id="set-pace-mult" type="number" value="0.95" step="0.01"></div>
+      <!-- Pace Multiplier removed — player-weighted pace from DARKO is used directly -->
       <div class="fg"><label class="fl">Sigma (σ) — Spread Variance</label><input id="set-sigma" type="number" value="13" min="8" max="18" step="0.5"></div>
       <div class="fg"><label class="fl">Total Sigma (σ) — O/U Variance</label><input id="set-total-sigma" type="number" value="17" min="10" max="25" step="0.5"></div>
       <div class="fg"><label class="fl">Min Liquidity ($)</label><input id="set-min-liq" type="number" value="500" min="0" max="10000" step="100"></div>
@@ -1415,7 +1415,7 @@ function gVal(g, field) { return g[field]; }  // projections are recomputed in-p
 // Compute projected spread for a game using a specific rating source
 function _gameSpreadForSource(g, source) {
   const avgOrtg = STATE.leagueAvgOrtg || 114.8;
-  const paceMult = STATE.settings?.paceMult || 1.0;
+  const paceMult = 1.0;
   const hca = (STATE.settings?.hca || 1.5) / 2;
   const pace = (g._rawPace || g.matchup_pace || 95) * paceMult;
 
@@ -1441,7 +1441,7 @@ function _gameSpreadForSource(g, source) {
 }
 function _gameTotalForSource(g, source) {
   const avgOrtg = STATE.leagueAvgOrtg || 114.8;
-  const paceMult = STATE.settings?.paceMult || 1.0;
+  const paceMult = 1.0;
   const hca = (STATE.settings?.hca || 1.5) / 2;
   const pace = (g._rawPace || g.matchup_pace || 95) * paceMult;
   function teamRating(players, src) {
@@ -1507,7 +1507,7 @@ function getLbDpm(p) {
 
 function recomputeProjections() {
   const avgOrtg = STATE.leagueAvgOrtg || 114.8;
-  const paceMult = STATE.settings?.paceMult || 1.0;
+  const paceMult = 1.0;
   const hca = (STATE.settings?.hca || 1.5) / 2;
 
   for (const g of STATE.games) {
@@ -5241,10 +5241,8 @@ function setupRealtimeListener() {
         hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York'
       }) + ' ET';
     }
-    buildRatingLookups(); recomputeProjections();
-    renderGames();
-    renderOddsSummary();
-    updateStrip();
+    // Apply baselines on every snapshot to ensure roster data (pace, ratings) is used
+    applyBaselines();
 
   });
 }
