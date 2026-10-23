@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v164</title>
+<title>NBA ALGO v165</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1845,7 +1845,7 @@ function renderGames() {
         <button onclick="toggleDrawer(${i})">Show Math</button>
         ${(() => {
           const gameKey = g.away + '@' + g.home;
-          const betsOnGame = (_placedBets || []).filter(b => b.gameKey === gameKey);
+          const betsOnGame = (_placedBets || []).filter(b => b.gameKey === gameKey && !b.voided);
           if (!betsOnGame.length) return '<button disabled style="opacity:0.3;cursor:default;">No Bets</button>';
           const totalRisk = betsOnGame.reduce((s, b) => s + (b.stake || 0), 0);
           return `<button onclick="toggleBets(${i})" style="background:#1b5e20;color:#fff;font-weight:700;">Risk: $${totalRisk.toLocaleString()}</button>`;
@@ -1854,7 +1854,7 @@ function renderGames() {
       <div id="bets-panel-${i}" style="display:none;padding:6px 10px;">
         ${(() => {
           const gameKey = g.away + '@' + g.home;
-          const betsOnGame = (_placedBets || []).filter(b => b.gameKey === gameKey);
+          const betsOnGame = (_placedBets || []).filter(b => b.gameKey === gameKey && !b.voided);
           if (!betsOnGame.length) return '';
           return betsOnGame.map(b => {
             const [aw, hm] = (b.gameKey || '@').split('@');
