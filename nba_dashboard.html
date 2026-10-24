@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v169</title>
+<title>NBA ALGO v170</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -876,7 +876,7 @@ input[type=number] { -moz-appearance: textfield; }
       <table class="dt" style="font-size:13px;">
         <thead>
           <tr>
-            <th style="width:220px;">Player</th><th id="last5-header" style="text-align:center;font-size:9px;color:var(--muted);" colspan="5">LAST 5</th><th style="text-align:right;width:50px;">Total</th>
+            <th style="width:220px;">Player</th><th id="last5-header" style="text-align:center;font-size:9px;color:var(--muted);" colspan="5">LAST 5</th><th id="th-total" style="text-align:right;width:50px;">Total</th>
             <th style="text-align:center;color:var(--accent);width:50px;">PG</th>
             <th style="text-align:center;color:var(--accent);width:50px;">SG</th>
             <th style="text-align:center;color:var(--accent);width:50px;">SF</th>
@@ -4027,24 +4027,35 @@ function _last5GamCells(p) {
 }
 
 function _renderLast5Header() {
-  const th = document.getElementById('last5-header');
-  if (!th) return;
-  if (!_last5Games.length) { th.innerHTML = 'LAST 5'; th.colSpan = 5; return; }
-  // Replace single header with individual game columns
-  const tr = th.parentElement;
-  // Remove the old header
-  th.remove();
-  // Remove any previously inserted last5 headers
+  const totalTh = document.getElementById('th-total');
+  if (!totalTh) return;
+  const tr = totalTh.parentElement;
+
+  // Clean up previous state
+  const ph = document.getElementById('last5-header');
+  if (ph) ph.remove();
   tr.querySelectorAll('.last5-col').forEach(el => el.remove());
-  // Insert before the Total column (3rd th originally, now after Player)
-  const totalTh = tr.querySelector('th[style*="width:50px"]');
-  for (const g of _last5Games) {
+
+  if (!_last5Games.length) {
     const newTh = document.createElement('th');
-    newTh.className = 'last5-col';
-    newTh.style.cssText = 'text-align:center;font-size:8px;color:var(--muted);padding:2px 2px;min-width:32px;line-height:1.2;';
-    newTh.innerHTML = `${g.date}<br><span style="font-size:7px;">${g.opp}</span>`;
+    newTh.id = 'last5-header';
+    newTh.colSpan = 5;
+    newTh.style.cssText = 'text-align:center;font-size:9px;color:var(--muted);';
+    newTh.textContent = 'LAST 5';
     tr.insertBefore(newTh, totalTh);
+  } else {
+    for (const g of _last5Games) {
+      const newTh = document.createElement('th');
+      newTh.className = 'last5-col';
+      newTh.style.cssText = 'text-align:center;font-size:8px;color:var(--muted);padding:2px 2px;min-width:32px;line-height:1.2;';
+      newTh.innerHTML = `${g.date}<br><span style="font-size:7px;">${g.opp}</span>`;
+      tr.insertBefore(newTh, totalTh);
+    }
   }
+
+  // Update SUM row colspan to match
+  const sumRow = document.getElementById('team-sums-row');
+  if (sumRow) sumRow.children[1].colSpan = _last5Games.length || 5;
 }
 
 function renderTeamBaseline() {
@@ -4279,18 +4290,19 @@ function updateTeamSums() {
   sumTotal = sumPg + sumSg + sumSf + sumPf + sumC;
 
   const clr = (v, target) => v > target + 1 ? 'var(--red)' : v < target - 1 ? 'var(--yellow)' : 'var(--green)';
-  document.getElementById('sum-total').textContent = sumTotal.toFixed(0);
-  document.getElementById('sum-total').style.color = clr(sumTotal, 240);
-  document.getElementById('sum-pg').textContent = sumPg.toFixed(0);
-  document.getElementById('sum-pg').style.color = clr(sumPg, 48);
-  document.getElementById('sum-sg').textContent = sumSg.toFixed(0);
-  document.getElementById('sum-sg').style.color = clr(sumSg, 48);
-  document.getElementById('sum-sf').textContent = sumSf.toFixed(0);
-  document.getElementById('sum-sf').style.color = clr(sumSf, 48);
-  document.getElementById('sum-pf').textContent = sumPf.toFixed(0);
-  document.getElementById('sum-pf').style.color = clr(sumPf, 48);
-  document.getElementById('sum-c').textContent = sumC.toFixed(0);
-  document.getElementById('sum-c').style.color = clr(sumC, 48);
+  const badBg = (v, target) => Math.abs(v - target) > 0.5 ? 'rgba(198,40,40,0.15)' : '';
+  function setSumCell(id, val, target) {
+    const el = document.getElementById(id);
+    el.textContent = val.toFixed(0);
+    el.style.color = clr(val, target);
+    el.style.background = badBg(val, target);
+  }
+  setSumCell('sum-total', sumTotal, 240);
+  setSumCell('sum-pg', sumPg, 48);
+  setSumCell('sum-sg', sumSg, 48);
+  setSumCell('sum-sf', sumSf, 48);
+  setSumCell('sum-pf', sumPf, 48);
+  setSumCell('sum-c', sumC, 48);
 
   // Compute weighted pace
   let paceSum = 0, paceMinSum = 0;
