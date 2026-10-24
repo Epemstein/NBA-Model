@@ -3822,6 +3822,8 @@ function loadTeamBaseline() {
   if (!team) return;
   _selectedTeam = team;
   _archivedPlayers = [];
+  _last5Games = [];
+  _last5PlayerMin = {};
 
   // Load roster from nba_rosters/all (1 read for all teams)
   fbDb.collection('nba_rosters').doc('all').get().then(allSnap => {
