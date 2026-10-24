@@ -1423,7 +1423,7 @@ function _gameSpreadForSource(g, source) {
   const avgOrtg = STATE.leagueAvgOrtg || 114.8;
   const paceMult = 1.0;
   const hca = (STATE.settings?.hca || 1.5) / 2;
-  const b2bPen = (STATE.settings?.b2b ?? 1.0) / 2;
+  const b2bPen = (STATE.settings?.b2b ?? 1.0);
   const pace = (g._rawPace || g.matchup_pace || 95) * paceMult;
 
   function teamRating(players, src) {
@@ -1452,7 +1452,7 @@ function _gameTotalForSource(g, source) {
   const avgOrtg = STATE.leagueAvgOrtg || 114.8;
   const paceMult = 1.0;
   const hca = (STATE.settings?.hca || 1.5) / 2;
-  const b2bPen = (STATE.settings?.b2b ?? 1.0) / 2;
+  const b2bPen = (STATE.settings?.b2b ?? 1.0);
   const pace = (g._rawPace || g.matchup_pace || 95) * paceMult;
   function teamRating(players, src) {
     const totalRaw = players.reduce((s, p) => s + (p.min || 0) / 48, 0);
@@ -1521,7 +1521,7 @@ function recomputeProjections() {
   const avgOrtg = STATE.leagueAvgOrtg || 114.8;
   const paceMult = 1.0;
   const hca = (STATE.settings?.hca || 1.5) / 2;
-  const b2bPen = (STATE.settings?.b2b ?? 1.0) / 2;
+  const b2bPen = (STATE.settings?.b2b ?? 1.0);
 
   for (const g of STATE.games) {
     for (const side of ['away', 'home']) {
@@ -1942,7 +1942,7 @@ function renderGames() {
             <div class="math-row"><span class="mk">League Avg ORTG</span><span class="mv">${STATE.leagueAvgOrtg}</span></div>
             <div class="math-row"><span class="mk">Matchup Pace (adj)</span><span class="mv">${g.matchup_pace || '—'}</span></div>
             <div class="math-row"><span class="mk">Home Court Adv</span><span class="mv">±${STATE.settings.hca / 2}</span></div>
-            ${g.away_b2b || g.home_b2b ? `<div class="math-row"><span class="mk">Back-to-Back</span><span class="mv" style="color:var(--red);">${g.away_b2b ? g.away + ' ' : ''}${g.home_b2b ? g.home : ''} (−${(STATE.settings.b2b ?? 1.0) / 2})</span></div>` : ''}
+            ${g.away_b2b || g.home_b2b ? `<div class="math-row"><span class="mk">Back-to-Back</span><span class="mv" style="color:var(--red);">${g.away_b2b ? g.away + ' ' : ''}${g.home_b2b ? g.home : ''} (−${(STATE.settings.b2b ?? 1.0)})</span></div>` : ''}
           </div>
         </div>
       </div>
@@ -2303,7 +2303,7 @@ function _inlineRecalcGame(gameIdx) {
   // Recalc projections
   const avgOrtg = STATE.leagueAvgOrtg || 114.8;
   const hca = (STATE.settings?.hca || 1.5) / 2;
-  const b2bPen = (STATE.settings?.b2b ?? 1.0) / 2;
+  const b2bPen = (STATE.settings?.b2b ?? 1.0);
   const pace = g.matchup_pace || 95;
   const awPP100 = avgOrtg + g.away_off - g.home_def;
   const hwPP100 = avgOrtg + g.home_off - g.away_def;
@@ -4874,7 +4874,7 @@ function saveRoster(silent) {
       // Recalc projections
       const avgOrtg = STATE.leagueAvgOrtg || 114.8;
       const hca = (STATE.settings.hca || 1.5) / 2;
-      const b2bPen = (STATE.settings?.b2b ?? 1.0) / 2;
+      const b2bPen = (STATE.settings?.b2b ?? 1.0);
       const pace = g.matchup_pace || 95;
       const awPP100 = avgOrtg + gVal(g,"away_off") - gVal(g,"home_def");
       const hwPP100 = avgOrtg + gVal(g,"home_off") - gVal(g,"away_def");
