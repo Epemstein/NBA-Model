@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v173</title>
+<title>NBA ALGO v174</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -2039,6 +2039,7 @@ function loadAndRenderInlinePlayers(gameIdx) {
 
 function _buildInlineSide(gameIdx, side, roster, baselines, overrides) {
   const key = `${gameIdx}_${side}`;
+  if (roster.length) console.log('[DEBUG _buildInlineSide]', side, 'roster[0]:', JSON.stringify(roster[0]), 'keys:', Object.keys(roster[0]), '_nameToNbaId size:', Object.keys(_nameToNbaId).length, '_nameToDarko size:', Object.keys(_nameToDarko).length);
   const players = roster.map(p => {
     let pg=0, sg=0, sf=0, pf=0, c=0;
     const bl = baselines[p.name];
