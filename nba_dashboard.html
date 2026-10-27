@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v172</title>
+<title>NBA ALGO v173</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1481,20 +1481,32 @@ function _gameTotalForSource(g, source) {
 let _darkoLookup = {};   // {nba_id: {dpm, o_dpm, d_dpm}}
 let _lebronLookup = {};  // {nba_id: lb_dpm}
 let _epmLookup = {};     // {nba_id: {epm, epm_o, epm_d}}
+let _nameToDarko = {};   // {normName: {dpm, o_dpm, d_dpm}}
+let _nameToNbaId = {};   // {normName: nba_id}
+let _nameToLebron = {};  // {normName: lb_dpm}
+let _nameToEpm = {};     // {normName: {epm, epm_o, epm_d}}
 
 function buildRatingLookups() {
   for (const g of STATE.games) {
     for (const side of ['away', 'home']) {
       for (const p of (g[`${side}_players`] || [])) {
-        if (!p.nba_id) continue;
-        if (p.dpm != null) {
-          _darkoLookup[p.nba_id] = { dpm: p.dpm, o_dpm: p.o_dpm, d_dpm: p.d_dpm };
+        const nn = p.name ? normName(p.name) : '';
+        if (p.nba_id) {
+          if (nn) _nameToNbaId[nn] = p.nba_id;
+          if (p.dpm != null) {
+            _darkoLookup[p.nba_id] = { dpm: p.dpm, o_dpm: p.o_dpm, d_dpm: p.d_dpm };
+          }
+          if (p.lb_dpm != null) {
+            _lebronLookup[p.nba_id] = p.lb_dpm;
+          }
+          if (p.epm != null) {
+            _epmLookup[p.nba_id] = { epm: p.epm, epm_o: p.epm_o, epm_d: p.epm_d };
+          }
         }
-        if (p.lb_dpm != null) {
-          _lebronLookup[p.nba_id] = p.lb_dpm;
-        }
-        if (p.epm != null) {
-          _epmLookup[p.nba_id] = { epm: p.epm, epm_o: p.epm_o, epm_d: p.epm_d };
+        if (nn) {
+          if (p.dpm != null) _nameToDarko[nn] = { dpm: p.dpm, o_dpm: p.o_dpm, d_dpm: p.d_dpm };
+          if (p.lb_dpm != null) _nameToLebron[nn] = p.lb_dpm;
+          if (p.epm != null) _nameToEpm[nn] = { epm: p.epm, epm_o: p.epm_o, epm_d: p.epm_d };
         }
       }
     }
@@ -1504,12 +1516,14 @@ function buildRatingLookups() {
 function getDarko(p) {
   if (p.dpm != null) return { dpm: p.dpm, o_dpm: p.o_dpm || 0, d_dpm: p.d_dpm || 0 };
   if (p.nba_id && _darkoLookup[p.nba_id]) return _darkoLookup[p.nba_id];
+  if (p.name) { const d = _nameToDarko[normName(p.name)]; if (d) return d; }
   return { dpm: null, o_dpm: 0, d_dpm: 0 };
 }
 
 function getLbDpm(p) {
   if (p.lb_dpm != null) return p.lb_dpm;
   if (p.nba_id && _lebronLookup[p.nba_id] != null) return _lebronLookup[p.nba_id];
+  if (p.name) { const v = _nameToLebron[normName(p.name)]; if (v != null) return v; }
   return null;
 }
 
@@ -2037,8 +2051,9 @@ function _buildInlineSide(gameIdx, side, roster, baselines, overrides) {
     } else if (ov != null && ov === 0) {
       pg=0; sg=0; sf=0; pf=0; c=0;
     }
+    const nbaId = p.nba_id || (p.name ? _nameToNbaId[normName(p.name)] : '') || '';
     return {
-      name: p.name, pos: p.pos||'', nba_id: p.nba_id||'',
+      name: p.name, pos: p.pos||'', nba_id: nbaId,
       pg, sg, sf, pf, c,
       dpm: p.dpm ?? null, o_dpm: p.o_dpm ?? null, d_dpm: p.d_dpm ?? null,
       epm: p.epm, epm_o: p.epm_o, epm_d: p.epm_d,
