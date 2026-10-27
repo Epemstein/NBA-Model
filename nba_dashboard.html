@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v175</title>
+<title>NBA ALGO v176</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1998,7 +1998,27 @@ function _loadRosterData(team, gameIdx, side) {
           _inlineRosterCache[t] = _inlineRosterCache[t] || { roster: [], baselines: {}, _blLoaded: false };
           _inlineRosterCache[t].roster = pl;
         }
-        return (_inlineRosterCache[team] || {}).roster || [];
+        let roster = (_inlineRosterCache[team] || {}).roster || [];
+        // Fallback: build roster from game player data if nba_rosters is empty for this team
+        if (!roster.length && STATE.games.length) {
+          const seen = new Set();
+          for (const gm of STATE.games) {
+            for (const sd of ['away', 'home']) {
+              if (gm[sd] !== team) continue;
+              for (const p of (gm[`${sd}_players`] || [])) {
+                const k = p.nba_id || p.name;
+                if (seen.has(k)) continue;
+                seen.add(k);
+                roster.push(p);
+              }
+            }
+          }
+          if (roster.length) {
+            _inlineRosterCache[team] = _inlineRosterCache[team] || { roster: [], baselines: {}, _blLoaded: false };
+            _inlineRosterCache[team].roster = roster;
+          }
+        }
+        return roster;
       })
     : Promise.resolve(cached.roster);
 
@@ -2039,7 +2059,6 @@ function loadAndRenderInlinePlayers(gameIdx) {
 
 function _buildInlineSide(gameIdx, side, roster, baselines, overrides) {
   const key = `${gameIdx}_${side}`;
-  if (roster.length) console.log('[DEBUG _buildInlineSide]', side, 'roster[0]:', JSON.stringify(roster[0]), 'keys:', Object.keys(roster[0]), '_nameToNbaId size:', Object.keys(_nameToNbaId).length, '_nameToDarko size:', Object.keys(_nameToDarko).length);
   const players = roster.map(p => {
     let pg=0, sg=0, sf=0, pf=0, c=0;
     const bl = baselines[p.name];
@@ -2129,10 +2148,7 @@ function _renderInlinePlayersPanel(gameIdx) {
       return p.pg !== (pBl.pg||0) || p.sg !== (pBl.sg||0) || p.sf !== (pBl.sf||0) || p.pf !== (pBl.pf||0) || p.c !== (pBl.c||0);
     });
 
-    const _dbg0 = players[0] || {};
-    const _dbgInfo = `[DBG] dpm=${_dbg0.dpm} nba_id=${_dbg0.nba_id} keys=${Object.keys(_dbg0).join(',')} nameLookups=${Object.keys(_nameToDarko).length}`;
     return `<div>
-      <div style="font-size:9px;color:#c62828;font-family:monospace;padding:2px 4px;background:#fff3e0;word-break:break-all;">${_dbgInfo}</div>
       <div class="math-col-title" style="display:flex;align-items:center;justify-content:space-between;">
         <span>${team} Rotation</span>
         <span style="display:flex;align-items:center;gap:6px;">
