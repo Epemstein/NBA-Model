@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v174</title>
+<title>NBA ALGO v175</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -2129,7 +2129,10 @@ function _renderInlinePlayersPanel(gameIdx) {
       return p.pg !== (pBl.pg||0) || p.sg !== (pBl.sg||0) || p.sf !== (pBl.sf||0) || p.pf !== (pBl.pf||0) || p.c !== (pBl.c||0);
     });
 
+    const _dbg0 = players[0] || {};
+    const _dbgInfo = `[DBG] dpm=${_dbg0.dpm} nba_id=${_dbg0.nba_id} keys=${Object.keys(_dbg0).join(',')} nameLookups=${Object.keys(_nameToDarko).length}`;
     return `<div>
+      <div style="font-size:9px;color:#c62828;font-family:monospace;padding:2px 4px;background:#fff3e0;word-break:break-all;">${_dbgInfo}</div>
       <div class="math-col-title" style="display:flex;align-items:center;justify-content:space-between;">
         <span>${team} Rotation</span>
         <span style="display:flex;align-items:center;gap:6px;">
