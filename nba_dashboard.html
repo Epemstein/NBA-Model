@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v179</title>
+<title>NBA ALGO v180</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1210,21 +1210,7 @@ input[type=number] { -moz-appearance: textfield; }
       </div>
       <div style="overflow-x:auto;max-height:60vh;overflow-y:auto;">
         <table style="width:100%;border-collapse:collapse;font-size:12px;">
-          <thead>
-            <tr style="border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface);z-index:2;">
-              <th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--muted);">PLAYER</th>
-              <th style="text-align:right;padding:6px 4px;font-size:10px;color:var(--muted);width:50px;">TOTAL</th>
-              <th style="text-align:center;padding:6px 2px;font-size:10px;color:var(--accent);width:50px;">PG</th>
-              <th style="text-align:center;padding:6px 2px;font-size:10px;color:var(--accent);width:50px;">SG</th>
-              <th style="text-align:center;padding:6px 2px;font-size:10px;color:var(--accent);width:50px;">SF</th>
-              <th style="text-align:center;padding:6px 2px;font-size:10px;color:var(--accent);width:50px;">PF</th>
-              <th style="text-align:center;padding:6px 2px;font-size:10px;color:var(--accent);width:50px;">C</th>
-              <th style="text-align:right;padding:6px 4px;font-size:10px;color:var(--muted);width:40px;">OFF</th>
-              <th style="text-align:right;padding:6px 4px;font-size:10px;color:var(--muted);width:40px;">DEF</th>
-              <th style="text-align:right;padding:6px 4px;font-size:10px;color:var(--muted);width:40px;">DPM</th>
-            </tr>
-            <tr id="baseline-modal-sums" style="background:#f0f7ff;font-weight:700;font-family:var(--mono);font-size:11px;position:sticky;top:28px;z-index:2;"></tr>
-          </thead>
+          <thead id="baseline-modal-thead"></thead>
           <tbody id="baseline-modal-body"></tbody>
         </table>
       </div>
@@ -4768,33 +4754,39 @@ function renderBaselineModal() {
 
   document.getElementById('baseline-modal-total').innerHTML = `Total: <b style="color:${totalClr}">${totalMin.toFixed(0)}</b> / 240 min`;
 
-  // Last 5 header columns
+  // Build thead dynamically with Last 5 columns
   const l5hdr = _modalLast5Games.length
     ? _modalLast5Games.map(g => `<th style="text-align:center;font-size:9px;color:var(--muted);padding:4px 2px;min-width:32px;"><div>${g.date}</div><div style="font-weight:400;">${g.opp}</div></th>`).join('')
-    : '<th style="text-align:center;font-size:9px;color:var(--muted);padding:4px 2px;">LAST 5</th>';
+    : '';
   const l5span = _modalLast5Games.length || 1;
+  const l5sumBlank = _modalLast5Games.length ? `<td colspan="${l5span}"></td>` : '';
+  const thStyle = 'font-size:10px;padding:6px 2px;';
 
-  // Update header row with last5 columns
-  const hdrRow = document.querySelector('#baseline-modal-body')?.closest('table')?.querySelector('thead tr:first-child');
-  if (hdrRow) {
-    hdrRow.querySelectorAll('.ml5h').forEach(el => el.remove());
-    const playerTh = hdrRow.children[0];
-    const frag = document.createRange().createContextualFragment(l5hdr.replace(/<th /g, '<th class="ml5h" '));
-    playerTh.after(frag);
-  }
-
-  // Sums row
-  const l5blank = `<td colspan="${l5span}"></td>`;
-  document.getElementById('baseline-modal-sums').innerHTML = `
-    <td style="padding:6px 8px;font-size:10px;color:var(--muted);">SUM</td>
-    ${l5blank}
-    <td style="text-align:right;padding:6px 4px;color:${totalClr};">${totalMin.toFixed(0)}</td>
-    <td style="text-align:center;color:${posClr(sumPg)};">${sumPg.toFixed(0)}</td>
-    <td style="text-align:center;color:${posClr(sumSg)};">${sumSg.toFixed(0)}</td>
-    <td style="text-align:center;color:${posClr(sumSf)};">${sumSf.toFixed(0)}</td>
-    <td style="text-align:center;color:${posClr(sumPf)};">${sumPf.toFixed(0)}</td>
-    <td style="text-align:center;color:${posClr(sumC)};">${sumC.toFixed(0)}</td>
-    <td></td><td></td><td></td>`;
+  document.getElementById('baseline-modal-thead').innerHTML = `
+    <tr style="border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface);z-index:2;">
+      <th style="text-align:left;padding:6px 8px;${thStyle}color:var(--muted);">PLAYER</th>
+      ${l5hdr}
+      <th style="text-align:right;padding:6px 4px;${thStyle}color:var(--muted);width:50px;">TOTAL</th>
+      <th style="text-align:center;${thStyle}color:var(--accent);width:50px;">PG</th>
+      <th style="text-align:center;${thStyle}color:var(--accent);width:50px;">SG</th>
+      <th style="text-align:center;${thStyle}color:var(--accent);width:50px;">SF</th>
+      <th style="text-align:center;${thStyle}color:var(--accent);width:50px;">PF</th>
+      <th style="text-align:center;${thStyle}color:var(--accent);width:50px;">C</th>
+      <th style="text-align:right;padding:6px 4px;${thStyle}color:var(--muted);width:40px;">OFF</th>
+      <th style="text-align:right;padding:6px 4px;${thStyle}color:var(--muted);width:40px;">DEF</th>
+      <th style="text-align:right;padding:6px 4px;${thStyle}color:var(--muted);width:40px;">DPM</th>
+    </tr>
+    <tr style="background:#f0f7ff;font-weight:700;font-family:var(--mono);font-size:11px;position:sticky;top:28px;z-index:2;">
+      <td style="padding:6px 8px;font-size:10px;color:var(--muted);">SUM</td>
+      ${l5sumBlank}
+      <td style="text-align:right;padding:6px 4px;color:${totalClr};">${totalMin.toFixed(0)}</td>
+      <td style="text-align:center;color:${posClr(sumPg)};">${sumPg.toFixed(0)}</td>
+      <td style="text-align:center;color:${posClr(sumSg)};">${sumSg.toFixed(0)}</td>
+      <td style="text-align:center;color:${posClr(sumSf)};">${sumSf.toFixed(0)}</td>
+      <td style="text-align:center;color:${posClr(sumPf)};">${sumPf.toFixed(0)}</td>
+      <td style="text-align:center;color:${posClr(sumC)};">${sumC.toFixed(0)}</td>
+      <td></td><td></td><td></td>
+    </tr>`;
 
   // Players
   const hs = (id) => id ? `https://cdn.nba.com/headshots/nba/latest/260x190/${id}.png` : '';
