@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v178</title>
+<title>NBA ALGO v179</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -4656,6 +4656,8 @@ async function applyBaselines() {
 // ── Baseline Editor Modal ────────────────────────────────────────────
 let _modalTeam = '';
 let _modalPlayers = [];
+let _modalLast5Games = [];
+let _modalLast5Min = {};
 
 function openBaselineModal(team) {
   _modalTeam = team;
@@ -4703,6 +4705,33 @@ function openBaselineModal(team) {
     });
     _modalPlayers.sort((a, b) => (b.pg+b.sg+b.sf+b.pf+b.c) - (a.pg+a.sg+a.sf+a.pf+a.c));
     renderBaselineModal();
+    // Fetch last 5 games in background
+    _modalLast5Games = [];
+    _modalLast5Min = {};
+    fetch(`${RENDER_URL}/game-logs?team=${team.toLowerCase()}&limit=5`).then(r => r.json()).then(data => {
+      if (!data.games || !data.games.length || _modalTeam !== team) return;
+      const espnMap = {WAS:'WSH',GSW:'GS',SAS:'SA',NYK:'NY',NOP:'NO',UTA:'UTAH'};
+      const _nameAlias = {'Bones Hyland':'Nah\'Shon Hyland','Nic Claxton':'Nicolas Claxton','Moe Wagner':'Moritz Wagner','PJ Washington':'P.J. Washington','CJ McCollum':'C.J. McCollum','AJ Green':'A.J. Green','RJ Barrett':'R.J. Barrett','OG Anunoby':'O.G. Anunoby','TJ McConnell':'T.J. McConnell'};
+      for (const g of data.games) {
+        const dt = new Date(g.date);
+        const dateStr = (dt.getMonth()+1) + '/' + dt.getDate();
+        const opp = Object.keys(g.players).find(t => t !== team && t !== espnMap[team]) || '?';
+        _modalLast5Games.push({date: dateStr, opp});
+        const players = g.players[team] || g.players[espnMap[team]] || Object.values(g.players).find(arr => arr.length > 0) || [];
+        for (const p of players) {
+          const names = [p.name, normName(p.name)];
+          if (_nameAlias[p.name]) { names.push(_nameAlias[p.name]); names.push(normName(_nameAlias[p.name])); }
+          for (const n of names) {
+            if (!_modalLast5Min[n]) _modalLast5Min[n] = new Array(_modalLast5Games.length - 1).fill(null);
+            _modalLast5Min[n][_modalLast5Games.length - 1] = p.min;
+          }
+        }
+        for (const n in _modalLast5Min) {
+          if (_modalLast5Min[n].length < _modalLast5Games.length) _modalLast5Min[n].push(null);
+        }
+      }
+      renderBaselineModal();
+    }).catch(() => {});
   });
 }
 
@@ -4710,6 +4739,8 @@ function closeBaselineModal() {
   document.getElementById('baseline-modal-overlay').style.display = 'none';
   _modalTeam = '';
   _modalPlayers = [];
+  _modalLast5Games = [];
+  _modalLast5Min = {};
 }
 
 function renderBaselineModal() {
@@ -4737,9 +4768,26 @@ function renderBaselineModal() {
 
   document.getElementById('baseline-modal-total').innerHTML = `Total: <b style="color:${totalClr}">${totalMin.toFixed(0)}</b> / 240 min`;
 
+  // Last 5 header columns
+  const l5hdr = _modalLast5Games.length
+    ? _modalLast5Games.map(g => `<th style="text-align:center;font-size:9px;color:var(--muted);padding:4px 2px;min-width:32px;"><div>${g.date}</div><div style="font-weight:400;">${g.opp}</div></th>`).join('')
+    : '<th style="text-align:center;font-size:9px;color:var(--muted);padding:4px 2px;">LAST 5</th>';
+  const l5span = _modalLast5Games.length || 1;
+
+  // Update header row with last5 columns
+  const hdrRow = document.querySelector('#baseline-modal-body')?.closest('table')?.querySelector('thead tr:first-child');
+  if (hdrRow) {
+    hdrRow.querySelectorAll('.ml5h').forEach(el => el.remove());
+    const playerTh = hdrRow.children[0];
+    const frag = document.createRange().createContextualFragment(l5hdr.replace(/<th /g, '<th class="ml5h" '));
+    playerTh.after(frag);
+  }
+
   // Sums row
+  const l5blank = `<td colspan="${l5span}"></td>`;
   document.getElementById('baseline-modal-sums').innerHTML = `
     <td style="padding:6px 8px;font-size:10px;color:var(--muted);">SUM</td>
+    ${l5blank}
     <td style="text-align:right;padding:6px 4px;color:${totalClr};">${totalMin.toFixed(0)}</td>
     <td style="text-align:center;color:${posClr(sumPg)};">${sumPg.toFixed(0)}</td>
     <td style="text-align:center;color:${posClr(sumSg)};">${sumSg.toFixed(0)}</td>
@@ -4750,20 +4798,30 @@ function renderBaselineModal() {
 
   // Players
   const hs = (id) => id ? `https://cdn.nba.com/headshots/nba/latest/260x190/${id}.png` : '';
+  function modalL5Cells(p) {
+    if (!_modalLast5Games.length) return '<td style="text-align:center;font-family:var(--mono);font-size:10px;color:var(--muted);padding:4px 2px;">--</td>';
+    const mins = _modalLast5Min[p.name] || _modalLast5Min[normName(p.name)] || [];
+    return _modalLast5Games.map((g, i) => {
+      const m = mins[i];
+      return `<td style="text-align:center;font-family:var(--mono);font-size:10px;color:${m != null ? 'var(--fg)' : 'var(--muted)'};padding:4px 2px;min-width:32px;">${m != null ? m : '-'}</td>`;
+    }).join('');
+  }
   document.getElementById('baseline-modal-body').innerHTML = _modalPlayers.map((p, i) => {
     const total = p.pg+p.sg+p.sf+p.pf+p.c;
     const dimmed = total === 0 ? 'opacity:0.35;' : '';
     const hsUrl = hs(p.nba_id);
+    const injHtml = p.injury ? `<span class="inj-badge" onmouseenter="showInjTip(event,this)" onmouseleave="hideInjTip()" data-inj="${(p.injury_detail||'No details available').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}" style="background:#c62828;color:#fff;font-size:8px;font-weight:700;padding:1px 3px;border-radius:2px;margin-left:4px;cursor:help;">${p.injury}</span>` : '';
     return `<tr style="border-bottom:1px solid #f0f0f0;height:42px;${dimmed}">
       <td style="padding:6px 8px;white-space:nowrap;">
         <div style="display:flex;align-items:center;gap:8px;">
           <img src="${hsUrl || placeholder}" style="width:36px;height:28px;object-fit:cover;object-position:top;border-radius:3px;background:#e0e0e0;flex-shrink:0;" onerror="this.src='${placeholder}'" />
           <div>
-            <div style="font-size:13px;font-weight:600;">${p.name}${p.injury ? `<span style="background:#c62828;color:#fff;font-size:8px;font-weight:700;padding:1px 3px;border-radius:2px;margin-left:4px;">${p.injury}</span>` : ''}</div>
+            <div style="font-size:13px;font-weight:600;">${p.name}${injHtml}</div>
             <div style="font-size:10px;color:var(--muted);">${p.pos||''} <span style="font-family:var(--mono);color:${dpmColor(pDpm(p))};font-weight:600;">${fmtDpm(pDpm(p))}</span></div>
           </div>
         </div>
       </td>
+      ${modalL5Cells(p)}
       <td style="text-align:right;font-family:var(--mono);font-weight:700;font-size:13px;padding:6px 4px;">${total > 0 ? total.toFixed(1) : '\u2014'}</td>
       <td style="text-align:center;padding:4px 2px;"><input type="number" value="${p.pg||''}" min="0" max="48" step="0.5" style="width:44px;text-align:center;font-size:12px;padding:3px 2px;font-family:var(--mono);" onchange="modalUpdatePos(${i},'pg',this.value)" placeholder="0"></td>
       <td style="text-align:center;padding:4px 2px;"><input type="number" value="${p.sg||''}" min="0" max="48" step="0.5" style="width:44px;text-align:center;font-size:12px;padding:3px 2px;font-family:var(--mono);" onchange="modalUpdatePos(${i},'sg',this.value)" placeholder="0"></td>
