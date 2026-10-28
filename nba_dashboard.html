@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v184</title>
+<title>NBA ALGO v185</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -4810,7 +4810,7 @@ function renderBaselineModal() {
         <div style="display:flex;align-items:center;gap:8px;">
           <img src="${hsUrl || placeholder}" style="width:36px;height:28px;object-fit:cover;object-position:top;border-radius:3px;background:#e0e0e0;flex-shrink:0;" onerror="this.src='${placeholder}'" />
           <div>
-            <div style="font-size:13px;font-weight:600;">${p.name}${injHtml}</div>
+            <div style="font-size:13px;font-weight:600;"><span style="cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px;" onclick="toggleDarkoHistory('${p.nba_id}',this)">${p.name}</span>${injHtml}</div>
             <div style="font-size:10px;color:var(--muted);">${p.pos||''} <span style="font-family:var(--mono);color:${dpmColor(pDpm(p))};font-weight:600;">${fmtDpm(pDpm(p))}</span></div>
           </div>
         </div>
@@ -4883,6 +4883,97 @@ document.addEventListener('keydown', e => {
     }
   }
 });
+
+// ── DARKO History Chart ─────────────────────────────────────────────────
+let _darkoHistoryCache = {}; // {nba_id: [{date, dpm, o_dpm, d_dpm}]}
+
+function toggleDarkoHistory(nbaId, el) {
+  if (!nbaId) return;
+  const tr = el.closest('tr');
+  const existing = tr.nextElementSibling;
+  if (existing && existing.classList.contains('darko-history-row')) {
+    existing.remove();
+    return;
+  }
+  // Remove any other open history rows
+  document.querySelectorAll('.darko-history-row').forEach(r => r.remove());
+
+  const colSpan = tr.children.length;
+  const row = document.createElement('tr');
+  row.className = 'darko-history-row';
+  row.innerHTML = `<td colspan="${colSpan}" style="padding:8px 12px;background:#f8f8f8;"><div style="font-size:11px;color:var(--muted);">Loading DARKO history...</div></td>`;
+  tr.after(row);
+
+  if (_darkoHistoryCache[nbaId]) {
+    _renderDarkoChart(row, _darkoHistoryCache[nbaId], colSpan);
+    return;
+  }
+
+  fbDb.collection('nba_darko_history').doc(String(nbaId)).get().then(snap => {
+    const entries = snap.exists ? (snap.data().entries || []) : [];
+    entries.sort((a, b) => a.date.localeCompare(b.date));
+    _darkoHistoryCache[nbaId] = entries;
+    _renderDarkoChart(row, entries, colSpan);
+  }).catch(e => {
+    row.innerHTML = `<td colspan="${colSpan}" style="padding:8px;background:#f8f8f8;font-size:11px;color:var(--red);">Error loading history</td>`;
+  });
+}
+
+function _renderDarkoChart(row, entries, colSpan) {
+  if (!entries.length) {
+    row.innerHTML = `<td colspan="${colSpan}" style="padding:8px 12px;background:#f8f8f8;font-size:11px;color:var(--muted);">No DARKO history available yet (data starts accumulating after next pipeline run)</td>`;
+    return;
+  }
+
+  const W = 500, H = 100, pad = 30;
+  const dpms = entries.map(e => e.dpm);
+  const minV = Math.min(...dpms, 0) - 0.5;
+  const maxV = Math.max(...dpms, 0) + 0.5;
+  const rangeV = maxV - minV || 1;
+
+  const x = (i) => pad + (i / Math.max(entries.length - 1, 1)) * (W - pad * 2);
+  const y = (v) => pad + (1 - (v - minV) / rangeV) * (H - pad * 2);
+
+  // Zero line
+  const zeroY = y(0);
+  let svg = `<line x1="${pad}" y1="${zeroY}" x2="${W - pad}" y2="${zeroY}" stroke="#ccc" stroke-width="0.5" stroke-dasharray="3,3"/>`;
+
+  // DPM line
+  const pts = entries.map((e, i) => `${x(i)},${y(e.dpm)}`).join(' ');
+  svg += `<polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2"/>`;
+
+  // Dots with tooltips
+  entries.forEach((e, i) => {
+    const cx = x(i), cy = y(e.dpm);
+    const col = e.dpm >= 0 ? 'var(--green)' : 'var(--red)';
+    svg += `<circle cx="${cx}" cy="${cy}" r="3" fill="${col}" stroke="#fff" stroke-width="1">
+      <title>${e.date}: DPM ${e.dpm >= 0 ? '+' : ''}${e.dpm.toFixed(1)} (OFF ${e.o_dpm >= 0 ? '+' : ''}${e.o_dpm.toFixed(1)}, DEF ${e.d_dpm >= 0 ? '+' : ''}${e.d_dpm.toFixed(1)})</title>
+    </circle>`;
+  });
+
+  // Y-axis labels
+  svg += `<text x="${pad - 4}" y="${y(maxV) + 3}" text-anchor="end" font-size="9" fill="#999">${maxV >= 0 ? '+' : ''}${maxV.toFixed(1)}</text>`;
+  svg += `<text x="${pad - 4}" y="${y(minV) + 3}" text-anchor="end" font-size="9" fill="#999">${minV >= 0 ? '+' : ''}${minV.toFixed(1)}</text>`;
+  if (zeroY > y(maxV) + 10 && zeroY < y(minV) - 10) {
+    svg += `<text x="${pad - 4}" y="${zeroY + 3}" text-anchor="end" font-size="9" fill="#aaa">0</text>`;
+  }
+
+  // Date labels (first and last)
+  svg += `<text x="${x(0)}" y="${H - 2}" text-anchor="start" font-size="8" fill="#999">${entries[0].date}</text>`;
+  if (entries.length > 1) svg += `<text x="${x(entries.length - 1)}" y="${H - 2}" text-anchor="end" font-size="8" fill="#999">${entries[entries.length - 1].date}</text>`;
+
+  const latest = entries[entries.length - 1];
+  row.innerHTML = `<td colspan="${colSpan}" style="padding:8px 12px;background:#f8f8f8;">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div style="font-size:11px;font-weight:600;color:var(--muted);white-space:nowrap;">DARKO DPM<br><span style="font-size:10px;font-weight:400;">${entries.length} days</span></div>
+      <svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:${H}px;">${svg}</svg>
+      <div style="font-size:10px;font-family:var(--mono);white-space:nowrap;text-align:right;">
+        <div style="font-weight:700;color:${dpmColor(latest.dpm)};">${latest.dpm >= 0 ? '+' : ''}${latest.dpm.toFixed(1)}</div>
+        <div style="color:var(--muted);">${entries.length > 1 ? ((latest.dpm - entries[0].dpm) >= 0 ? '▲' : '▼') + ' ' + Math.abs(latest.dpm - entries[0].dpm).toFixed(1) : ''}</div>
+      </div>
+    </div>
+  </td>`;
+}
 
 // ── Roster Editor ───────────────────────────────────────────────────────
 let _rosterState = { gameIdx: null, side: null, players: [], origPlayers: [] };
