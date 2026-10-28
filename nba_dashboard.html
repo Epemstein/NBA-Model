@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v185</title>
+<title>NBA ALGO v186</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1219,6 +1219,14 @@ input[type=number] { -moz-appearance: textfield; }
         <button onclick="closeBaselineModal()" style="background:#eee;color:#333;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;">Cancel</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- DARKO History Popup -->
+<div id="darko-history-popup" style="display:none;position:fixed;inset:0;z-index:700;background:rgba(0,0,0,.4);align-items:center;justify-content:center;" onclick="if(event.target===this)this.style.display='none'">
+  <div style="background:var(--surface);width:90%;max-width:580px;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.3);overflow:hidden;position:relative;">
+    <button onclick="document.getElementById('darko-history-popup').style.display='none'" style="position:absolute;top:8px;right:12px;background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);z-index:1;">&times;</button>
+    <div class="dhp-content"></div>
   </div>
 </div>
 
@@ -4889,23 +4897,13 @@ let _darkoHistoryCache = {}; // {nba_id: [{date, dpm, o_dpm, d_dpm}]}
 
 function toggleDarkoHistory(nbaId, el) {
   if (!nbaId) return;
-  const tr = el.closest('tr');
-  const existing = tr.nextElementSibling;
-  if (existing && existing.classList.contains('darko-history-row')) {
-    existing.remove();
-    return;
-  }
-  // Remove any other open history rows
-  document.querySelectorAll('.darko-history-row').forEach(r => r.remove());
-
-  const colSpan = tr.children.length;
-  const row = document.createElement('tr');
-  row.className = 'darko-history-row';
-  row.innerHTML = `<td colspan="${colSpan}" style="padding:8px 12px;background:#f8f8f8;"><div style="font-size:11px;color:var(--muted);">Loading DARKO history...</div></td>`;
-  tr.after(row);
+  const playerName = el.textContent;
+  const popup = document.getElementById('darko-history-popup');
+  popup.style.display = 'flex';
+  popup.querySelector('.dhp-content').innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:12px;">Loading DARKO history...</div>';
 
   if (_darkoHistoryCache[nbaId]) {
-    _renderDarkoChart(row, _darkoHistoryCache[nbaId], colSpan);
+    _renderDarkoPopup(playerName, _darkoHistoryCache[nbaId]);
     return;
   }
 
@@ -4913,66 +4911,85 @@ function toggleDarkoHistory(nbaId, el) {
     const entries = snap.exists ? (snap.data().entries || []) : [];
     entries.sort((a, b) => a.date.localeCompare(b.date));
     _darkoHistoryCache[nbaId] = entries;
-    _renderDarkoChart(row, entries, colSpan);
+    _renderDarkoPopup(playerName, entries);
   }).catch(e => {
-    row.innerHTML = `<td colspan="${colSpan}" style="padding:8px;background:#f8f8f8;font-size:11px;color:var(--red);">Error loading history</td>`;
+    popup.querySelector('.dhp-content').innerHTML = '<div style="padding:24px;text-align:center;color:var(--red);font-size:12px;">Error loading history</div>';
   });
 }
 
-function _renderDarkoChart(row, entries, colSpan) {
+function _renderDarkoPopup(playerName, entries) {
+  const content = document.querySelector('#darko-history-popup .dhp-content');
   if (!entries.length) {
-    row.innerHTML = `<td colspan="${colSpan}" style="padding:8px 12px;background:#f8f8f8;font-size:11px;color:var(--muted);">No DARKO history available yet (data starts accumulating after next pipeline run)</td>`;
+    content.innerHTML = `<div style="padding:24px;text-align:center;">
+      <div style="font-size:16px;font-weight:700;margin-bottom:8px;">${playerName}</div>
+      <div style="color:var(--muted);font-size:12px;">No DARKO history yet — data accumulates with each pipeline run</div>
+    </div>`;
     return;
   }
 
-  const W = 500, H = 100, pad = 30;
+  const W = 520, H = 180, pad = 40, padR = 20, padB = 30;
   const dpms = entries.map(e => e.dpm);
   const minV = Math.min(...dpms, 0) - 0.5;
   const maxV = Math.max(...dpms, 0) + 0.5;
   const rangeV = maxV - minV || 1;
 
-  const x = (i) => pad + (i / Math.max(entries.length - 1, 1)) * (W - pad * 2);
-  const y = (v) => pad + (1 - (v - minV) / rangeV) * (H - pad * 2);
+  const xPos = (i) => pad + (i / Math.max(entries.length - 1, 1)) * (W - pad - padR);
+  const yPos = (v) => 10 + (1 - (v - minV) / rangeV) * (H - 10 - padB);
 
-  // Zero line
-  const zeroY = y(0);
-  let svg = `<line x1="${pad}" y1="${zeroY}" x2="${W - pad}" y2="${zeroY}" stroke="#ccc" stroke-width="0.5" stroke-dasharray="3,3"/>`;
+  const zeroY = yPos(0);
+  let svg = `<line x1="${pad}" y1="${zeroY}" x2="${W - padR}" y2="${zeroY}" stroke="#ccc" stroke-width="0.5" stroke-dasharray="4,4"/>`;
 
   // DPM line
-  const pts = entries.map((e, i) => `${x(i)},${y(e.dpm)}`).join(' ');
-  svg += `<polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2"/>`;
+  const pts = entries.map((e, i) => `${xPos(i)},${yPos(e.dpm)}`).join(' ');
+  svg += `<polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2.5"/>`;
 
-  // Dots with tooltips
+  // Dots
   entries.forEach((e, i) => {
-    const cx = x(i), cy = y(e.dpm);
+    const cx = xPos(i), cy = yPos(e.dpm);
     const col = e.dpm >= 0 ? 'var(--green)' : 'var(--red)';
-    svg += `<circle cx="${cx}" cy="${cy}" r="3" fill="${col}" stroke="#fff" stroke-width="1">
-      <title>${e.date}: DPM ${e.dpm >= 0 ? '+' : ''}${e.dpm.toFixed(1)} (OFF ${e.o_dpm >= 0 ? '+' : ''}${e.o_dpm.toFixed(1)}, DEF ${e.d_dpm >= 0 ? '+' : ''}${e.d_dpm.toFixed(1)})</title>
+    svg += `<circle cx="${cx}" cy="${cy}" r="4" fill="${col}" stroke="#fff" stroke-width="1.5">
+      <title>${e.date}\nDPM: ${e.dpm >= 0 ? '+' : ''}${e.dpm.toFixed(2)}\nOFF: ${e.o_dpm >= 0 ? '+' : ''}${e.o_dpm.toFixed(2)}\nDEF: ${e.d_dpm >= 0 ? '+' : ''}${e.d_dpm.toFixed(2)}</title>
     </circle>`;
   });
 
-  // Y-axis labels
-  svg += `<text x="${pad - 4}" y="${y(maxV) + 3}" text-anchor="end" font-size="9" fill="#999">${maxV >= 0 ? '+' : ''}${maxV.toFixed(1)}</text>`;
-  svg += `<text x="${pad - 4}" y="${y(minV) + 3}" text-anchor="end" font-size="9" fill="#999">${minV >= 0 ? '+' : ''}${minV.toFixed(1)}</text>`;
-  if (zeroY > y(maxV) + 10 && zeroY < y(minV) - 10) {
-    svg += `<text x="${pad - 4}" y="${zeroY + 3}" text-anchor="end" font-size="9" fill="#aaa">0</text>`;
+  // Y-axis
+  const steps = 5;
+  for (let i = 0; i <= steps; i++) {
+    const v = minV + (rangeV * i / steps);
+    const vy = yPos(v);
+    svg += `<text x="${pad - 6}" y="${vy + 3}" text-anchor="end" font-size="10" fill="#999">${v >= 0 ? '+' : ''}${v.toFixed(1)}</text>`;
+    svg += `<line x1="${pad}" y1="${vy}" x2="${W - padR}" y2="${vy}" stroke="#eee" stroke-width="0.5"/>`;
   }
 
-  // Date labels (first and last)
-  svg += `<text x="${x(0)}" y="${H - 2}" text-anchor="start" font-size="8" fill="#999">${entries[0].date}</text>`;
-  if (entries.length > 1) svg += `<text x="${x(entries.length - 1)}" y="${H - 2}" text-anchor="end" font-size="8" fill="#999">${entries[entries.length - 1].date}</text>`;
+  // X-axis date labels
+  const labelCount = Math.min(entries.length, 6);
+  for (let i = 0; i < labelCount; i++) {
+    const idx = Math.round(i * (entries.length - 1) / Math.max(labelCount - 1, 1));
+    svg += `<text x="${xPos(idx)}" y="${H - 4}" text-anchor="middle" font-size="9" fill="#999">${entries[idx].date}</text>`;
+  }
 
   const latest = entries[entries.length - 1];
-  row.innerHTML = `<td colspan="${colSpan}" style="padding:8px 12px;background:#f8f8f8;">
-    <div style="display:flex;align-items:center;gap:12px;">
-      <div style="font-size:11px;font-weight:600;color:var(--muted);white-space:nowrap;">DARKO DPM<br><span style="font-size:10px;font-weight:400;">${entries.length} days</span></div>
-      <svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:${H}px;">${svg}</svg>
-      <div style="font-size:10px;font-family:var(--mono);white-space:nowrap;text-align:right;">
-        <div style="font-weight:700;color:${dpmColor(latest.dpm)};">${latest.dpm >= 0 ? '+' : ''}${latest.dpm.toFixed(1)}</div>
-        <div style="color:var(--muted);">${entries.length > 1 ? ((latest.dpm - entries[0].dpm) >= 0 ? '▲' : '▼') + ' ' + Math.abs(latest.dpm - entries[0].dpm).toFixed(1) : ''}</div>
+  const first = entries[0];
+  const delta = entries.length > 1 ? latest.dpm - first.dpm : 0;
+
+  content.innerHTML = `
+    <div style="padding:16px 20px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div>
+          <div style="font-size:18px;font-weight:700;">${playerName}</div>
+          <div style="font-size:11px;color:var(--muted);">DARKO DPM · ${entries.length} day${entries.length > 1 ? 's' : ''}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:22px;font-weight:800;font-family:var(--mono);color:${dpmColor(latest.dpm)};">${latest.dpm >= 0 ? '+' : ''}${latest.dpm.toFixed(2)}</div>
+          ${entries.length > 1 ? `<div style="font-size:11px;font-family:var(--mono);color:${delta >= 0 ? 'var(--green)' : 'var(--red)'};">${delta >= 0 ? '▲' : '▼'} ${Math.abs(delta).toFixed(2)}</div>` : ''}
+        </div>
       </div>
-    </div>
-  </td>`;
+      <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px;">${svg}</svg>
+      <div style="display:flex;gap:16px;margin-top:10px;font-size:11px;font-family:var(--mono);">
+        <div>OFF: <span style="color:${dpmColor(latest.o_dpm)};font-weight:600;">${latest.o_dpm >= 0 ? '+' : ''}${latest.o_dpm.toFixed(2)}</span></div>
+        <div>DEF: <span style="color:${dpmColor(latest.d_dpm)};font-weight:600;">${latest.d_dpm >= 0 ? '+' : ''}${latest.d_dpm.toFixed(2)}</span></div>
+      </div>
+    </div>`;
 }
 
 // ── Roster Editor ───────────────────────────────────────────────────────
