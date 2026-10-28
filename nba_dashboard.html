@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v177</title>
+<title>NBA ALGO v178</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1196,6 +1196,46 @@ input[type=number] { -moz-appearance: textfield; }
   </div>
 </div>
 
+<!-- Baseline Editor Modal -->
+<div id="baseline-modal-overlay" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.5);overflow-y:auto;" onclick="if(event.target===this)closeBaselineModal()">
+  <div style="background:var(--surface);width:90%;max-width:900px;margin:40px auto;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.3);overflow:hidden;">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);">
+      <span style="font-weight:700;font-size:14px;">Edit Baseline Minutes</span>
+      <button onclick="closeBaselineModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);padding:0 4px;">&times;</button>
+    </div>
+    <div id="baseline-modal-banner"></div>
+    <div style="padding:0 16px 16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin:8px 0;">
+        <span id="baseline-modal-total" style="font-size:12px;color:var(--muted);"></span>
+      </div>
+      <div style="overflow-x:auto;max-height:60vh;overflow-y:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead>
+            <tr style="border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface);z-index:2;">
+              <th style="text-align:left;padding:6px 8px;font-size:10px;color:var(--muted);">PLAYER</th>
+              <th style="text-align:right;padding:6px 4px;font-size:10px;color:var(--muted);width:50px;">TOTAL</th>
+              <th style="text-align:center;padding:6px 2px;font-size:10px;color:var(--accent);width:50px;">PG</th>
+              <th style="text-align:center;padding:6px 2px;font-size:10px;color:var(--accent);width:50px;">SG</th>
+              <th style="text-align:center;padding:6px 2px;font-size:10px;color:var(--accent);width:50px;">SF</th>
+              <th style="text-align:center;padding:6px 2px;font-size:10px;color:var(--accent);width:50px;">PF</th>
+              <th style="text-align:center;padding:6px 2px;font-size:10px;color:var(--accent);width:50px;">C</th>
+              <th style="text-align:right;padding:6px 4px;font-size:10px;color:var(--muted);width:40px;">OFF</th>
+              <th style="text-align:right;padding:6px 4px;font-size:10px;color:var(--muted);width:40px;">DEF</th>
+              <th style="text-align:right;padding:6px 4px;font-size:10px;color:var(--muted);width:40px;">DPM</th>
+            </tr>
+            <tr id="baseline-modal-sums" style="background:#f0f7ff;font-weight:700;font-family:var(--mono);font-size:11px;position:sticky;top:28px;z-index:2;"></tr>
+          </thead>
+          <tbody id="baseline-modal-body"></tbody>
+        </table>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px;">
+        <button id="baseline-modal-save" onclick="saveBaselineModal()" style="background:var(--accent);color:#fff;border:none;padding:8px 20px;border-radius:6px;font-weight:600;cursor:pointer;">Save Baseline</button>
+        <button onclick="closeBaselineModal()" style="background:#eee;color:#333;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 </div><!-- end app-shell -->
 
 <!-- ═══════════ NOVIG BOOK MODAL ═══════════ -->
@@ -1868,7 +1908,7 @@ function renderGames() {
       <div style="display:flex;">
         <div style="border-right:1px solid var(--border);">${leftBox}</div>
         <div class="gc-teams" style="flex:1;">
-          <div class="gc-team-hdr away" style="background:${awColor};cursor:pointer;" onclick="openRoster(${i},'away')">
+          <div class="gc-team-hdr away" style="background:${awColor};cursor:pointer;" onclick="openBaselineModal('${g.away}')">
             <img src="${teamLogo(g.away)}" style="position:absolute;left:6px;top:50%;transform:translateY(-50%);width:62px;height:62px;object-fit:contain;opacity:.45;pointer-events:none;filter:brightness(1.05) drop-shadow(0 0 2px rgba(0,0,0,.15));${awBad ? 'filter:grayscale(1);' : ''}" onerror="this.style.display='none'" />
             <span class="team-hdr-name" style="padding-left:52px;">${g.away}</span>
             <div style="text-align:right;position:relative;z-index:1;">
@@ -1876,7 +1916,7 @@ function renderGames() {
               ${gVal(g,"proj_spread") != null ? `<div style="font-size:10px;font-family:var(--mono);opacity:.8;margin-top:1px;">${(spreadToWinProb(-gVal(g,"proj_spread"))*100).toFixed(0)}% · ${fmtML(spreadToML(-gVal(g,"proj_spread")))}</div>` : ''}
             </div>
           </div>
-          <div class="gc-team-hdr home" style="background:${hwColor};cursor:pointer;" onclick="openRoster(${i},'home')">
+          <div class="gc-team-hdr home" style="background:${hwColor};cursor:pointer;" onclick="openBaselineModal('${g.home}')">
             <div style="text-align:left;position:relative;z-index:1;">
               <div class="team-hdr-proj">${gVal(g,"home_proj") != null ? gVal(g,"home_proj") : '—'}</div>
               ${gVal(g,"proj_spread") != null ? `<div style="font-size:10px;font-family:var(--mono);opacity:.8;margin-top:1px;">${(spreadToWinProb(gVal(g,"proj_spread"))*100).toFixed(0)}% · ${fmtML(spreadToML(gVal(g,"proj_spread")))}</div>` : ''}
@@ -2032,8 +2072,7 @@ function _loadRosterData(team, gameIdx, side) {
       })
     : Promise.resolve(cached.baselines);
 
-  const overP = fbDb.collection('nba_game_overrides').doc(overKey).get()
-    .then(s => s.exists ? (s.data().players || {}) : {});
+  const overP = Promise.resolve({});
 
   return Promise.all([rosterP, baseP, overP]);
 }
@@ -2151,10 +2190,7 @@ function _renderInlinePlayersPanel(gameIdx) {
     return `<div>
       <div class="math-col-title" style="display:flex;align-items:center;justify-content:space-between;">
         <span>${team} Rotation</span>
-        <span style="display:flex;align-items:center;gap:6px;">
-          <button onclick="inlineRevert(${gameIdx},'${side}')" style="font-size:9px;padding:2px 8px;border:1px solid ${hasOverrides ? 'var(--accent)' : '#ccc'};border-radius:3px;cursor:${hasOverrides ? 'pointer' : 'default'};background:${hasOverrides ? 'var(--accent)' : '#f0f0f0'};color:${hasOverrides ? '#fff' : '#bbb'};font-weight:600;${hasOverrides ? '' : 'pointer-events:none;'}" ${hasOverrides ? '' : 'disabled'}>Revert</button>
-          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:${totalClr};">${totalMin.toFixed(0)} min</span>
-        </span>
+        <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:${totalClr};">${totalMin.toFixed(0)} min</span>
       </div>
       <div style="overflow-x:auto;max-height:500px;overflow-y:auto;">
       <table style="width:100%;border-collapse:collapse;font-size:10px;">
@@ -2205,11 +2241,11 @@ function _renderInlinePlayersPanel(gameIdx) {
               </div>
             </td>
             <td style="text-align:center;font-family:var(--mono);font-weight:700;font-size:11px;padding:2px 2px;">${total > 0 ? total : ''}</td>
-            <td style="text-align:center;padding:1px;${cellBg('pg')}"><input type="number" value="${p.pg||''}" min="0" max="48" step="1" style="width:40px;text-align:center;font-size:10px;padding:2px;font-family:var(--mono);${cellBg('pg')}" onchange="inlineUpdatePos(${gameIdx},'${side}',${j},'pg',this.value)" placeholder="0"></td>
-            <td style="text-align:center;padding:1px;${cellBg('sg')}"><input type="number" value="${p.sg||''}" min="0" max="48" step="1" style="width:40px;text-align:center;font-size:10px;padding:2px;font-family:var(--mono);${cellBg('sg')}" onchange="inlineUpdatePos(${gameIdx},'${side}',${j},'sg',this.value)" placeholder="0"></td>
-            <td style="text-align:center;padding:1px;${cellBg('sf')}"><input type="number" value="${p.sf||''}" min="0" max="48" step="1" style="width:40px;text-align:center;font-size:10px;padding:2px;font-family:var(--mono);${cellBg('sf')}" onchange="inlineUpdatePos(${gameIdx},'${side}',${j},'sf',this.value)" placeholder="0"></td>
-            <td style="text-align:center;padding:1px;${cellBg('pf')}"><input type="number" value="${p.pf||''}" min="0" max="48" step="1" style="width:40px;text-align:center;font-size:10px;padding:2px;font-family:var(--mono);${cellBg('pf')}" onchange="inlineUpdatePos(${gameIdx},'${side}',${j},'pf',this.value)" placeholder="0"></td>
-            <td style="text-align:center;padding:1px;${cellBg('c')}"><input type="number" value="${p.c||''}" min="0" max="48" step="1" style="width:40px;text-align:center;font-size:10px;padding:2px;font-family:var(--mono);${cellBg('c')}" onchange="inlineUpdatePos(${gameIdx},'${side}',${j},'c',this.value)" placeholder="0"></td>
+            <td style="text-align:center;padding:1px;font-family:var(--mono);font-size:10px;${cellBg('pg')}">${p.pg || ''}</td>
+            <td style="text-align:center;padding:1px;font-family:var(--mono);font-size:10px;${cellBg('sg')}">${p.sg || ''}</td>
+            <td style="text-align:center;padding:1px;font-family:var(--mono);font-size:10px;${cellBg('sf')}">${p.sf || ''}</td>
+            <td style="text-align:center;padding:1px;font-family:var(--mono);font-size:10px;${cellBg('pf')}">${p.pf || ''}</td>
+            <td style="text-align:center;padding:1px;font-family:var(--mono);font-size:10px;${cellBg('c')}">${p.c || ''}</td>
           </tr>`;
           }).join('')}
         </tbody>
@@ -4615,6 +4651,179 @@ async function applyBaselines() {
   } catch (e) {
     console.error('applyBaselines error:', e);
   }
+}
+
+// ── Baseline Editor Modal ────────────────────────────────────────────
+let _modalTeam = '';
+let _modalPlayers = [];
+
+function openBaselineModal(team) {
+  _modalTeam = team;
+  const overlay = document.getElementById('baseline-modal-overlay');
+  overlay.style.display = 'block';
+
+  // Load roster + baseline
+  Promise.all([
+    fbDb.collection('nba_rosters').doc('all').get(),
+    fbDb.collection('nba_baselines').doc(team).get(),
+  ]).then(([rosterSnap, baseSnap]) => {
+    let roster = rosterSnap.exists ? (rosterSnap.data().teams || {})[team] || [] : [];
+    // Fallback to game data if roster empty
+    if (!roster.length && STATE.games.length) {
+      const seen = new Set();
+      for (const g of STATE.games) {
+        for (const sd of ['away', 'home']) {
+          if (g[sd] !== team) continue;
+          for (const p of (g[`${sd}_players`] || [])) {
+            const k = p.nba_id || p.name;
+            if (seen.has(k)) continue;
+            seen.add(k);
+            roster.push(p);
+          }
+        }
+      }
+    }
+    const saved = baseSnap.exists ? (baseSnap.data().players || {}) : {};
+
+    _modalPlayers = roster.map(p => {
+      const sv = saved[p.name];
+      let pg=0, sg=0, sf=0, pf=0, c=0;
+      if (sv && typeof sv === 'object') {
+        pg = sv.pg||0; sg = sv.sg||0; sf = sv.sf||0; pf = sv.pf||0; c = sv.c||0;
+      }
+      return {
+        name: p.name, pos: p.pos||'', nba_id: p.nba_id||'',
+        pg, sg, sf, pf, c,
+        dpm: p.dpm ?? null, o_dpm: p.o_dpm ?? null, d_dpm: p.d_dpm ?? null,
+        epm: p.epm, epm_o: p.epm_o, epm_d: p.epm_d,
+        lb_dpm: p.lb_dpm, lb_o_dpm: p.lb_o_dpm, lb_d_dpm: p.lb_d_dpm,
+        pace: p.pace||0,
+        injury: p.injury||'', injury_detail: p.injury_detail||'',
+      };
+    });
+    _modalPlayers.sort((a, b) => (b.pg+b.sg+b.sf+b.pf+b.c) - (a.pg+a.sg+a.sf+a.pf+a.c));
+    renderBaselineModal();
+  });
+}
+
+function closeBaselineModal() {
+  document.getElementById('baseline-modal-overlay').style.display = 'none';
+  _modalTeam = '';
+  _modalPlayers = [];
+}
+
+function renderBaselineModal() {
+  const team = _modalTeam;
+  const color = COLORS[team] || '#333';
+  const fullName = FULL_NAMES[team] || team;
+  const placeholder = `data:image/svg+xml,<%3Fxml version=%221.0%22%3F><svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2236%22 height=%2228%22><rect fill=%22%23ddd%22 width=%2236%22 height=%2228%22/><circle cx=%2218%22 cy=%2210%22 r=%225%22 fill=%22%23bbb%22/><ellipse cx=%2218%22 cy=%2228%22 rx=%229%22 ry=%228%22 fill=%22%23bbb%22/></svg>`;
+
+  // Banner
+  document.getElementById('baseline-modal-banner').innerHTML = `
+    <div style="display:flex;gap:16px;padding:16px 20px;background:linear-gradient(135deg, ${color} 0%, ${color}cc 60%, ${color}88 100%);color:#fff;align-items:center;">
+      <img src="${teamLogo(team)}" style="width:56px;height:56px;object-fit:contain;" onerror="this.style.display='none'" />
+      <div>
+        <div style="font-size:20px;font-weight:800;">${team}</div>
+        <div style="font-size:12px;opacity:.8;">${fullName}</div>
+      </div>
+    </div>`;
+
+  // Totals
+  let sumPg=0, sumSg=0, sumSf=0, sumPf=0, sumC=0;
+  for (const p of _modalPlayers) { sumPg+=p.pg; sumSg+=p.sg; sumSf+=p.sf; sumPf+=p.pf; sumC+=p.c; }
+  const totalMin = sumPg+sumSg+sumSf+sumPf+sumC;
+  const totalClr = Math.abs(totalMin - 240) < 0.5 ? 'var(--green)' : 'var(--red)';
+  const posClr = v => Math.abs(v - 48) < 0.5 ? 'var(--green)' : 'var(--red)';
+
+  document.getElementById('baseline-modal-total').innerHTML = `Total: <b style="color:${totalClr}">${totalMin.toFixed(0)}</b> / 240 min`;
+
+  // Sums row
+  document.getElementById('baseline-modal-sums').innerHTML = `
+    <td style="padding:6px 8px;font-size:10px;color:var(--muted);">SUM</td>
+    <td style="text-align:right;padding:6px 4px;color:${totalClr};">${totalMin.toFixed(0)}</td>
+    <td style="text-align:center;color:${posClr(sumPg)};">${sumPg.toFixed(0)}</td>
+    <td style="text-align:center;color:${posClr(sumSg)};">${sumSg.toFixed(0)}</td>
+    <td style="text-align:center;color:${posClr(sumSf)};">${sumSf.toFixed(0)}</td>
+    <td style="text-align:center;color:${posClr(sumPf)};">${sumPf.toFixed(0)}</td>
+    <td style="text-align:center;color:${posClr(sumC)};">${sumC.toFixed(0)}</td>
+    <td></td><td></td><td></td>`;
+
+  // Players
+  const hs = (id) => id ? `https://cdn.nba.com/headshots/nba/latest/260x190/${id}.png` : '';
+  document.getElementById('baseline-modal-body').innerHTML = _modalPlayers.map((p, i) => {
+    const total = p.pg+p.sg+p.sf+p.pf+p.c;
+    const dimmed = total === 0 ? 'opacity:0.35;' : '';
+    const hsUrl = hs(p.nba_id);
+    return `<tr style="border-bottom:1px solid #f0f0f0;height:42px;${dimmed}">
+      <td style="padding:6px 8px;white-space:nowrap;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <img src="${hsUrl || placeholder}" style="width:36px;height:28px;object-fit:cover;object-position:top;border-radius:3px;background:#e0e0e0;flex-shrink:0;" onerror="this.src='${placeholder}'" />
+          <div>
+            <div style="font-size:13px;font-weight:600;">${p.name}${p.injury ? `<span style="background:#c62828;color:#fff;font-size:8px;font-weight:700;padding:1px 3px;border-radius:2px;margin-left:4px;">${p.injury}</span>` : ''}</div>
+            <div style="font-size:10px;color:var(--muted);">${p.pos||''} <span style="font-family:var(--mono);color:${dpmColor(pDpm(p))};font-weight:600;">${fmtDpm(pDpm(p))}</span></div>
+          </div>
+        </div>
+      </td>
+      <td style="text-align:right;font-family:var(--mono);font-weight:700;font-size:13px;padding:6px 4px;">${total > 0 ? total.toFixed(1) : '\u2014'}</td>
+      <td style="text-align:center;padding:4px 2px;"><input type="number" value="${p.pg||''}" min="0" max="48" step="0.5" style="width:44px;text-align:center;font-size:12px;padding:3px 2px;font-family:var(--mono);" onchange="modalUpdatePos(${i},'pg',this.value)" placeholder="0"></td>
+      <td style="text-align:center;padding:4px 2px;"><input type="number" value="${p.sg||''}" min="0" max="48" step="0.5" style="width:44px;text-align:center;font-size:12px;padding:3px 2px;font-family:var(--mono);" onchange="modalUpdatePos(${i},'sg',this.value)" placeholder="0"></td>
+      <td style="text-align:center;padding:4px 2px;"><input type="number" value="${p.sf||''}" min="0" max="48" step="0.5" style="width:44px;text-align:center;font-size:12px;padding:3px 2px;font-family:var(--mono);" onchange="modalUpdatePos(${i},'sf',this.value)" placeholder="0"></td>
+      <td style="text-align:center;padding:4px 2px;"><input type="number" value="${p.pf||''}" min="0" max="48" step="0.5" style="width:44px;text-align:center;font-size:12px;padding:3px 2px;font-family:var(--mono);" onchange="modalUpdatePos(${i},'pf',this.value)" placeholder="0"></td>
+      <td style="text-align:center;padding:4px 2px;"><input type="number" value="${p.c||''}" min="0" max="48" step="0.5" style="width:44px;text-align:center;font-size:12px;padding:3px 2px;font-family:var(--mono);" onchange="modalUpdatePos(${i},'c',this.value)" placeholder="0"></td>
+      <td style="text-align:right;font-family:var(--mono);font-size:11px;color:${dpmColor(getPlayerOffDef(p).off)};padding:6px 4px;">${fmtDpm(getPlayerOffDef(p).off)}</td>
+      <td style="text-align:right;font-family:var(--mono);font-size:11px;color:${dpmColor(getPlayerOffDef(p).def)};padding:6px 4px;">${fmtDpm(getPlayerOffDef(p).def)}</td>
+      <td style="text-align:right;font-family:var(--mono);font-size:11px;font-weight:700;color:${dpmColor(pDpm(p))};padding:6px 4px;">${fmtDpm(pDpm(p))}</td>
+    </tr>`;
+  }).join('');
+}
+
+function modalUpdatePos(idx, pos, val) {
+  _modalPlayers[idx][pos] = parseFloat(val) || 0;
+  _modalPlayers.sort((a, b) => (b.pg+b.sg+b.sf+b.pf+b.c) - (a.pg+a.sg+a.sf+a.pf+a.c));
+  renderBaselineModal();
+}
+
+function saveBaselineModal() {
+  const team = _modalTeam;
+  if (!team) return;
+  const players = {};
+  for (const p of _modalPlayers) {
+    const total = p.pg+p.sg+p.sf+p.pf+p.c;
+    if (total > 0) {
+      players[p.name] = { pg: p.pg, sg: p.sg, sf: p.sf, pf: p.pf, c: p.c };
+    }
+  }
+  const btn = document.getElementById('baseline-modal-save');
+  btn.textContent = 'Saving...';
+  btn.disabled = true;
+  fbDb.collection('nba_baselines').doc(team).set({ players }).then(() => {
+    btn.textContent = 'Saved \u2713';
+    btn.style.background = 'var(--green)';
+    // Clear caches and recompute
+    _inlineState = {};
+    _inlineRosterCache = {};
+    applyBaselines().then(() => {
+      // Re-render any open inline panels
+      document.querySelectorAll('[id^="players-"].open').forEach(el => {
+        const idx = parseInt(el.id.replace('players-', ''));
+        loadAndRenderInlinePlayers(idx);
+      });
+    });
+    setTimeout(() => {
+      btn.textContent = 'Save Baseline';
+      btn.style.background = 'var(--accent)';
+      btn.disabled = false;
+    }, 1500);
+  }).catch(e => {
+    btn.textContent = 'Error!';
+    btn.style.background = 'var(--red)';
+    console.error('Baseline save error:', e);
+    setTimeout(() => {
+      btn.textContent = 'Save Baseline';
+      btn.style.background = 'var(--accent)';
+      btn.disabled = false;
+    }, 2000);
+  });
 }
 
 // ── Roster Editor ───────────────────────────────────────────────────────
