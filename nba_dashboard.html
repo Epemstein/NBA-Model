@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v180</title>
+<title>NBA ALGO v181</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -4722,6 +4722,8 @@ function openBaselineModal(team) {
 }
 
 function closeBaselineModal() {
+  clearTimeout(_modalSaveTimer);
+  if (_modalDirty) _modalSaveQuiet();
   document.getElementById('baseline-modal-overlay').style.display = 'none';
   _modalTeam = '';
   _modalPlayers = [];
@@ -4827,15 +4829,23 @@ function renderBaselineModal() {
   }).join('');
 }
 
+let _modalSaveTimer = null;
+let _modalDirty = false;
+
 function modalUpdatePos(idx, pos, val) {
   _modalPlayers[idx][pos] = parseFloat(val) || 0;
   _modalPlayers.sort((a, b) => (b.pg+b.sg+b.sf+b.pf+b.c) - (a.pg+a.sg+a.sf+a.pf+a.c));
+  _modalDirty = true;
   renderBaselineModal();
+  // Auto-save with debounce
+  clearTimeout(_modalSaveTimer);
+  _modalSaveTimer = setTimeout(() => _modalSaveQuiet(), 500);
 }
 
-function saveBaselineModal() {
+function _modalSaveQuiet() {
   const team = _modalTeam;
-  if (!team) return;
+  if (!team || !_modalDirty) return;
+  _modalDirty = false;
   const players = {};
   for (const p of _modalPlayers) {
     const total = p.pg+p.sg+p.sf+p.pf+p.c;
@@ -4843,38 +4853,32 @@ function saveBaselineModal() {
       players[p.name] = { pg: p.pg, sg: p.sg, sf: p.sf, pf: p.pf, c: p.c };
     }
   }
-  const btn = document.getElementById('baseline-modal-save');
-  btn.textContent = 'Saving...';
-  btn.disabled = true;
   fbDb.collection('nba_baselines').doc(team).set({ players }).then(() => {
-    btn.textContent = 'Saved \u2713';
-    btn.style.background = 'var(--green)';
-    // Clear caches and recompute
     _inlineState = {};
     _inlineRosterCache = {};
     applyBaselines().then(() => {
-      // Re-render any open inline panels
       document.querySelectorAll('[id^="players-"].open').forEach(el => {
         const idx = parseInt(el.id.replace('players-', ''));
         loadAndRenderInlinePlayers(idx);
       });
     });
-    setTimeout(() => {
-      btn.textContent = 'Save Baseline';
-      btn.style.background = 'var(--accent)';
-      btn.disabled = false;
-    }, 1500);
-  }).catch(e => {
-    btn.textContent = 'Error!';
-    btn.style.background = 'var(--red)';
-    console.error('Baseline save error:', e);
-    setTimeout(() => {
-      btn.textContent = 'Save Baseline';
-      btn.style.background = 'var(--accent)';
-      btn.disabled = false;
-    }, 2000);
-  });
+  }).catch(e => console.error('Baseline auto-save error:', e));
 }
+
+function saveBaselineModal() {
+  clearTimeout(_modalSaveTimer);
+  _modalDirty = true;
+  _modalSaveQuiet();
+  closeBaselineModal();
+}
+
+// Enter key closes modal (saves happen automatically)
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.getElementById('baseline-modal-overlay').style.display === 'block') {
+    e.preventDefault();
+    saveBaselineModal();
+  }
+});
 
 // ── Roster Editor ───────────────────────────────────────────────────────
 let _rosterState = { gameIdx: null, side: null, players: [], origPlayers: [] };
