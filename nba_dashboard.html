@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v176</title>
+<title>NBA ALGO v177</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1374,7 +1374,7 @@ function switchRating(source) {
   });
   renderGames();
   // Re-open panels
-  openPlayers.forEach(i => { const d = document.getElementById('players-' + i); if (d) { d.classList.add('open'); renderPlayersPanel(parseInt(i)); } });
+  openPlayers.forEach(i => { const d = document.getElementById('players-' + i); if (d) { d.classList.add('open'); _renderInlinePlayersPanel(parseInt(i)); } });
   openDrawers.forEach(i => { const d = document.getElementById('drawer-' + i); if (d) d.classList.add('open'); });
   renderOddsSummary();
   updateStrip();
