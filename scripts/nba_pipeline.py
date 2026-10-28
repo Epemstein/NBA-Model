@@ -175,14 +175,15 @@ def fetch_darko():
         r.raise_for_status()
         data = r.json()
         node = data['nodes'][1]['data']
-        keys = [node[i] for i in node[2]]
-        groups = node[29]
+        meta = node[1]  # {'keys': <idx>, 'values': <idx>}
+        keys = [node[i] for i in node[meta['keys']]]
+        groups = node[meta['values']]
 
         # Decode columns from SvelteKit flat array format
         columns = {}
         for gi, gidx in enumerate(groups):
             col_refs = node[gidx]
-            columns[keys[gi]] = [node[x] if isinstance(x, int) else x for x in col_refs]
+            columns[keys[gi]] = [node[x] if isinstance(x, (int, float)) else x for x in col_refs]
 
         n = len(columns['nba_id'])
         players = {}
