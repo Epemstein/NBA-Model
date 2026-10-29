@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v186</title>
+<title>NBA ALGO v187</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1204,6 +1204,7 @@ input[type=number] { -moz-appearance: textfield; }
       <button onclick="closeBaselineModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);padding:0 4px;">&times;</button>
     </div>
     <div id="baseline-modal-banner"></div>
+    <div id="baseline-modal-scatter" style="padding:8px 16px;"></div>
     <div style="padding:0 16px 16px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin:8px 0;">
         <span id="baseline-modal-total" style="font-size:12px;color:var(--muted);"></span>
@@ -4650,6 +4651,7 @@ async function applyBaselines() {
 // ── Baseline Editor Modal ────────────────────────────────────────────
 let _modalTeam = '';
 let _modalPlayers = [];
+let _modalAllPlayers = [];
 let _modalLast5Games = [];
 let _modalLast5Min = {};
 
@@ -4663,7 +4665,14 @@ function openBaselineModal(team) {
     fbDb.collection('nba_rosters').doc('all').get(),
     fbDb.collection('nba_baselines').doc(team).get(),
   ]).then(([rosterSnap, baseSnap]) => {
-    let roster = rosterSnap.exists ? (rosterSnap.data().teams || {})[team] || [] : [];
+    const allTeams = rosterSnap.exists ? (rosterSnap.data().teams || {}) : {};
+    _modalAllPlayers = [];
+    for (const pl of Object.values(allTeams)) {
+      for (const p of pl) {
+        if (p.o_dpm != null && p.d_dpm != null) _modalAllPlayers.push(p);
+      }
+    }
+    let roster = allTeams[team] || [];
     // Fallback to game data if roster empty
     if (!roster.length && STATE.games.length) {
       const seen = new Set();
@@ -4835,6 +4844,83 @@ function renderBaselineModal() {
       <td style="text-align:right;font-family:var(--mono);font-size:11px;font-weight:700;color:${dpmColor(pDpm(p))};padding:6px 4px;">${fmtDpm(pDpm(p))}</td>
     </tr>`;
   }).join('');
+
+  _renderScatterPlot();
+}
+
+function _renderScatterPlot() {
+  const container = document.getElementById('baseline-modal-scatter');
+  const teamPlayers = _modalPlayers.filter(p => (p.pg+p.sg+p.sf+p.pf+p.c) > 0 && (p.o_dpm != null || p.d_dpm != null));
+  if (!teamPlayers.length || !_modalAllPlayers.length) { container.innerHTML = ''; return; }
+
+  // League-wide ranges
+  const allO = _modalAllPlayers.map(p => p.o_dpm).filter(v => v != null);
+  const allD = _modalAllPlayers.map(p => p.d_dpm).filter(v => v != null);
+  const oMin = Math.min(...allO), oMax = Math.max(...allO);
+  const dMin = Math.min(...allD), dMax = Math.max(...allD);
+
+  const W = 560, H = 400, pad = 40, padR = 20, padT = 20, padB = 35;
+  const plotW = W - pad - padR, plotH = H - padT - padB;
+
+  const xPos = (v) => pad + ((v - oMin) / (oMax - oMin || 1)) * plotW;
+  const yPos = (v) => padT + ((dMax - v) / (dMax - dMin || 1)) * plotH; // inverted: high DEF at top
+
+  let svg = '';
+
+  // Quadrant shading (above-average regions)
+  const x0 = xPos(0), y0 = yPos(0);
+  // Top-right = good offense + good defense (green tint)
+  svg += `<rect x="${x0}" y="${padT}" width="${pad + plotW + padR - x0}" height="${y0 - padT}" fill="rgba(76,175,80,0.06)"/>`;
+  // Bottom-left = bad offense + bad defense (red tint)
+  svg += `<rect x="${pad}" y="${y0}" width="${x0 - pad}" height="${padT + plotH - y0}" fill="rgba(198,40,40,0.06)"/>`;
+
+  // Zero lines
+  svg += `<line x1="${x0}" y1="${padT}" x2="${x0}" y2="${padT + plotH}" stroke="#bbb" stroke-width="1" stroke-dasharray="4,3"/>`;
+  svg += `<line x1="${pad}" y1="${y0}" x2="${pad + plotW}" y2="${y0}" stroke="#bbb" stroke-width="1" stroke-dasharray="4,3"/>`;
+
+  // Axis labels
+  svg += `<text x="${pad + plotW / 2}" y="${H - 2}" text-anchor="middle" font-size="11" fill="#888" font-weight="600">Offensive DPM &rarr;</text>`;
+  svg += `<text x="12" y="${padT + plotH / 2}" text-anchor="middle" font-size="11" fill="#888" font-weight="600" transform="rotate(-90,12,${padT + plotH / 2})">Defensive DPM &rarr;</text>`;
+
+  // Tick labels on axes
+  for (let v = Math.ceil(oMin); v <= Math.floor(oMax); v++) {
+    const tx = xPos(v);
+    svg += `<text x="${tx}" y="${padT + plotH + 14}" text-anchor="middle" font-size="9" fill="#aaa">${v > 0 ? '+' : ''}${v}</text>`;
+    svg += `<line x1="${tx}" y1="${padT}" x2="${tx}" y2="${padT + plotH}" stroke="#f0f0f0" stroke-width="0.5"/>`;
+  }
+  for (let v = Math.ceil(dMin); v <= Math.floor(dMax); v++) {
+    const ty = yPos(v);
+    svg += `<text x="${pad - 5}" y="${ty + 3}" text-anchor="end" font-size="9" fill="#aaa">${v > 0 ? '+' : ''}${v}</text>`;
+    svg += `<line x1="${pad}" y1="${ty}" x2="${pad + plotW}" y2="${ty}" stroke="#f0f0f0" stroke-width="0.5"/>`;
+  }
+
+  // Player dots with headshots
+  const imgSize = 28;
+  const half = imgSize / 2;
+  const hs = (id) => id ? `https://cdn.nba.com/headshots/nba/latest/260x190/${id}.png` : '';
+
+  for (const p of teamPlayers) {
+    const ox = p.o_dpm ?? getDarko(p).o_dpm ?? 0;
+    const dx = p.d_dpm ?? getDarko(p).d_dpm ?? 0;
+    const cx = xPos(ox), cy = yPos(dx);
+    const clipId = `clip-${p.nba_id || p.name.replace(/\s/g,'')}`;
+    const hsUrl = hs(p.nba_id);
+
+    svg += `<defs><clipPath id="${clipId}"><circle cx="${cx}" cy="${cy}" r="${half}"/></clipPath></defs>`;
+    // Shadow/border circle
+    svg += `<circle cx="${cx}" cy="${cy}" r="${half + 1}" fill="#fff" stroke="#ccc" stroke-width="1"/>`;
+    if (hsUrl) {
+      svg += `<image href="${hsUrl}" x="${cx - half}" y="${cy - half}" width="${imgSize}" height="${imgSize}" clip-path="url(#${clipId})" preserveAspectRatio="xMidYMin slice"/>`;
+    } else {
+      svg += `<circle cx="${cx}" cy="${cy}" r="${half}" fill="#ddd"/>`;
+    }
+    svg += `<title>${p.name}\nOFF: ${ox >= 0 ? '+' : ''}${ox.toFixed(1)}\nDEF: ${dx >= 0 ? '+' : ''}${dx.toFixed(1)}\nDPM: ${(ox+dx) >= 0 ? '+' : ''}${(ox+dx).toFixed(1)}</title>`;
+  }
+
+  // Border
+  svg += `<rect x="${pad}" y="${padT}" width="${plotW}" height="${plotH}" fill="none" stroke="#ddd" stroke-width="1"/>`;
+
+  container.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:auto;">${svg}</svg>`;
 }
 
 let _modalSaveTimer = null;
