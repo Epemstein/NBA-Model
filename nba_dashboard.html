@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v187</title>
+<title>NBA ALGO v188</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1204,7 +1204,7 @@ input[type=number] { -moz-appearance: textfield; }
       <button onclick="closeBaselineModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);padding:0 4px;">&times;</button>
     </div>
     <div id="baseline-modal-banner"></div>
-    <div id="baseline-modal-scatter" style="padding:8px 16px;"></div>
+    <div id="baseline-modal-scatter"></div>
     <div style="padding:0 16px 16px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin:8px 0;">
         <span id="baseline-modal-total" style="font-size:12px;color:var(--muted);"></span>
@@ -1230,6 +1230,22 @@ input[type=number] { -moz-appearance: textfield; }
     <div class="dhp-content"></div>
   </div>
 </div>
+
+<!-- Scatter Plot Modal -->
+<div id="scatter-modal" style="display:none;position:fixed;inset:0;z-index:650;background:rgba(0,0,0,.5);align-items:center;justify-content:center;" onclick="if(event.target===this)this.style.display='none'">
+  <div style="background:var(--surface);width:95%;max-width:1000px;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.3);overflow:hidden;position:relative;">
+    <button onclick="document.getElementById('scatter-modal').style.display='none'" style="position:absolute;top:8px;right:12px;background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);z-index:1;">&times;</button>
+    <div style="padding:16px 20px 8px;font-weight:700;font-size:14px;">Offensive vs Defensive DPM</div>
+    <div style="display:flex;gap:0;">
+      <div id="scatter-plot" style="flex:1;padding:0 16px 16px;"></div>
+      <div style="width:200px;border-left:1px solid var(--border);padding:12px;">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;">DARKO CHANGES</div>
+        <div id="scatter-changes" style="max-height:400px;overflow-y:auto;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="scatter-tip" style="display:none;position:fixed;z-index:9999;background:#222;color:#fff;font-size:11px;padding:6px 10px;border-radius:4px;pointer-events:none;white-space:nowrap;font-family:var(--mono);"></div>
 
 </div><!-- end app-shell -->
 
@@ -4759,10 +4775,11 @@ function renderBaselineModal() {
     <div style="display:flex;gap:16px;padding:16px 20px;background:linear-gradient(135deg, ${color} 0%, ${color}cc 60%, ${color}88 100%);color:#fff;align-items:center;">
       <img src="${teamLogo(team)}" style="width:56px;height:56px;object-fit:contain;" onerror="this.style.display='none'" />
       <div>
-        <div style="font-size:20px;font-weight:800;">${team}</div>
+        <div style="font-size:20px;font-weight:800;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px;" onclick="openScatterModal()">${team}</div>
         <div style="font-size:12px;opacity:.8;">${fullName}</div>
       </div>
     </div>`;
+  document.getElementById('baseline-modal-scatter').innerHTML = '';
 
   // Totals
   let sumPg=0, sumSg=0, sumSf=0, sumPf=0, sumC=0;
@@ -4845,82 +4862,143 @@ function renderBaselineModal() {
     </tr>`;
   }).join('');
 
-  _renderScatterPlot();
 }
 
-function _renderScatterPlot() {
-  const container = document.getElementById('baseline-modal-scatter');
-  const teamPlayers = _modalPlayers.filter(p => (p.pg+p.sg+p.sf+p.pf+p.c) > 0 && (p.o_dpm != null || p.d_dpm != null));
-  if (!teamPlayers.length || !_modalAllPlayers.length) { container.innerHTML = ''; return; }
+function openScatterModal() {
+  const popup = document.getElementById('scatter-modal');
+  popup.style.display = 'flex';
+  _renderScatterModal();
+  // Fetch DARKO changes
+  _loadDarkoChanges();
+}
 
-  // League-wide ranges
+function _loadDarkoChanges() {
+  const sidebar = document.getElementById('scatter-changes');
+  sidebar.innerHTML = '<div style="color:var(--muted);font-size:11px;">Loading changes...</div>';
+  const teamPlayers = _modalPlayers.filter(p => p.nba_id);
+  const promises = teamPlayers.map(p =>
+    (_darkoHistoryCache[p.nba_id]
+      ? Promise.resolve(_darkoHistoryCache[p.nba_id])
+      : fbDb.collection('nba_darko_history').doc(String(p.nba_id)).get().then(s => {
+          const entries = s.exists ? (s.data().entries || []) : [];
+          entries.sort((a, b) => a.date.localeCompare(b.date));
+          _darkoHistoryCache[p.nba_id] = entries;
+          return entries;
+        })
+    ).then(entries => ({ name: p.name, nba_id: p.nba_id, entries }))
+  );
+  Promise.all(promises).then(results => {
+    const changes = [];
+    for (const r of results) {
+      if (r.entries.length < 2) continue;
+      const prev = r.entries[r.entries.length - 2];
+      const curr = r.entries[r.entries.length - 1];
+      const delta = curr.dpm - prev.dpm;
+      if (Math.abs(delta) >= 0.01) changes.push({ name: r.name, prev: prev.dpm, curr: curr.dpm, delta });
+    }
+    changes.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+    if (!changes.length) {
+      sidebar.innerHTML = '<div style="color:var(--muted);font-size:11px;">No changes from yesterday</div>';
+      return;
+    }
+    sidebar.innerHTML = changes.map(c => {
+      const arrow = c.delta >= 0 ? '▲' : '▼';
+      const col = c.delta >= 0 ? 'var(--green)' : 'var(--red)';
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid #f0f0f0;font-size:11px;">
+        <span style="font-weight:500;">${c.name}</span>
+        <span style="font-family:var(--mono);color:${col};font-weight:600;">${arrow}${Math.abs(c.delta).toFixed(2)}</span>
+      </div>`;
+    }).join('');
+  });
+}
+
+function _renderScatterModal() {
+  const teamPlayers = _modalPlayers.filter(p => p.o_dpm != null || p.d_dpm != null);
+  const plotEl = document.getElementById('scatter-plot');
+  if (!teamPlayers.length || !_modalAllPlayers.length) { plotEl.innerHTML = ''; return; }
+
   const allO = _modalAllPlayers.map(p => p.o_dpm).filter(v => v != null);
   const allD = _modalAllPlayers.map(p => p.d_dpm).filter(v => v != null);
   const oMin = Math.min(...allO), oMax = Math.max(...allO);
   const dMin = Math.min(...allD), dMax = Math.max(...allD);
 
-  const W = 560, H = 400, pad = 40, padR = 20, padT = 20, padB = 35;
-  const plotW = W - pad - padR, plotH = H - padT - padB;
+  // Minutes range for sizing
+  const mins = teamPlayers.map(p => p.pg+p.sg+p.sf+p.pf+p.c);
+  const maxMin = Math.max(...mins, 1);
 
+  const W = 560, H = 440, pad = 44, padR = 20, padT = 20, padB = 38;
+  const plotW = W - pad - padR, plotH = H - padT - padB;
   const xPos = (v) => pad + ((v - oMin) / (oMax - oMin || 1)) * plotW;
-  const yPos = (v) => padT + ((dMax - v) / (dMax - dMin || 1)) * plotH; // inverted: high DEF at top
+  const yPos = (v) => padT + ((dMax - v) / (dMax - dMin || 1)) * plotH;
 
   let svg = '';
-
-  // Quadrant shading (above-average regions)
   const x0 = xPos(0), y0 = yPos(0);
-  // Top-right = good offense + good defense (green tint)
+
+  // Quadrant shading
   svg += `<rect x="${x0}" y="${padT}" width="${pad + plotW + padR - x0}" height="${y0 - padT}" fill="rgba(76,175,80,0.06)"/>`;
-  // Bottom-left = bad offense + bad defense (red tint)
   svg += `<rect x="${pad}" y="${y0}" width="${x0 - pad}" height="${padT + plotH - y0}" fill="rgba(198,40,40,0.06)"/>`;
 
-  // Zero lines
-  svg += `<line x1="${x0}" y1="${padT}" x2="${x0}" y2="${padT + plotH}" stroke="#bbb" stroke-width="1" stroke-dasharray="4,3"/>`;
-  svg += `<line x1="${pad}" y1="${y0}" x2="${pad + plotW}" y2="${y0}" stroke="#bbb" stroke-width="1" stroke-dasharray="4,3"/>`;
-
-  // Axis labels
-  svg += `<text x="${pad + plotW / 2}" y="${H - 2}" text-anchor="middle" font-size="11" fill="#888" font-weight="600">Offensive DPM &rarr;</text>`;
-  svg += `<text x="12" y="${padT + plotH / 2}" text-anchor="middle" font-size="11" fill="#888" font-weight="600" transform="rotate(-90,12,${padT + plotH / 2})">Defensive DPM &rarr;</text>`;
-
-  // Tick labels on axes
+  // Grid + zero lines
   for (let v = Math.ceil(oMin); v <= Math.floor(oMax); v++) {
     const tx = xPos(v);
+    svg += `<line x1="${tx}" y1="${padT}" x2="${tx}" y2="${padT + plotH}" stroke="${v === 0 ? '#bbb' : '#f0f0f0'}" stroke-width="${v === 0 ? 1 : 0.5}" ${v === 0 ? 'stroke-dasharray="4,3"' : ''}/>`;
     svg += `<text x="${tx}" y="${padT + plotH + 14}" text-anchor="middle" font-size="9" fill="#aaa">${v > 0 ? '+' : ''}${v}</text>`;
-    svg += `<line x1="${tx}" y1="${padT}" x2="${tx}" y2="${padT + plotH}" stroke="#f0f0f0" stroke-width="0.5"/>`;
   }
   for (let v = Math.ceil(dMin); v <= Math.floor(dMax); v++) {
     const ty = yPos(v);
+    svg += `<line x1="${pad}" y1="${ty}" x2="${pad + plotW}" y2="${ty}" stroke="${v === 0 ? '#bbb' : '#f0f0f0'}" stroke-width="${v === 0 ? 1 : 0.5}" ${v === 0 ? 'stroke-dasharray="4,3"' : ''}/>`;
     svg += `<text x="${pad - 5}" y="${ty + 3}" text-anchor="end" font-size="9" fill="#aaa">${v > 0 ? '+' : ''}${v}</text>`;
-    svg += `<line x1="${pad}" y1="${ty}" x2="${pad + plotW}" y2="${ty}" stroke="#f0f0f0" stroke-width="0.5"/>`;
   }
 
-  // Player dots with headshots
-  const imgSize = 28;
-  const half = imgSize / 2;
+  // Axis labels
+  svg += `<text x="${pad + plotW / 2}" y="${H - 2}" text-anchor="middle" font-size="11" fill="#888" font-weight="600">Offensive DPM →</text>`;
+  svg += `<text x="12" y="${padT + plotH / 2}" text-anchor="middle" font-size="11" fill="#888" font-weight="600" transform="rotate(-90,12,${padT + plotH / 2})">Defensive DPM →</text>`;
+
+  // Players - sorted by minutes so big ones render last (on top)
+  const sorted = [...teamPlayers].sort((a, b) => (a.pg+a.sg+a.sf+a.pf+a.c) - (b.pg+b.sg+b.sf+b.pf+b.c));
   const hs = (id) => id ? `https://cdn.nba.com/headshots/nba/latest/260x190/${id}.png` : '';
 
-  for (const p of teamPlayers) {
+  for (const p of sorted) {
     const ox = p.o_dpm ?? getDarko(p).o_dpm ?? 0;
     const dx = p.d_dpm ?? getDarko(p).d_dpm ?? 0;
     const cx = xPos(ox), cy = yPos(dx);
-    const clipId = `clip-${p.nba_id || p.name.replace(/\s/g,'')}`;
+    const pMin = p.pg+p.sg+p.sf+p.pf+p.c;
+    const imgSize = pMin > 0 ? 18 + (pMin / maxMin) * 22 : 16;
+    const half = imgSize / 2;
+    const clipId = `sc-${p.nba_id || p.name.replace(/[^a-z0-9]/gi,'')}-${Math.random().toString(36).slice(2,6)}`;
     const hsUrl = hs(p.nba_id);
+    const dpm = ox + dx;
+    const faded = pMin === 0;
+    const tipData = `${p.name} (${pMin.toFixed(0)} min)|OFF: ${ox >= 0 ? '+' : ''}${ox.toFixed(1)}|DEF: ${dx >= 0 ? '+' : ''}${dx.toFixed(1)}|DPM: ${dpm >= 0 ? '+' : ''}${dpm.toFixed(1)}`.replace(/"/g,'&quot;');
 
     svg += `<defs><clipPath id="${clipId}"><circle cx="${cx}" cy="${cy}" r="${half}"/></clipPath></defs>`;
-    // Shadow/border circle
-    svg += `<circle cx="${cx}" cy="${cy}" r="${half + 1}" fill="#fff" stroke="#ccc" stroke-width="1"/>`;
+    svg += `<g data-tip="${tipData}" style="cursor:pointer;${faded ? 'opacity:0.35;filter:grayscale(1);' : ''}">`;
+    svg += `<circle cx="${cx}" cy="${cy}" r="${half + 1.5}" fill="#fff" stroke="${faded ? '#999' : (dpm >= 0 ? 'var(--green)' : 'var(--red)')}" stroke-width="1.5"/>`;
     if (hsUrl) {
       svg += `<image href="${hsUrl}" x="${cx - half}" y="${cy - half}" width="${imgSize}" height="${imgSize}" clip-path="url(#${clipId})" preserveAspectRatio="xMidYMin slice"/>`;
     } else {
       svg += `<circle cx="${cx}" cy="${cy}" r="${half}" fill="#ddd"/>`;
     }
-    svg += `<title>${p.name}\nOFF: ${ox >= 0 ? '+' : ''}${ox.toFixed(1)}\nDEF: ${dx >= 0 ? '+' : ''}${dx.toFixed(1)}\nDPM: ${(ox+dx) >= 0 ? '+' : ''}${(ox+dx).toFixed(1)}</title>`;
+    svg += `</g>`;
   }
 
-  // Border
   svg += `<rect x="${pad}" y="${padT}" width="${plotW}" height="${plotH}" fill="none" stroke="#ddd" stroke-width="1"/>`;
+  plotEl.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;">${svg}</svg>`;
 
-  container.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:auto;">${svg}</svg>`;
+  // Wire up instant tooltips
+  const tip = document.getElementById('scatter-tip');
+  plotEl.querySelectorAll('g[data-tip]').forEach(g => {
+    g.addEventListener('mouseenter', e => {
+      const lines = g.dataset.tip.split('|');
+      tip.innerHTML = lines.join('<br>');
+      tip.style.display = 'block';
+    });
+    g.addEventListener('mousemove', e => {
+      tip.style.left = (e.clientX + 12) + 'px';
+      tip.style.top = (e.clientY - 10) + 'px';
+    });
+    g.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
+  });
 }
 
 let _modalSaveTimer = null;
