@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NBA ALGO v188</title>
+<title>NBA ALGO v189</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -4010,7 +4010,7 @@ async function _fetchLastGameMin(team) {
     const data = await r.json();
     if (data.games && data.games.length) {
       const espnMap = {WAS:'WSH',GSW:'GS',SAS:'SA',NYK:'NY',NOP:'NO',UTA:'UTAH'};
-      const _nameAlias = {'Bones Hyland':'Nah\'Shon Hyland','Nic Claxton':'Nicolas Claxton','Moe Wagner':'Moritz Wagner','PJ Washington':'P.J. Washington','CJ McCollum':'C.J. McCollum','AJ Green':'A.J. Green','RJ Barrett':'R.J. Barrett','OG Anunoby':'O.G. Anunoby','TJ McConnell':'T.J. McConnell','JT Thor':'Jamal Terrell Thor','Tari Eason':'Tari Eason','Alex Sarr':'Alexandre Sarr'};
+      const _nameAlias = {'Bones Hyland':'Nah\'Shon Hyland','Nic Claxton':'Nicolas Claxton','Moe Wagner':'Moritz Wagner','PJ Washington':'P.J. Washington','CJ McCollum':'C.J. McCollum','AJ Green':'A.J. Green','RJ Barrett':'R.J. Barrett','OG Anunoby':'O.G. Anunoby','TJ McConnell':'T.J. McConnell','JT Thor':'Jamal Terrell Thor','Tari Eason':'Tari Eason','Alex Sarr':'Alexandre Sarr','Bub Carrington':'Carlton Carrington'};
 
       // Build last 5 game headers (most recent last)
       _last5Games = [];
@@ -4730,7 +4730,7 @@ function openBaselineModal(team) {
     fetch(`${RENDER_URL}/game-logs?team=${team.toLowerCase()}&limit=5`).then(r => r.json()).then(data => {
       if (!data.games || !data.games.length || _modalTeam !== team) return;
       const espnMap = {WAS:'WSH',GSW:'GS',SAS:'SA',NYK:'NY',NOP:'NO',UTA:'UTAH'};
-      const _nameAlias = {'Bones Hyland':'Nah\'Shon Hyland','Nic Claxton':'Nicolas Claxton','Moe Wagner':'Moritz Wagner','PJ Washington':'P.J. Washington','CJ McCollum':'C.J. McCollum','AJ Green':'A.J. Green','RJ Barrett':'R.J. Barrett','OG Anunoby':'O.G. Anunoby','TJ McConnell':'T.J. McConnell','Alex Sarr':'Alexandre Sarr'};
+      const _nameAlias = {'Bones Hyland':'Nah\'Shon Hyland','Nic Claxton':'Nicolas Claxton','Moe Wagner':'Moritz Wagner','PJ Washington':'P.J. Washington','CJ McCollum':'C.J. McCollum','AJ Green':'A.J. Green','RJ Barrett':'R.J. Barrett','OG Anunoby':'O.G. Anunoby','TJ McConnell':'T.J. McConnell','Alex Sarr':'Alexandre Sarr','Bub Carrington':'Carlton Carrington'};
       for (const g of data.games) {
         const dt = new Date(g.date);
         const dateStr = (dt.getMonth()+1) + '/' + dt.getDate();
