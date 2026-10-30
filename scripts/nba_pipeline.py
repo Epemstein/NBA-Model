@@ -164,6 +164,7 @@ def fetch_darko():
                         result[norm_name(p['name'])] = p
                         if p.get('nba_id'):
                             result[f'id:{p["nba_id"]}'] = p
+                    _write_darko_history(data['players'], today)
                     return result
         except Exception as e:
             print(f'DARKO cache miss: {e}')
@@ -257,35 +258,41 @@ def fetch_darko():
         except Exception as e:
             print(f'DARKO cache write failed: {e}')
 
-        # Append daily snapshot to per-player history
-        try:
-            batch = db.batch()
-            count = 0
-            for p in raw_list:
-                nba_id = p.get('nba_id', '')
-                if not nba_id:
-                    continue
-                ref = db.collection('nba_darko_history').document(str(nba_id))
-                batch.set(ref, {
-                    'name': p['name'],
-                    'entries': firestore.ArrayUnion([{
-                        'date': today,
-                        'dpm': round(p['dpm'], 2),
-                        'o_dpm': round(p['o_dpm'], 2),
-                        'd_dpm': round(p['d_dpm'], 2),
-                    }])
-                }, merge=True)
-                count += 1
-                if count % 400 == 0:  # Firestore batch limit is 500
-                    batch.commit()
-                    batch = db.batch()
-            if count % 400 != 0:
-                batch.commit()
-            print(f'DARKO history: {count} players updated for {today}')
-        except Exception as e:
-            print(f'DARKO history write failed: {e}')
+        _write_darko_history(raw_list, today)
 
     return players
+
+
+def _write_darko_history(player_list, today):
+    """Append daily DARKO snapshot to per-player history docs."""
+    if not db or not player_list:
+        return
+    try:
+        batch = db.batch()
+        count = 0
+        for p in player_list:
+            nba_id = p.get('nba_id', '')
+            if not nba_id:
+                continue
+            ref = db.collection('nba_darko_history').document(str(nba_id))
+            batch.set(ref, {
+                'name': p['name'],
+                'entries': firestore.ArrayUnion([{
+                    'date': today,
+                    'dpm': round(p['dpm'], 2),
+                    'o_dpm': round(p['o_dpm'], 2),
+                    'd_dpm': round(p['d_dpm'], 2),
+                }])
+            }, merge=True)
+            count += 1
+            if count % 400 == 0:
+                batch.commit()
+                batch = db.batch()
+        if count % 400 != 0:
+            batch.commit()
+        print(f'DARKO history: {count} players updated for {today}')
+    except Exception as e:
+        print(f'DARKO history write failed: {e}')
 
 
 # ── Fetch LEBRON ratings ─────────────────────────────────────────────────
