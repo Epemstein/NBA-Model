@@ -1,0 +1,49 @@
+name: Rotations Pipeline
+
+on:
+  schedule:
+    - cron: '0 11 * * *'   # 6 AM ET daily
+  workflow_dispatch:
+    inputs:
+      date:
+        description: 'Date to process (YYYY-MM-DD), defaults to yesterday'
+        type: string
+        default: ''
+      backfill_start:
+        description: 'Backfill start date (YYYY-MM-DD)'
+        type: string
+        default: ''
+      backfill_end:
+        description: 'Backfill end date (YYYY-MM-DD)'
+        type: string
+        default: ''
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests firebase-admin
+
+      - name: Run pipeline
+        env:
+          FIREBASE_SA_JSON: ${{ secrets.FIREBASE_SA_JSON }}
+          RENDER_URL: ${{ secrets.RENDER_URL }}
+        run: |
+          if [ -n "${{ inputs.backfill_start }}" ] && [ -n "${{ inputs.backfill_end }}" ]; then
+            python scripts/rotations_pipeline.py --backfill ${{ inputs.backfill_start }} ${{ inputs.backfill_end }}
+          elif [ -n "${{ inputs.date }}" ]; then
+            python scripts/rotations_pipeline.py ${{ inputs.date }}
+          else
+            python scripts/rotations_pipeline.py
+          fi

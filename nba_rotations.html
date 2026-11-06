@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NBA Rotations</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+:root {
+  --bg: #1a1a1a;
+  --surface: #242424;
+  --border: #333;
+  --fg: #e0e0e0;
+  --muted: #888;
+  --accent: #e67e22;
+  --green: #4caf50;
+  --red: #c62828;
+  --mono: 'SF Mono', 'Fira Code', monospace;
+  --sans: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 14px; min-height: 100vh; }
+
+/* Header */
+header {
+  background: #111;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  border-bottom: 1px solid var(--border);
+}
+.logo { font-weight: 700; font-size: 17px; color: #fff; letter-spacing: .02em; }
+.logo em { color: var(--accent); font-style: normal; }
+.back-link { color: var(--muted); text-decoration: none; font-size: 13px; transition: color .15s; }
+.back-link:hover { color: var(--fg); }
+
+/* Date bar */
+.date-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 14px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.date-bar button {
+  background: #333;
+  border: 1px solid var(--border);
+  color: var(--fg);
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background .15s;
+}
+.date-bar button:hover { background: #444; }
+.date-bar input[type="date"] {
+  background: #333;
+  border: 1px solid var(--border);
+  color: var(--fg);
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 14px;
+  font-family: var(--sans);
+}
+.date-bar input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.8); }
+
+/* Container */
+.container { max-width: 1200px; margin: 0 auto; padding: 16px; }
+
+/* Status */
+.status { text-align: center; padding: 60px 20px; color: var(--muted); font-size: 15px; }
+
+/* Game card */
+.game-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+.game-header {
+  padding: 12px 16px;
+  font-size: 15px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.game-header .score { color: var(--accent); font-family: var(--mono); }
+.game-header .at { color: var(--muted); font-weight: 400; }
+
+/* Chart container */
+.chart-wrap {
+  position: relative;
+  padding: 8px 0;
+}
+.chart-wrap canvas { display: block; }
+
+/* Tooltip */
+.tooltip {
+  display: none;
+  position: fixed;
+  background: rgba(0,0,0,.92);
+  border: 1px solid #555;
+  border-radius: 5px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-family: var(--sans);
+  color: var(--fg);
+  pointer-events: none;
+  z-index: 300;
+  max-width: 280px;
+  line-height: 1.5;
+}
+.tooltip .tt-time { color: var(--accent); font-weight: 600; margin-bottom: 4px; }
+.tooltip .tt-team { font-weight: 600; margin-top: 4px; color: #aaa; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+.tooltip .tt-player { font-size: 11px; }
+
+/* Legend */
+.legend {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  padding: 10px;
+  flex-wrap: wrap;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.legend-swatch {
+  width: 14px;
+  height: 10px;
+  border-radius: 2px;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><em>NBA</em> Rotations</div>
+  <a href="nba_dashboard.html" class="back-link">&larr; Dashboard</a>
+</header>
+
+<div class="date-bar">
+  <button id="prevDay">&lsaquo; Prev</button>
+  <input type="date" id="datePicker">
+  <button id="nextDay">Next &rsaquo;</button>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><span class="legend-swatch" style="background:#4CAF50"></span>Q1</div>
+  <div class="legend-item"><span class="legend-swatch" style="background:#2196F3"></span>Q2</div>
+  <div class="legend-item"><span class="legend-swatch" style="background:#FF9800"></span>Q3</div>
+  <div class="legend-item"><span class="legend-swatch" style="background:#F44336"></span>Q4</div>
+  <div class="legend-item"><span class="legend-swatch" style="background:#9C27B0"></span>OT</div>
+</div>
+
+<div class="container" id="app">
+  <div class="status" id="status">Loading...</div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyC2pfd0YtSDf2Ybj6X-uHv7owzZKqn7pmA",
+  authDomain: "mlb-algo-b8923.firebaseapp.com",
+  databaseURL: "https://mlb-algo-b8923-default-rtdb.firebaseio.com",
+  projectId: "mlb-algo-b8923",
+  storageBucket: "mlb-algo-b8923.firebasestorage.app",
+  messagingSenderId: "120593689531",
+  appId: "1:120593689531:web:ae2b2afa087e58eedb729e"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+const Q_COLORS = ['#4CAF50','#2196F3','#FF9800','#F44336','#9C27B0'];
+const Q_LABELS = ['Q1','Q2','Q3','Q4','OT'];
+const Q_BOUND = 720; // seconds per quarter
+const ROW_H = 26;
+const LEFT_MARGIN = 160;
+const RIGHT_MARGIN = 52;
+const TOP_MARGIN = 24;
+const HEADSHOT_SIZE = 22;
+
+// Headshot cache + redraw system
+const headshotCache = {};
+const allDrawFns = [];
+
+function loadHeadshot(nbaId) {
+  if (headshotCache[nbaId]) return headshotCache[nbaId];
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.src = `https://cdn.nba.com/headshots/nba/latest/260x190/${nbaId}.png`;
+  img.onload = () => {
+    allDrawFns.forEach(fn => fn());
+  };
+  img.onerror = () => {};
+  headshotCache[nbaId] = img;
+  return img;
+}
+
+const app = document.getElementById('app');
+const status = document.getElementById('status');
+const datePicker = document.getElementById('datePicker');
+const tooltip = document.getElementById('tooltip');
+
+// Default to yesterday
+function fmtDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const dd = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${dd}`;
+}
+
+let currentDate;
+(function init() {
+  const yest = new Date();
+  yest.setDate(yest.getDate() - 1);
+  currentDate = fmtDate(yest);
+  datePicker.value = currentDate;
+  loadDate(currentDate);
+})();
+
+datePicker.addEventListener('change', () => { currentDate = datePicker.value; loadDate(currentDate); });
+document.getElementById('prevDay').addEventListener('click', () => { shiftDate(-1); });
+document.getElementById('nextDay').addEventListener('click', () => { shiftDate(1); });
+
+function shiftDate(delta) {
+  const d = new Date(currentDate + 'T12:00:00');
+  d.setDate(d.getDate() + delta);
+  currentDate = fmtDate(d);
+  datePicker.value = currentDate;
+  loadDate(currentDate);
+}
+
+async function loadDate(dateStr) {
+  // Clear previous
+  allDrawFns.length = 0;
+  app.innerHTML = '<div class="status" id="status">Loading...</div>';
+  try {
+    const doc = await db.collection('nba_rotations').doc(dateStr).get();
+    if (!doc.exists || !doc.data().games || doc.data().games.length === 0) {
+      app.innerHTML = '<div class="status">No games found for ' + dateStr + '</div>';
+      return;
+    }
+    const data = doc.data();
+    app.innerHTML = '';
+    data.games.forEach(game => renderGame(game));
+  } catch(e) {
+    console.error(e);
+    app.innerHTML = '<div class="status">Error loading data: ' + e.message + '</div>';
+  }
+}
+
+function getMaxSec(game) {
+  let mx = 2880;
+  const allPlayers = [...(game.players.away || []), ...(game.players.home || [])];
+  allPlayers.forEach(p => {
+    (p.stints || []).forEach(s => { if (s.end_sec > mx) mx = s.end_sec; });
+  });
+  return mx;
+}
+
+function getQuarterForSec(sec) {
+  if (sec < 720) return 0;
+  if (sec < 1440) return 1;
+  if (sec < 2160) return 2;
+  if (sec < 2880) return 3;
+  return 4;
+}
+
+function fmtGameTime(sec) {
+  const q = getQuarterForSec(sec);
+  const qStart = q * 720;
+  const inQ = sec - qStart;
+  // Quarters count down from 12:00, but our data is elapsed time
+  // Show as elapsed within quarter
+  const m = Math.floor(inQ / 60);
+  const s = Math.floor(inQ % 60);
+  const label = q < 4 ? `Q${q+1}` : `OT${q-3}`;
+  return `${label} ${m}:${String(s).padStart(2,'0')}`;
+}
+
+function renderGame(game) {
+  const card = document.createElement('div');
+  card.className = 'game-card';
+
+  const header = document.createElement('div');
+  header.className = 'game-header';
+  header.innerHTML = `<span>${game.away}</span> <span class="score">${game.away_score}</span> <span class="at">@</span> <span>${game.home}</span> <span class="score">${game.home_score}</span>`;
+  card.appendChild(header);
+
+  // Prepare players sorted by total_min desc for each team
+  const awayPlayers = [...(game.players.away || [])].sort((a,b) => (b.total_min||0) - (a.total_min||0));
+  const homePlayers = [...(game.players.home || [])].sort((a,b) => (b.total_min||0) - (a.total_min||0));
+
+  const maxSec = getMaxSec(game);
+  const allPlayers = [
+    ...awayPlayers.map(p => ({...p, team: game.away, side: 'away'})),
+    ...homePlayers.map(p => ({...p, team: game.home, side: 'home'}))
+  ];
+
+  // Team separator index
+  const awayCt = awayPlayers.length;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'chart-wrap';
+  card.appendChild(wrap);
+  app.appendChild(card);
+
+  const canvas = document.createElement('canvas');
+  wrap.appendChild(canvas);
+  const ctx = canvas.getContext('2d');
+
+  function draw() {
+    const containerW = wrap.clientWidth;
+    const dpr = window.devicePixelRatio || 1;
+    const chartW = containerW - LEFT_MARGIN - RIGHT_MARGIN;
+    const teamGap = 12;
+    const totalRows = allPlayers.length;
+    const canvasH = TOP_MARGIN + totalRows * ROW_H + teamGap + 8;
+    canvas.width = containerW * dpr;
+    canvas.height = canvasH * dpr;
+    canvas.style.width = containerW + 'px';
+    canvas.style.height = canvasH + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    ctx.clearRect(0, 0, containerW, canvasH);
+
+    // Quarter boundaries
+    const qBounds = [];
+    for (let i = 1; i <= Math.ceil(maxSec / Q_BOUND); i++) {
+      const sec = i * Q_BOUND;
+      if (sec <= maxSec) qBounds.push(sec);
+    }
+
+    // Quarter labels at top
+    ctx.font = '10px ' + getComputedStyle(document.body).getPropertyValue('--sans');
+    ctx.fillStyle = '#888';
+    ctx.textAlign = 'center';
+    for (let q = 0; q < Math.ceil(maxSec / Q_BOUND); q++) {
+      const startSec = q * Q_BOUND;
+      const endSec = Math.min((q+1) * Q_BOUND, maxSec);
+      const x1 = LEFT_MARGIN + (startSec / maxSec) * chartW;
+      const x2 = LEFT_MARGIN + (endSec / maxSec) * chartW;
+      ctx.fillText(Q_LABELS[Math.min(q, 4)], (x1+x2)/2, 14);
+    }
+
+    // Draw rows
+    allPlayers.forEach((player, i) => {
+      const extraGap = (i >= awayCt) ? teamGap : 0;
+      const y = TOP_MARGIN + i * ROW_H + extraGap;
+
+      // Player name
+      ctx.font = '11px ' + getComputedStyle(document.body).getPropertyValue('--sans');
+      ctx.fillStyle = var_fg;
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      // Team label for first of each group
+      if (i === 0 || i === awayCt) {
+        ctx.font = 'bold 10px ' + getComputedStyle(document.body).getPropertyValue('--sans');
+        ctx.fillStyle = '#666';
+        ctx.textAlign = 'left';
+        ctx.fillText(player.team, 8, y + ROW_H/2 - (i === awayCt ? teamGap : 0) - 2);
+        ctx.textAlign = 'right';
+        ctx.font = '11px ' + getComputedStyle(document.body).getPropertyValue('--sans');
+        ctx.fillStyle = var_fg;
+      }
+
+      // Headshot
+      const imgSize = HEADSHOT_SIZE;
+      const imgX = LEFT_MARGIN - imgSize - 40;
+      const imgY = y + (ROW_H - imgSize) / 2;
+      if (player.nba_id) {
+        const img = headshotCache[player.nba_id] || loadHeadshot(player.nba_id);
+        if (img && img.complete && img.naturalWidth > 0) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(imgX + imgSize/2, imgY + imgSize/2, imgSize/2, 0, Math.PI*2);
+          ctx.clip();
+          ctx.drawImage(img, imgX, imgY, imgSize, imgSize);
+          ctx.restore();
+        }
+      }
+
+      // Name
+      ctx.fillStyle = var_fg;
+      ctx.textAlign = 'right';
+      ctx.font = '11px ' + getComputedStyle(document.body).getPropertyValue('--sans');
+      ctx.fillText(truncName(player.name), LEFT_MARGIN - 6, y + ROW_H/2);
+
+      // Stint bars
+      (player.stints || []).forEach(stint => {
+        drawStintBar(ctx, stint.start_sec, stint.end_sec, maxSec, chartW, y + 3, ROW_H - 6);
+      });
+
+      // Total minutes
+      ctx.fillStyle = '#888';
+      ctx.textAlign = 'left';
+      ctx.font = '10px ' + getComputedStyle(document.body).getPropertyValue('--mono');
+      ctx.fillText((player.total_min || 0).toFixed(1), LEFT_MARGIN + chartW + 6, y + ROW_H/2);
+    });
+
+    // Vertical dashed lines at quarter boundaries
+    ctx.setLineDash([4, 3]);
+    ctx.strokeStyle = '#555';
+    ctx.lineWidth = 1;
+    qBounds.forEach(sec => {
+      const x = LEFT_MARGIN + (sec / maxSec) * chartW;
+      ctx.beginPath();
+      ctx.moveTo(x, TOP_MARGIN);
+      ctx.lineTo(x, TOP_MARGIN + totalRows * ROW_H + teamGap);
+      ctx.stroke();
+    });
+    ctx.setLineDash([]);
+
+    // Team separator line
+    if (awayCt > 0 && homePlayers.length > 0) {
+      const sepY = TOP_MARGIN + awayCt * ROW_H + teamGap/2;
+      ctx.strokeStyle = '#444';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(LEFT_MARGIN, sepY);
+      ctx.lineTo(LEFT_MARGIN + chartW, sepY);
+      ctx.stroke();
+    }
+  }
+
+  const var_fg = '#e0e0e0';
+
+  function drawStintBar(ctx, startSec, endSec, maxSec, chartW, y, h) {
+    // Split across quarter boundaries for color
+    let s = startSec;
+    while (s < endSec) {
+      const q = getQuarterForSec(s);
+      const qEnd = (q + 1) * Q_BOUND;
+      const segEnd = Math.min(endSec, qEnd);
+      const x1 = LEFT_MARGIN + (s / maxSec) * chartW;
+      const x2 = LEFT_MARGIN + (segEnd / maxSec) * chartW;
+      ctx.fillStyle = Q_COLORS[Math.min(q, 4)];
+      ctx.fillRect(x1, y, Math.max(x2 - x1 - 1, 1), h);
+      s = segEnd;
+    }
+  }
+
+  function truncName(name) {
+    if (!name) return '';
+    if (name.length <= 18) return name;
+    const parts = name.split(' ');
+    if (parts.length >= 2) return parts[0][0] + '. ' + parts.slice(1).join(' ');
+    return name.substring(0, 16) + '...';
+  }
+
+  // Hover handling
+  canvas.addEventListener('mousemove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const containerW = wrap.clientWidth;
+    const chartW = containerW - LEFT_MARGIN - RIGHT_MARGIN;
+
+    if (mx < LEFT_MARGIN || mx > LEFT_MARGIN + chartW) {
+      tooltip.style.display = 'none';
+      draw();
+      return;
+    }
+
+    const frac = (mx - LEFT_MARGIN) / chartW;
+    const sec = frac * maxSec;
+
+    // Redraw then overlay vertical line
+    draw();
+    const dpr = window.devicePixelRatio || 1;
+    const totalRows = allPlayers.length;
+    const teamGap = 12;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(mx, TOP_MARGIN);
+    ctx.lineTo(mx, TOP_MARGIN + totalRows * ROW_H + teamGap);
+    ctx.stroke();
+
+    // Find who's on court
+    const awayOn = awayPlayers.filter(p => (p.stints||[]).some(s => sec >= s.start_sec && sec < s.end_sec)).map(p => p.name);
+    const homeOn = homePlayers.filter(p => (p.stints||[]).some(s => sec >= s.start_sec && sec < s.end_sec)).map(p => p.name);
+
+    let html = `<div class="tt-time">${fmtGameTime(Math.round(sec))}</div>`;
+    html += `<div class="tt-team">${game.away} on court</div>`;
+    awayOn.forEach(n => { html += `<div class="tt-player">${n}</div>`; });
+    if (awayOn.length === 0) html += `<div class="tt-player" style="color:#666">None</div>`;
+    html += `<div class="tt-team">${game.home} on court</div>`;
+    homeOn.forEach(n => { html += `<div class="tt-player">${n}</div>`; });
+    if (homeOn.length === 0) html += `<div class="tt-player" style="color:#666">None</div>`;
+    tooltip.innerHTML = html;
+    tooltip.style.display = 'block';
+
+    // Position tooltip
+    let tx = e.clientX + 14;
+    let ty = e.clientY - 10;
+    if (tx + 260 > window.innerWidth) tx = e.clientX - 270;
+    if (ty + tooltip.offsetHeight > window.innerHeight) ty = window.innerHeight - tooltip.offsetHeight - 8;
+    tooltip.style.left = tx + 'px';
+    tooltip.style.top = ty + 'px';
+  });
+
+  canvas.addEventListener('mouseleave', () => {
+    tooltip.style.display = 'none';
+    draw();
+  });
+
+  // Initial draw + redraw on resize
+  draw();
+  allDrawFns.push(draw);
+  const ro = new ResizeObserver(() => draw());
+  ro.observe(wrap);
+}
+
+</script>
+</body>
+</html>
