@@ -38,7 +38,7 @@ else:
 # ── Config ────────────────────────────────────────────────────────────────
 RENDER_URL = os.environ.get('RENDER_URL', '')
 ET = ZoneInfo('America/New_York')
-API_DELAY = 0.6  # seconds between NBA API calls
+API_DELAY = 1.0  # seconds between NBA API calls
 
 NBA_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -62,19 +62,19 @@ NBA_ID_TO_ABR = {
 
 # ── NBA API helper ───────────────────────────────────────────────────────
 def _nba_get(base_url, params=None, timeout=30):
-    """Make an NBA API request, routing through Render proxy if configured."""
-    if RENDER_URL:
-        if 'stats.nba.com/stats/' in base_url:
-            proxy_url = base_url.replace('https://stats.nba.com/stats/', f'{RENDER_URL}/nba-api/')
-        elif 'cdn.nba.com/static/json/liveData/' in base_url:
-            proxy_url = base_url.replace('https://cdn.nba.com/static/json/liveData/', f'{RENDER_URL}/nba-live/')
-        else:
-            proxy_url = base_url
-        r = requests.get(proxy_url, params=params, timeout=timeout)
-    else:
-        r = requests.get(base_url, params=params, headers=NBA_HEADERS, timeout=timeout)
-    r.raise_for_status()
-    return r
+    """Make an NBA API request directly (no proxy — avoids rate limiting)."""
+    for attempt in range(3):
+        try:
+            r = requests.get(base_url, params=params, headers=NBA_HEADERS, timeout=timeout)
+            r.raise_for_status()
+            return r
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 429 and attempt < 2:
+                wait = 10 * (attempt + 1)
+                print(f'  Rate limited, waiting {wait}s...')
+                time.sleep(wait)
+                continue
+            raise
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────

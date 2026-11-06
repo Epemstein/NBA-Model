@@ -6,6 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NBA Rotations</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <style>
 :root {
@@ -150,6 +151,15 @@ header {
 </head>
 <body>
 
+<div id="login-screen" style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:16px;">
+  <div style="font-size:28px;font-weight:800;"><span style="color:var(--fg);">NBA</span> <span style="color:var(--accent);">Rotations</span></div>
+  <div style="color:var(--muted);font-size:13px;">Sign in to access rotations</div>
+  <button onclick="firebase.auth().signInWithPopup(new firebase.auth.GoogleAuthProvider())" style="display:flex;align-items:center;gap:10px;padding:10px 24px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--fg);cursor:pointer;font-size:14px;">
+    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" style="width:18px;height:18px;"> Sign in with Google
+  </button>
+</div>
+
+<div id="app-shell" style="display:none;">
 <header>
   <div class="logo"><em>NBA</em> Rotations</div>
   <a href="nba_dashboard.html" class="back-link">&larr; Dashboard</a>
@@ -172,6 +182,8 @@ header {
 <div class="container" id="app">
   <div class="status" id="status">Loading...</div>
 </div>
+
+</div><!-- end app-shell -->
 
 <div class="tooltip" id="tooltip"></div>
 
@@ -228,13 +240,21 @@ function fmtDate(d) {
 }
 
 let currentDate;
-(function init() {
-  const yest = new Date();
-  yest.setDate(yest.getDate() - 1);
-  currentDate = fmtDate(yest);
-  datePicker.value = currentDate;
-  loadDate(currentDate);
-})();
+const auth = firebase.auth();
+auth.onAuthStateChanged(user => {
+  if (user) {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app-shell').style.display = '';
+    const yest = new Date();
+    yest.setDate(yest.getDate() - 1);
+    currentDate = fmtDate(yest);
+    datePicker.value = currentDate;
+    loadDate(currentDate);
+  } else {
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('app-shell').style.display = 'none';
+  }
+});
 
 datePicker.addEventListener('change', () => { currentDate = datePicker.value; loadDate(currentDate); });
 document.getElementById('prevDay').addEventListener('click', () => { shiftDate(-1); });
