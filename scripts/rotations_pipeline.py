@@ -61,17 +61,22 @@ NBA_ID_TO_ABR = {
 
 
 # ── NBA API helper ───────────────────────────────────────────────────────
-def _nba_get(base_url, params=None, timeout=30):
-    """Make an NBA API request directly (no proxy — avoids rate limiting)."""
+def _nba_get(base_url, params=None, timeout=45):
+    """Make an NBA API request via Render proxy with retries."""
     for attempt in range(3):
         try:
-            r = requests.get(base_url, params=params, headers=NBA_HEADERS, timeout=timeout)
+            if RENDER_URL and 'stats.nba.com/stats/' in base_url:
+                url = base_url.replace('https://stats.nba.com/stats/', f'{RENDER_URL}/nba-api/')
+                r = requests.get(url, params=params, timeout=timeout)
+            else:
+                r = requests.get(base_url, params=params, headers=NBA_HEADERS, timeout=timeout)
             r.raise_for_status()
             return r
-        except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 429 and attempt < 2:
-                wait = 10 * (attempt + 1)
-                print(f'  Rate limited, waiting {wait}s...')
+        except (requests.exceptions.HTTPError, requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+            status = getattr(getattr(e, 'response', None), 'status_code', 0)
+            if attempt < 2 and (status in (429, 502, 503) or isinstance(e, (requests.exceptions.Timeout, requests.exceptions.ConnectionError))):
+                wait = 5 * (attempt + 1)
+                print(f'  Retry {attempt+1}/3 ({"HTTP " + str(status) if status else type(e).__name__}), waiting {wait}s...')
                 time.sleep(wait)
                 continue
             raise
