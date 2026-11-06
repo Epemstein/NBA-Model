@@ -17,6 +17,19 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 
 from nba_api.stats.endpoints import scoreboardv3, playbyplayv3, boxscoretraditionalv3
+from nba_api.stats.library.http import NBAStatsHTTP
+
+# Override default headers to look more like a browser
+NBAStatsHTTP.nba_response = None
+CUSTOM_HEADERS = {
+    'Host': 'stats.nba.com',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    'Accept': 'application/json, text/plain, */*',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Referer': 'https://www.nba.com/',
+    'Origin': 'https://www.nba.com',
+    'Connection': 'keep-alive',
+}
 
 # ── Firebase ─────────────────────────────────────────────────────────────
 SA_JSON = os.environ.get('FIREBASE_SA_JSON', '')
@@ -104,7 +117,7 @@ def fetch_scoreboard(date_str):
     """Fetch all games for a date from the NBA scoreboard v3 endpoint.
     Returns list of game info dicts with game_id, teams, scores, status.
     """
-    data = scoreboardv3.ScoreboardV3(game_date=date_str).get_dict()
+    data = scoreboardv3.ScoreboardV3(game_date=date_str, headers=CUSTOM_HEADERS, timeout=120).get_dict()
 
     scoreboard = data.get('scoreboard', {})
     raw_games = scoreboard.get('games', [])
@@ -146,7 +159,7 @@ def fetch_box_score(game_id):
     - starters: {team_id: [{'id': pid, 'name': name}]}
     - name_to_id: {'J. Tatum': pid, 'Jayson Tatum': pid, ...}
     """
-    data = boxscoretraditionalv3.BoxScoreTraditionalV3(game_id=game_id).get_dict()
+    data = boxscoretraditionalv3.BoxScoreTraditionalV3(game_id=game_id, headers=CUSTOM_HEADERS, timeout=120).get_dict()
     box = data.get('boxScoreTraditional', {})
     starters = {}
     name_to_id = {}
@@ -183,7 +196,7 @@ def fetch_pbp(game_id):
     """Fetch play-by-play v3 data for a game.
     Returns list of action dicts.
     """
-    data = playbyplayv3.PlayByPlayV3(game_id=game_id).get_dict()
+    data = playbyplayv3.PlayByPlayV3(game_id=game_id, headers=CUSTOM_HEADERS, timeout=120).get_dict()
 
     game_data = data.get('game', {})
     actions = game_data.get('actions', [])
