@@ -10,11 +10,13 @@ Usage:
   python rotations_pipeline.py --backfill 2026-10-20 2026-10-27  # date range
 """
 
-import os, json, sys, time, datetime, requests
+import os, json, sys, time, datetime, re
 from zoneinfo import ZoneInfo
 
 import firebase_admin
 from firebase_admin import credentials, firestore
+
+from nba_api.stats.endpoints import scoreboardv3, playbyplayv3, boxscoretraditionalv3
 
 # ── Firebase ─────────────────────────────────────────────────────────────
 SA_JSON = os.environ.get('FIREBASE_SA_JSON', '')
@@ -36,17 +38,8 @@ else:
     print('WARNING: No FIREBASE_SA_JSON — Firestore disabled')
 
 # ── Config ────────────────────────────────────────────────────────────────
-RENDER_URL = os.environ.get('RENDER_URL', '')
 ET = ZoneInfo('America/New_York')
-API_DELAY = 1.0  # seconds between NBA API calls
-
-NBA_HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-    'Accept': 'application/json, text/plain, */*',
-    'Referer': 'https://www.nba.com/',
-    'Origin': 'https://www.nba.com',
-    'Accept-Language': 'en-US,en;q=0.9',
-}
+API_DELAY = 0.6  # seconds between nba_api calls to avoid rate limiting
 
 NBA_ID_TO_ABR = {
     1610612737:'ATL', 1610612738:'BOS', 1610612751:'BKN', 1610612766:'CHA',
@@ -58,28 +51,6 @@ NBA_ID_TO_ABR = {
     1610612757:'POR', 1610612758:'SAC', 1610612759:'SAS', 1610612761:'TOR',
     1610612762:'UTA', 1610612764:'WAS',
 }
-
-
-# ── NBA API helper ───────────────────────────────────────────────────────
-def _nba_get(base_url, params=None, timeout=45):
-    """Make an NBA API request via Render proxy with retries."""
-    for attempt in range(3):
-        try:
-            if RENDER_URL and 'stats.nba.com/stats/' in base_url:
-                url = base_url.replace('https://stats.nba.com/stats/', f'{RENDER_URL}/nba-api/')
-                r = requests.get(url, params=params, timeout=timeout)
-            else:
-                r = requests.get(base_url, params=params, headers=NBA_HEADERS, timeout=timeout)
-            r.raise_for_status()
-            return r
-        except (requests.exceptions.HTTPError, requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
-            status = getattr(getattr(e, 'response', None), 'status_code', 0)
-            if attempt < 2 and (status in (429, 502, 503) or isinstance(e, (requests.exceptions.Timeout, requests.exceptions.ConnectionError))):
-                wait = 5 * (attempt + 1)
-                print(f'  Retry {attempt+1}/3 ({"HTTP " + str(status) if status else type(e).__name__}), waiting {wait}s...')
-                time.sleep(wait)
-                continue
-            raise
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────
@@ -133,11 +104,7 @@ def fetch_scoreboard(date_str):
     """Fetch all games for a date from the NBA scoreboard v3 endpoint.
     Returns list of game info dicts with game_id, teams, scores, status.
     """
-    url = 'https://stats.nba.com/stats/scoreboardv3'
-    params = {'GameDate': date_str, 'LeagueID': '00'}
-
-    r = _nba_get(url, params=params)
-    data = r.json()
+    data = scoreboardv3.ScoreboardV3(game_date=date_str).get_dict()
 
     scoreboard = data.get('scoreboard', {})
     raw_games = scoreboard.get('games', [])
@@ -154,12 +121,15 @@ def fetch_scoreboard(date_str):
         home_id = home_team.get('teamId', 0)
         away_id = away_team.get('teamId', 0)
 
+        home_tricode = home_team.get('teamTricode', '')
+        away_tricode = away_team.get('teamTricode', '')
+
         games.append({
             'game_id': game_id,
             'status': status,
             'status_text': status_text,
-            'home': NBA_ID_TO_ABR.get(home_id, str(home_id)),
-            'away': NBA_ID_TO_ABR.get(away_id, str(away_id)),
+            'home': home_tricode or NBA_ID_TO_ABR.get(home_id, str(home_id)),
+            'away': away_tricode or NBA_ID_TO_ABR.get(away_id, str(away_id)),
             'home_id': home_id,
             'away_id': away_id,
             'home_score': home_team.get('score', 0),
@@ -171,36 +141,41 @@ def fetch_scoreboard(date_str):
 
 
 # ── Fetch starters from box score ────────────────────────────────────────
-def fetch_starters(game_id):
-    """Fetch starters for a game from the box score traditional v3 endpoint.
-    Returns {home_team_id: [player_ids], away_team_id: [player_ids]}
+def fetch_box_score(game_id):
+    """Fetch box score for a game. Returns:
+    - starters: {team_id: [{'id': pid, 'name': name}]}
+    - name_to_id: {'J. Tatum': pid, 'Jayson Tatum': pid, ...}
     """
-    url = 'https://stats.nba.com/stats/boxscoretraditionalv3'
-    params = {'GameID': game_id}
-
-    r = _nba_get(url, params=params)
-    data = r.json()
-
+    data = boxscoretraditionalv3.BoxScoreTraditionalV3(game_id=game_id).get_dict()
     box = data.get('boxScoreTraditional', {})
     starters = {}
+    name_to_id = {}
 
     for side in ['homeTeam', 'awayTeam']:
         team_data = box.get(side, {})
         team_id = team_data.get('teamId', 0)
         players = team_data.get('players', [])
 
+        # First 5 players in the list are starters
         team_starters = []
-        for p in players:
-            stats = p.get('statistics', {})
-            if stats.get('startPosition', '') != '':
-                team_starters.append({
-                    'id': p.get('personId', 0),
-                    'name': f"{p.get('firstName', '')} {p.get('familyName', '')}".strip(),
-                })
+        for i, p in enumerate(players):
+            pid = p.get('personId', 0)
+            first = p.get('firstName', '')
+            last = p.get('familyName', '')
+            full_name = f"{first} {last}".strip()
+            name_i = f"{first[0]}. {last}" if first and last else full_name
+
+            # Build name lookups
+            name_to_id[full_name] = pid
+            name_to_id[name_i] = pid
+            name_to_id[last] = pid  # fallback
+
+            if i < 5:
+                team_starters.append({'id': pid, 'name': full_name})
 
         starters[team_id] = team_starters
 
-    return starters
+    return starters, name_to_id
 
 
 # ── Fetch play-by-play ───────────────────────────────────────────────────
@@ -208,11 +183,7 @@ def fetch_pbp(game_id):
     """Fetch play-by-play v3 data for a game.
     Returns list of action dicts.
     """
-    url = 'https://stats.nba.com/stats/playbyplayv3'
-    params = {'GameID': game_id}
-
-    r = _nba_get(url, params=params)
-    data = r.json()
+    data = playbyplayv3.PlayByPlayV3(game_id=game_id).get_dict()
 
     game_data = data.get('game', {})
     actions = game_data.get('actions', [])
@@ -220,7 +191,7 @@ def fetch_pbp(game_id):
 
 
 # ── Build rotation stints ────────────────────────────────────────────────
-def build_rotations(game_info, starters, actions):
+def build_rotations(game_info, starters, actions, name_to_id):
     """Build rotation stints from starters + substitution events.
 
     Returns dict with player stints per team:
@@ -293,12 +264,13 @@ def build_rotations(game_info, starters, actions):
                         'start_sec': period_start, 'end_sec': None, 'period': period
                     })
 
-        if action_type != 'substitution':
+        # nba_api v3 uses 'Substitution' (capital S) for actionType
+        if action_type != 'Substitution':
             continue
 
-        sub_type = action.get('subType', '')
         person_id = action.get('personId', 0)
         player_name = action.get('playerNameI', '') or action.get('playerName', '')
+        description = action.get('description', '')
 
         elapsed = clock_to_elapsed(period, clock)
 
@@ -311,21 +283,40 @@ def build_rotations(game_info, starters, actions):
         else:
             continue
 
-        ensure_player(person_id, player_name, team_label)
+        # Format: "SUB: PlayerIn FOR PlayerOut" — personId is the player going OUT
+        # The player coming in is named in the description before "FOR"
+        # We need to find the incoming player's ID from context
 
-        if sub_type == 'out':
-            # Close the open stint
-            for stint in players[person_id]['stints']:
-                if stint['end_sec'] is None:
-                    stint['end_sec'] = elapsed
-            on_court.discard(person_id)
+        # Person going out
+        out_pid = person_id
+        out_name = player_name
+        ensure_player(out_pid, out_name, team_label)
 
-        elif sub_type == 'in':
-            # Open a new stint
-            players[person_id]['stints'].append({
+        # Close the outgoing player's open stint
+        for stint in players[out_pid]['stints']:
+            if stint['end_sec'] is None:
+                stint['end_sec'] = elapsed
+        on_court.discard(out_pid)
+
+        # Find incoming player from description: "SUB: InName FOR OutName"
+        m = re.match(r'SUB:\s*(.+?)\s+FOR\s+', description)
+        if m:
+            in_name = m.group(1).strip()
+            in_pid = name_to_id.get(in_name)
+            if not in_pid:
+                # Try partial matches
+                for nm, pid2 in name_to_id.items():
+                    if in_name in nm or nm in in_name:
+                        in_pid = pid2
+                        break
+            if not in_pid:
+                in_pid = abs(hash(in_name)) % 10000000  # Last resort
+                print(f'    WARNING: Could not resolve player ID for "{in_name}"')
+            ensure_player(in_pid, in_name, team_label)
+            players[in_pid]['stints'].append({
                 'start_sec': elapsed, 'end_sec': None, 'period': period
             })
-            on_court.add(person_id)
+            on_court.add(in_pid)
 
     # Close any remaining open stints at end of game
     game_end = period_start_sec(num_periods) + period_duration(num_periods)
@@ -413,7 +404,7 @@ def process_date(date_str):
         try:
             # Fetch starters
             print(f'    Fetching box score for starters...')
-            starters = fetch_starters(gid)
+            starters, name_to_id = fetch_box_score(gid)
             time.sleep(API_DELAY)
 
             home_starter_count = len(starters.get(game['home_id'], []))
@@ -425,11 +416,11 @@ def process_date(date_str):
             actions = fetch_pbp(gid)
             time.sleep(API_DELAY)
 
-            sub_count = sum(1 for a in actions if a.get('actionType') == 'substitution')
+            sub_count = sum(1 for a in actions if a.get('actionType') == 'Substitution')
             print(f'    PBP: {len(actions)} actions, {sub_count} substitutions')
 
             # Build rotations
-            rotations = build_rotations(game, starters, actions)
+            rotations = build_rotations(game, starters, actions, name_to_id)
 
             home_player_count = len(rotations['home'])
             away_player_count = len(rotations['away'])
